@@ -1,73 +1,126 @@
 # Trajectory IR Infrastructure & Deployment Design
 
-This document details the step-by-step infrastructure design for the Trajectory IR project. It synthesizes the storage, execution, and deployment constraints specified in the master `README.md` into actionable architecture tiers.
+This document provides a highly defined, technical blueprint for the infrastructure supporting Trajectory IR. It maps the specifications from the master `README.md` into concrete data flows, storage schemas, and deployment topologies.
 
-## 1. Core Architecture Layers
+## 1. System Architecture & Component Interaction
 
-Trajectory IR is designed as a semantic and portability layer over existing execution and storage primitives. It deliberately does not reinvent durable execution or object storage.
+Trajectory IR operates as a semantic layer over existing execution and storage primitives. The system is cleanly divided into three operational planes:
 
-| Concern | Technology / Component | Responsibility |
-|---|---|---|
-| **Durable Execution (Backend)** | **DBOS** (Phase 1A Default) <br> *Restate (Future)* | Owns crash detection, retry policies, deterministic replay, and lease/heartbeat coordination. Trajectory IR wraps tools as durable steps using this backend. |
-| **IR Metadata & Node Log** | **SQLite** (Local) <br> **PostgreSQL** (Server) | Stores trajectory node sequences, seals, and system states. Also used by DBOS for its own workflow state. |
-| **Content Addressed Storage (CAS)** | **Local Filesystem** <br> **MinIO / AWS S3** | Durable storage of artifact bytes, strictly identified by SHA256 hashes (`cas/<first-2-hex>/<remaining>`). |
-| **Caching / Data Locality** | **Fluid** (CNCF) | Optional read-path accelerator for large datasets on Kubernetes. |
+```mermaid
+flowchart TD
+    subgraph Execution Plane
+        A[Agent / LLM] -->|Proposes Plan| B(Trajectory IR Core)
+        B -->|Wraps Tool Calls| C{Durable Backend Adapter}
+    end
 
-> [!CAUTION]
-> **Strict Invariant**: Trajectory IR's correctness must *never* depend on a cache (Fluid or otherwise). Cache misses are expected and must seamlessly fallback to verifying hashes directly against the durable CAS store.
+    subgraph State & Durability Plane
+        C -->|Crash-safe execution, Retries| D[(DBOS / Restate)]
+        B -->|Appends Nodes/Seals| E[(IR Metadata Log)]
+        D -.->|Shares DB| E
+    end
+
+    subgraph Data & Caching Plane
+        B -->|Writes Artifacts| F[(S3 / MinIO CAS)]
+        B -->|Reads Artifacts| G{Cache Miss / Fallback}
+        G -->|Direct Fetch| F
+        G -->|Reads via Mount| H[(Fluid Dataset)]
+        H -.->|Async Sync| F
+    end
+```
+
+### Component Breakdown
+1. **Durable Backend Adapter**: Isolates Trajectory IR from the specifics of Temporal/Restate/DBOS. It intercepts `DECISION` and `TOOL_CALL` nodes and runs them as native durable steps, acquiring lease/heartbeat protection automatically.
+2. **IR Metadata Log**: The relational store (SQLite/Postgres) containing the append-only `nodes`, immutable `seals`, and `trajectory` state.
+3. **CAS (Content Addressed Storage)**: The S3-compatible blob store for arbitrary artifact bytes.
+4. **Fluid Dataset (Optional)**: A Kubernetes-native read-path accelerator (using Alluxio/JuiceFS) for massive read-heavy corpora.
 
 ---
 
-## 2. Deployment Profiles (Step-by-Step Evolution)
+## 2. Storage Mechanics & Data Layouts
 
-The infrastructure scales across three distinct profiles. The API surface remains identical across all profiles.
+### 2.1 The Relational IR Log
+Trajectory metadata is stored relationally. Whether using SQLite (local) or PostgreSQL (server), the schema remains identical:
+
+- `trajectories`: `trajectory_id` (PK), `tenant_id`, `status`.
+- `nodes`: `node_id` (PK, computed via RFC 8785 JCS + SHA256), `trajectory_id`, `seq`, `kind`, `payload`.
+- `seals`: `seal_id` (PK), `node_id` (FK), `signature`.
+
+> [!TIP]
+> **Co-location with DBOS**: In Phase 1A, DBOS workflow state tables and Trajectory IR tables live in the *same* database instance (SQLite file or Postgres schema), eliminating distributed transaction overhead.
+
+### 2.2 Sharded CAS Object Store
+Artifacts are never stored using a flat prefix. To prevent S3 bucket listing degradation and Fluid metadata sync bottlenecks, objects are sharded by the first two hex characters of their SHA256 hash.
+
+```text
+s3://<bucket_name>/cas/<shard_prefix>/<full_hash>
+
+# Example for hash: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+s3://trajir/cas/e3/b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+```
+
+### 2.3 The Read-Path & Cache Fallback Data Flow
+Trajectory IR strictly enforces that **correctness never depends on a cache**. 
+
+```mermaid
+sequenceDiagram
+    participant Agent
+    participant Runtime
+    participant Fluid
+    participant S3
+
+    Agent->>Runtime: Read Artifact (Hash: X)
+    Runtime->>Fluid: Attempt read from mount /cache/X
+    alt Fluid Miss or Hash Mismatch
+        Fluid-->>Runtime: File Not Found / Invalid Hash
+        Runtime->>S3: Direct SDK GET s3://.../cas/.../X
+        S3-->>Runtime: Artifact Bytes
+        Runtime->>Runtime: Verify SHA256(Bytes) == X
+        Runtime-->>Agent: Validated Bytes
+    else Fluid Hit
+        Fluid-->>Runtime: Cached Bytes
+        Runtime->>Runtime: Verify SHA256(Bytes) == X
+        Runtime-->>Agent: Validated Bytes
+    end
+```
+
+---
+
+## 3. Deployment Profiles
+
+The infrastructure is defined by three progressively scaling profiles. Code never forks; only configuration changes.
 
 ### Step 1: `local` Profile (Phase 1A Target)
-Designed for rapid development and the initial open-source release with zero operational overhead.
-- **Execution Backend**: DBOS (running embedded within the Python SDK).
-- **Database**: **SQLite** (Single file handles both DBOS workflow state and Trajectory IR node logs).
-- **Storage**: Local filesystem directory acting as the CAS object store.
-- **Containerization**: None required. Runs natively via Python for frictionless contributor onboarding.
+The frictionless developer environment.
+* **Execution**: Embedded DBOS library inside the Python process.
+* **Database**: Local SQLite file (`~/.trajectory-ir/local.db`).
+* **Storage**: Local filesystem mapping the sharded CAS layout (`~/.trajectory-ir/cas/`).
+* **Networking**: None. Fully offline capable.
 
 ### Step 2: `server-s3` Profile (Single-Region API)
-Designed for standalone API deployments without heavy Kubernetes orchestration.
-- **Execution Backend**: DBOS (embedded) or Restate (standalone server).
-- **Database**: **PostgreSQL** for high-concurrency node logs and durable step states.
-- **Storage**: **Amazon S3** (production) or **MinIO** (CI/CD and local server testing) using standard S3 SDKs.
-- **Containerization**: Packaged via `Dockerfile.server`.
+The standard production topology for standalone APIs.
+* **Execution**: Standalone API server container (`Dockerfile.server`).
+* **Database**: Amazon RDS for PostgreSQL (or equivalent).
+* **Storage**: Amazon S3 (using `boto3` or S3 API compliant SDK).
+* **High Availability**: Stateless API pods can scale horizontally, relying on Postgres locks and DBOS leases for concurrency control.
 
 ### Step 3: `k8s-fluid` Profile (Multi-Pod Agent Fleets)
-Designed for enterprise scale where multiple agents process massive shared datasets (e.g., repository snapshots, large context windows).
-- **Execution Backend**: PostgreSQL-backed DBOS / Restate on Kubernetes.
-- **Storage**: Amazon S3 / MinIO.
-- **Caching**: **Fluid Dataset/Runtime** deployed via Helm. Fluid mounts the read-heavy corpora into pods for fast localized reads.
-- **Multi-Tenancy**: Single shared Fluid Dataset with *path-based isolation*, rather than one dataset per tenant.
-- **Containerization**: Deployed via `charts/trajectory-ir/` Helm chart and `Dockerfile.k8s-fluid`.
+The enterprise scale Kubernetes topology for massive read-fanout (e.g., hundreds of agents reading the same 50GB code repository snapshot).
+* **Execution**: Kubernetes Deployments managed via Helm (`charts/trajectory-ir/`).
+* **Database**: Managed PostgreSQL.
+* **Storage**: Amazon S3.
+* **Caching**: 
+  - Fluid `Dataset` Custom Resource deployed via Helm.
+  - Fluid `Runtime` (Alluxio/JuiceFS) provisions worker pods to cache data.
+  - Trajectory API pods mount the Fluid cache via FUSE CSI driver.
+* **Multi-Tenancy**: Tenants share a single Fluid Dataset, isolated purely by path prefixes, avoiding the overhead of one cache cluster per tenant.
 
 ---
 
-## 3. Technology Stack Requirements
+## 4. Phase 1A Implementation Requirements
 
-> [!IMPORTANT]
-> To preserve consistency, the project explicitly mandates the following stack. Deviations require an approved issue.
+To fulfill this design in Phase 1A, the following technology stack is mandated:
 
-- **Primary Language**: Python (Phase 1A SDK, embedded runtime, and test harness).
-- **Future Control Plane Language**: Go (reserved for Kubernetes-native components).
-- **Data Hashing**: RFC 8785 JSON Canonicalization Scheme (JCS).
-- **CI/CD Quality Gates**: 
-  - GitHub Actions.
-  - Required DCO sign-offs (`Signed-off-by:`).
-  - Passing Conformance Tests (`R01` & `R02` are hard gates).
-
----
-
-## 4. CAS Storage Layout Specification
-
-Artifacts must not be dumped into a flat directory, which creates metadata-listing pressure at scale. They must be sharded by the first two characters of their SHA256 hash.
-
-**Required Layout:**
-```text
-s3://<bucket_name>/cas/<first-2-hex-chars>/<remaining-hex-chars>
-# Example: s3://trajir/cas/ab/cdef0123...
-```
-This is required starting from Phase 1A to ensure smooth transition to Fluid and S3 without data migration overhead.
+1. **Python 3.11+**: Primary runtime.
+2. **`canonicaljson`**: For strict, cross-language stable RFC 8785 JCS hashing.
+3. **`dbos-transact`**: Python library for the embedded durable execution backend.
+4. **`pytest` & `pytest-cov`**: Enforcing >80% test coverage and R01/R02 conformance gates.
