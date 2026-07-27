@@ -55,3 +55,11 @@ We use modern Python tooling:
 4. Run `pytest` to run the existing test suite.
 
 We look forward to reviewing your pull requests!
+
+## 5. AI Contribution Disclosure
+
+Trajectory IR is heavily developed in collaboration with AI tools (like the Antigravity IDE, Claude Code, and the ECC agent suite). We strongly embrace AI-assisted development! However, to maintain code quality, accountability, and clarity of origin, **human contributors must adhere to the following:**
+
+1. **Disclosure**: If you used an AI coding assistant (Copilot, Cursor, Claude, Antigravity, ChatGPT, etc.) to generate a significant portion of the logic in your PR, please mention it in the Pull Request description (e.g., "This PR was generated with the help of Antigravity IDE").
+2. **Accountability**: You, the human contributor, are 100% responsible for the code you submit. You must review the AI-generated code to ensure it adheres to the `README.md` spec, passes all conformance tests, and does not introduce security or performance regressions. 
+3. **No Hallucinations**: Do not let an AI agent invent APIs, node kinds, or durable execution mechanics that are not explicitly documented in the Trajectory IR master spec.
