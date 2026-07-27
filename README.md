@@ -545,5 +545,3 @@ Trajectory IR deliberately does not attempt to:
 ---
 
 *This document is the canonical reference for Trajectory IR. Contributors, reviewers, and AI coding agents should treat it as authoritative and raise an issue rather than deviate from it.*
-#   T r a j e c t o r y - I R  
- 
