@@ -405,11 +405,10 @@ This section is binding for implementation choices. Do not introduce alternative
 
 ```text
 trajectory-ir/
-  README.md                     # points here, to this master spec
+  README.md                     # Master Specification (this file)
   LICENSE                       # Apache-2.0
   CODE_OF_CONDUCT.md            # CNCF Code of Conduct
   CONTRIBUTING.md                # DCO sign-off requirement, PR process
-  TRAJECTORY_IR_MASTER_SPEC.md   # this file
   spec/
     node-kinds.md
     effect-classes.md
@@ -465,9 +464,18 @@ Contributors and agents should place new code according to this layout. If a cha
 
 ---
 
-## 15. Working agreement for AI coding agents
+## 15. Working agreement for AI coding agents (ECC Integration)
 
-This section exists specifically so that multiple AI coding agents (including different Claude Code sessions, potentially working on different parts of the codebase at overlapping times) converge on the same implementation rather than producing conflicting or duplicated logic. Treat every rule below as a hard constraint, not a suggestion.
+This section exists specifically so that multiple AI coding agents (including different Claude Code sessions and Everything Claude Code [ECC] specialized subagents, working on different parts of the codebase at overlapping times) converge on the same implementation rather than producing conflicting or duplicated logic.
+
+### 15.1 Specialized Agent Roles (ECC Suite)
+When developing Trajectory IR using AI coding assistants, human maintainers and agents must operate under three mandatory procedural gate roles:
+- **Planner Agent**: Must be invoked for any major architectural change, module creation, or ambiguous task to research and draft an `implementation_plan.md` before coding begins.
+- **TDD-Guide Agent**: Enforces test-driven development for all logic in `pkg/` and `drivers/`. Modules must be built test-first with over 80% test coverage.
+- **Security-Review Agent**: A mandatory procedural peer-review gate that must analyze and sign off on any proposed modifications to `pkg/effects/` (tool safety boundaries) or `pkg/resume/` (block-and-gate semantics) before a human maintainer merges the changes.
+
+### 15.2 Hard Implementation Rules
+Treat every numbered rule below as an immutable constraint, not a suggestion:
 
 1. **This document is the spec.** Do not derive undefined behavior from general familiarity with similar systems (event sourcing frameworks, other IR designs, etc.). Where this document is silent on a design point, do not invent one, open a `SPEC-QUESTION` issue or comment and stop short of implementing the undefined behavior. This is distinct from rule 2 below: the durable execution backend is not "a similar system to avoid copying", it is a declared, intentional dependency, and its documented behavior should be relied on, not reimplemented.
 2. **Never implement custom crash detection, retry, or lease/heartbeat logic.** This is the single most important rule in this section. That responsibility belongs entirely to the durable execution backend adapter (§3.1, §12.0). If a task seems to need it, the adapter interface is incomplete, extend `drivers/durable-backend/`, and if the chosen backend (DBOS) genuinely cannot provide what's needed, raise an issue before writing a parallel mechanism in `pkg/resume/`. A pull request that adds retry loops, polling, or timeout tracking outside the adapter is a defect, not a feature, regardless of how small it looks.
@@ -517,6 +525,7 @@ Trajectory IR deliberately does not attempt to:
 | CLOOP | The earlier session storage proposal, now folded into Trajectory IR's storage layer rather than existing separately |
 | Fluid | A CNCF incubating Kubernetes native dataset orchestrator, used only as an optional read path cache accelerator (§11.3) |
 | CAS | Content addressed storage, objects identified and retrieved by the hash of their bytes |
+| ECC | Everything Claude Code: An expert suite of specialized AI developer subagents (Planner, TDD-Guide, Security-Review) and canonical workflows mandated for AI-assisted development (§15) |
 
 ---
 
