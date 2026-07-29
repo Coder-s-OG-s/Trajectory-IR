@@ -37,7 +37,7 @@ flowchart TD
 **IR Metadata Log (SQLite/Postgres)**
 - `trajectories`: `trajectory_id` (PK), `tenant_id`, `status`.
 - `nodes`: `node_id` (PK, computed via RFC 8785 JCS + SHA256), `trajectory_id`, `seq`, `kind`, `payload`.
-- `seals`: `seal_id` (PK), `node_id` (FK), `signature`.
+- `seals`: `seal_id` (PK), `node_id` (FK), `content_hash`. *(Note: Contains the deterministic RFC 8785 JCS + SHA256 content integrity hash; package-level cryptographic digital signatures are explicitly deferred out-of-scope for Phase 1A).*
 
 **Sharded CAS Object Store (S3/Filesystem)**
 Artifacts are sharded by the first two hex characters of their SHA256 hash to prevent bucket listing degradation:
@@ -69,44 +69,56 @@ To ensure high quality, deterministic builds, and rapid iteration, we enforce st
    - Type Checking: **Mypy** (Strict mode enabled for all core IR packages).
 
 2. **Core Dependencies**:
-   - `canonicaljson`: For RFC 8785 strict hashing.
-   - `dbos-transact`: For the embedded durable execution Phase 1A backend.
+   - `canonicaljson`: For RFC 8785 strict canonical hashing.
+   - `dbos`: For the embedded durable execution Phase 1A backend.
    - `pytest` & `pytest-cov`: For the conformance suite.
 
 ### 2.2 AI Agent Workflow (ECC Integration)
 
-This repository is maintained by Human owners collaborating with AI Agents (specifically the Antigravity IDE and the Everything Claude Code suite). We mandate the following agent workflow:
+This repository is maintained by human owners collaborating with AI agents (specifically the Antigravity IDE and the Everything Claude Code [ECC] specialized subagent suite). As documented in `README.md` Section 15, we mandate the following developer and AI workflow:
 
 1. **Planner Agent**: Must be invoked for any new architecture or module to draft an `implementation_plan.md` before coding.
 2. **TDD-Guide Agent**: All modules in `pkg/` and `drivers/` are built test-first. Test coverage must exceed 80%.
-3. **Security-Review Agent**: Must be invoked before merging any modifications to `pkg/effects/` (tool safety boundaries) and `pkg/resume/` (block-and-gate logic).
+3. **Security-Review Agent (Procedural Governance Gate)**: Must be invoked before merging any modifications to `pkg/effects/` (tool safety boundaries) and `pkg/resume/` (block-and-gate logic). Unlike automated CI checks, this is a mandatory procedural code review and human maintainer sign-off policy designed to ensure maximum scrutiny on sensitive boundary logic.
 
 ### 2.3 CI/CD Pipeline (GitHub Actions)
 
-Every pull request runs through a strict automated pipeline:
+Every pull request runs through a strict automated CI pipeline. All four validation stages function as hard blocking gates upon failure:
 
 ```mermaid
 sequenceDiagram
     participant PR as Pull Request
+    participant DCO as DCO Verifier
     participant Lint as Ruff & Mypy
     participant Unit as Pytest (Unit)
     participant Conf as Conformance (R01/R02)
-    participant DCO as DCO Verifier
 
-    PR->>DCO: Check "Signed-off-by"
-    PR->>Lint: Static Analysis
-    PR->>Unit: Fast localized tests
-    PR->>Conf: Run durable DBOS gates
-    
-    alt Any stage fails
-        Lint-->>PR: Block Merge
-    else All stages pass
-        Conf-->>PR: Allow Merge
+    PR->>DCO: Check "Signed-off-by" trailer
+    alt DCO Check Fails
+        DCO-->>PR: Block Merge (Missing Sign-off)
+    else DCO Check Passes
+        PR->>Lint: Static Analysis & Type Checking
+        alt Lint / Mypy Fails
+            Lint-->>PR: Block Merge (Static Analysis Error)
+        else Static Analysis Passes
+            PR->>Unit: Execute Fast Localized Unit Tests
+            alt Unit Tests Fail
+                Unit-->>PR: Block Merge (Unit Test Failure)
+            else Unit Tests Pass
+                PR->>Conf: Execute Durable Conformance Gates (R01/R02)
+                alt Conformance Suite Fails
+                    Conf-->>PR: Block Merge (Durable Gate Failure)
+                else All Stages Pass Cleanly
+                    Conf-->>PR: Allow Merge
+                end
+            end
+        end
     end
 ```
 
-- **DCO Sign-off**: Every commit must carry a Developer Certificate of Origin (`Signed-off-by: Name <email>`). Commits without this are hard-blocked by CI.
-- **Conformance Gates**: Features are not complete unless tests `R01` (Safe Resume) and `R02` (Block-and-Gate) pass cleanly.
+- **DCO Sign-off (Automated Hard Gate)**: Every commit must carry a Developer Certificate of Origin (`Signed-off-by: Name <email>`). Commits without this are hard-blocked by CI.
+- **Conformance Gates (Automated Hard Gate)**: Features are not complete unless tests `R01` (Safe Resume) and `R02` (Block-and-Gate) pass cleanly in automated CI.
+- **Security & Architectural Sign-off (Procedural Review Policy)**: Changes modifying tool effect classification or block-and-gate resumption require explicit procedural peer review and human maintainer approval before PR merge.
 
 ### 2.4 Codebase Mapping
 

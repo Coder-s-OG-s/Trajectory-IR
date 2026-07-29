@@ -8,7 +8,7 @@ This document outlines the workflow and strict requirements for getting your cod
 
 The `README.md` (and the technical specifications inside `spec/`) acts as the single source of truth. 
 * **Do not** implement behavior that isn't defined in the spec.
-* **Do not** derive undefined behavior from general familiarity with similar systems (e.g., Temporal, LangGraph). 
+* **Do not** derive undefined behavior from general familiarity with high-level AI orchestration or state frameworks (e.g., LangGraph, CrewAI). *Note: The one deliberate exception is our pluggable durable execution backend (§3.1, such as DBOS or Restate), whose documented transactional replay, retry, and checkpoint behavior should be relied upon directly without redundant wrapper logic.*
 * If a design point is ambiguous, open an issue tagged `SPEC-QUESTION` and wait for a resolution. **Do not guess**.
 
 ## 2. Developer Certificate of Origin (DCO) Sign-off
@@ -31,15 +31,17 @@ git commit -s -m "feat: add basic DBOS adapter framework"
 
 ## 3. Pull Request Process & Quality Gates
 
-### A. AI Agent Working Agreements (ECC)
-If you are an AI coding agent (like Claude Code or Antigravity), you are strictly bound by the rules in `README.md` Section 15. You must:
-- Use the **Planner Agent** to create an implementation plan before writing core logic.
-- Use the **TDD-Guide Agent** to enforce >80% test coverage.
-- Use the **Security-Review Agent** for anything touching `pkg/effects/` or `pkg/resume/`.
+We enforce a layered governance model combining automated continuous integration checks with rigorous human and AI developer procedural review policies.
 
-### B. Conformance Testing
-No PR will be merged if it violates the conformance tests defined in `conformance/`. 
-- **R01 (Safe Resume)** and **R02 (Block-and-Gate)** are hard blockers for Phase 1A. If you modify the adapter interface or the resume logic, you must prove those tests still pass.
+### A. AI Agent Working Agreements (ECC Integration)
+If you are an AI coding agent (like Claude Code or Antigravity) or a developer leveraging AI assistants, you are strictly bound by the rules in `README.md` Section 15. Specifically, our codebase integrates the **Everything Claude Code (ECC)** subagent suite and mandates three specialized gate roles:
+- Use the **Planner Agent** to conduct architectural research and create an `implementation_plan.md` before writing core logic.
+- Use the **TDD-Guide Agent** to build test-first modules in `pkg/` and `drivers/`, enforcing >80% test coverage.
+- Use the **Security-Review Agent** as a mandatory procedural code review step before submitting any modifications to `pkg/effects/` or `pkg/resume/`.
+
+### B. Automated vs Procedural Gates
+- **Automated Hard CI Gates**: No PR will be merged if it violates automated continuous integration checks. Commits lacking DCO sign-offs or failing static analysis (Ruff/Mypy) will be blocked. Crucially, the conformance tests defined in `conformance/`—specifically **R01 (Safe Resume)** and **R02 (Block-and-Gate)**—are automated hard blockers for Phase 1A.
+- **Procedural Governance Gates**: Peer review by a human maintainer and Security-Review Agent verification are mandatory policy rules for any PR modifying safety boundaries or block-and-gate resumption.
 
 ### C. Formatting and Linting
 We use modern Python tooling:
@@ -58,7 +60,7 @@ We look forward to reviewing your pull requests!
 
 ## 5. AI Contribution Disclosure
 
-Trajectory IR is heavily developed in collaboration with AI tools (like the Antigravity IDE, Claude Code, and the ECC agent suite). We strongly embrace AI-assisted development! However, to maintain code quality, accountability, and clarity of origin, **human contributors must adhere to the following:**
+Trajectory IR is heavily developed in collaboration with AI tools (like the Antigravity IDE, Claude Code, and the Everything Claude Code [ECC] agent suite). We strongly embrace AI-assisted development! However, to maintain code quality, accountability, and clarity of origin, **human contributors must adhere to the following:**
 
 1. **Disclosure**: If you used an AI coding assistant (Copilot, Cursor, Claude, Antigravity, ChatGPT, etc.) to generate a significant portion of the logic in your PR, please mention it in the Pull Request description (e.g., "This PR was generated with the help of Antigravity IDE").
 2. **Accountability**: You, the human contributor, are 100% responsible for the code you submit. You must review the AI-generated code to ensure it adheres to the `README.md` spec, passes all conformance tests, and does not introduce security or performance regressions. 
