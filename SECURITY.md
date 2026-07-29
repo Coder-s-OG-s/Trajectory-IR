@@ -19,7 +19,7 @@ Trajectory IR is currently in its **Phase 1A / v0.1.x** development cycle.
 
 To adhere to cloud-native security standards (CNCF TAG Security best practices), we enforce coordinated vulnerability disclosure:
 1. **Primary Secure Channel (GitHub Private Advisories)**: Please use the repository's native **Private Vulnerability Reporting** feature. Navigate to the repository's **Security** tab, click **Advisories**, and select **Report a vulnerability**. This allows secure, confidential communication directly with core maintainers and creation of a private staging patch before public disclosure.
-2. **Secondary Backup Channel**: If you encounter issues accessing GitHub Private Advisories, please contact the lead maintainer directly via email at `siddharthagithub0007@gmail.com`.
+2. **Secondary Backup Channel**: If you encounter issues accessing GitHub Private Advisories, please contact the lead maintainers directly via email at `siddharthagithub0007@gmail.com` or `ayushpatel2731@gmail.com`.
 
 We will acknowledge receipt of your vulnerability report within 48 hours. Please adhere to the [Code of Conduct](CODE_OF_CONDUCT.md) during this process—public zero-day drops or harassment of maintainers over patches are strict violations of our community standards.
 
