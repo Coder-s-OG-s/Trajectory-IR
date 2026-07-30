@@ -52,11 +52,24 @@ def seal_decision(trajectory: Trajectory, step_n: int, plan: dict) -> Decision:
     return Decision(step_n=step_n, plan=plan)
 
 
-def exec_tool(trajectory: Trajectory, step_n: int, call: dict, tool: Tool) -> ToolResult:
+def exec_tool(trajectory: Trajectory, step_n: int, call: dict, tool: Tool, seq: int) -> ToolResult:
+    """Execute a tool call within a step.
+
+    Args:
+        trajectory: The trajectory context
+        step_n: Step number
+        call: Tool call dict with "args" key
+        tool: Tool definition with name, fn, and effect_class
+        seq: Sequence number within the step (caller-supplied, must be unique per call)
+             Suggested allocation: seq = 2 + 2*i for i-th tool call in a step
+
+    Returns:
+        ToolResult with the tool execution result
+    """
     log = NodeLog(trajectory.db_path)
     if tool.effect_class == EffectClass.NON_IDEMPOTENT_WRITE:
         fn = make_gated_tool_call(
-            log, trajectory.trajectory_id, trajectory.tenant_id, step_n, seq=2,
+            log, trajectory.trajectory_id, trajectory.tenant_id, step_n, seq=seq,
             tool_name=tool.name, tool_fn=tool.fn,
         )
     else:
@@ -65,9 +78,16 @@ def exec_tool(trajectory: Trajectory, step_n: int, call: dict, tool: Tool) -> To
     return ToolResult(step_n=step_n, result=result)
 
 
-def commit_step(trajectory: Trajectory, step_n: int) -> None:
+def commit_step(trajectory: Trajectory, step_n: int, seq: int) -> None:
+    """Commit (finalize) a step in the trajectory.
+
+    Args:
+        trajectory: The trajectory context
+        step_n: Step number
+        seq: Sequence number for commit (should be 2 + 2*num_tool_calls to follow after all tool calls)
+    """
     NodeLog(trajectory.db_path).append(
-        "COMMIT_STEP", step_n, {}, trajectory.trajectory_id, trajectory.tenant_id, seq=99
+        "COMMIT_STEP", step_n, {}, trajectory.trajectory_id, trajectory.tenant_id, seq=seq
     )
 
 
