@@ -28,3 +28,14 @@ Model inference and tools must go through `durable.Step` / `Infer` / `Tool`. Blo
 cd go
 go test ./...
 ```
+
+Crash resume conformance (R01/R02 style) lives under `conformance/`.
+
+1. In-process tests always run (panic after seal, TOOL_CALL pre-seed for gate).
+2. Subprocess tests build `cmd/crashagent`, hard-kill at markers, then resume.
+   They skip if the host blocks running the binary (some Windows policies).
+
+```bash
+cd go
+go test ./conformance -count=1 -v
+```

@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Go durable backend package (`trajir/durable`): local SQLite and memory step memoization; Temporal named as production target.
 - Go block and gate under `go/trajir/resume` for non idempotent tool re-entry.
 - Go RunStep seal path (project, durable infer, DECISION, tools, COMMIT_STEP).
+- Go crash resume conformance tests (R01/R02 style) via cmd/crashagent.
+
 
 
 

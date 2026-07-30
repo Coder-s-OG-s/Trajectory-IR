@@ -81,3 +81,10 @@ Thumbs.db
 test_model_call_count.txt
 test_deploy_side_effect_count.txt
 *.marker
+
+# Go local caches (never commit; use the user GOCACHE, not the repo)
+go/.gocache/
+go/.tmp/
+go/.bin/
+*.test
+*.test.exe
