@@ -205,6 +205,11 @@ func (t *Trajectory) CommitStep(stepN, seq int) error {
 	return err
 }
 
+// RunStepOpts are optional hooks for RunStep (demo and tests).
+type RunStepOpts struct {
+	OnDecisionSealed func()
+}
+
 // RunStep runs a full sealed step via resume.RunStep (project, infer, decision, tools, commit).
 func (t *Trajectory) RunStep(
 	ctx context.Context,
@@ -212,6 +217,7 @@ func (t *Trajectory) RunStep(
 	model resume.ModelFunc,
 	tools map[string]resume.Tool,
 	stepContext map[string]any,
+	opts ...RunStepOpts,
 ) ([]any, error) {
 	cfg := resume.RunStepConfig{
 		Log:          t.log,
@@ -220,6 +226,9 @@ func (t *Trajectory) RunStep(
 		TrajectoryID: t.TrajectoryID,
 		WorkflowID:   t.WorkflowID,
 		Tools:        tools,
+	}
+	if len(opts) > 0 {
+		cfg.OnDecisionSealed = opts[0].OnDecisionSealed
 	}
 	return resume.RunStep(ctx, cfg, stepN, model, stepContext)
 }
