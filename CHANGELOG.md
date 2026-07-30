@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Go SQLite NodeLog under `go/trajir/log` matching the Python append only IR log.
 - Go effect classes and fail closed MCP mapping under `go/trajir/effects`.
 - Go durable backend package (`trajir/durable`): local SQLite and memory step memoization; Temporal named as production target.
+- Go block and gate under `go/trajir/resume` for non idempotent tool re-entry.
 
 
 
