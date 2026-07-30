@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Go block and gate under `go/trajir/resume` for non idempotent tool re-entry.
 - Go RunStep seal path (project, durable infer, DECISION, tools, COMMIT_STEP).
 - Go crash resume conformance tests (R01/R02 style) via cmd/crashagent.
+- Go Temporal durable backend adapter under `go/trajir/durable/temporal` (optional cluster).
+
 
 
 
