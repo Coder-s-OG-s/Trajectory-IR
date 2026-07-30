@@ -1,5 +1,4 @@
-// Package resume holds Go resume policy helpers. Block and gate lives here;
-// full run_step orchestration is a follow up.
+// Package resume holds Go seal and resume helpers: block and gate, and RunStep.
 package resume
 
 import (
