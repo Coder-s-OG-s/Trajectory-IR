@@ -33,25 +33,27 @@ def make_gated_tool_call(node_log, trajectory_id, tenant_id, step_n, seq, tool_n
     (TOOL_RESULT, or ABORT when blocked) at `seq + 1`. Callers must space tool
     calls accordingly so no two nodes in a step collide on seq -- see
     `resume/step.py`.
+
+    The claim of the TOOL_CALL slot is atomic (``BEGIN IMMEDIATE`` + insert)
+    so concurrent workers cannot both pass a non-atomic has-then-append race.
     """
 
     def gated(**kwargs):
-        # A TOOL_CALL node at *this exact* (step_n, seq) is by itself proof that
-        # this call was already attempted, so any re-entry must block.
+        # Atomic claim: first successful insert of TOOL_CALL at this seq wins.
+        # Re-entry (or a concurrent loser) must block — never re-run the effect.
         #
         # Deliberately NOT `TOOL_CALL and not TOOL_RESULT`: TOOL_RESULT is
         # appended and committed to SQLite before the durable backend records
         # the step's memoized output, so a crash in that window leaves *both*
-        # nodes present. A `not TOOL_RESULT` conjunct fails open there -- the
-        # gate would wave the replay through and silently re-run the side
-        # effect, which is exactly the invariant this gate exists to protect.
-        # Returning the logged TOOL_RESULT instead of blocking would be unsound
-        # too: we cannot know the effect actually reached the outside world.
-        #
-        # Scoping to `seq` is what makes "this call" precise. Unscoped, one
-        # completed tool's TOOL_RESULT masks an unrelated interrupted tool's
-        # missing one, and the same silent re-run follows.
-        if node_log.has(trajectory_id, step_n, "TOOL_CALL", seq=seq):
+        # nodes present. A `not TOOL_RESULT` conjunct fails open there.
+        claimed = node_log.claim_tool_call(
+            step_n,
+            {"tool": tool_name, "args": kwargs},
+            trajectory_id,
+            tenant_id,
+            seq,
+        )
+        if not claimed:
             node_log.append(
                 "ABORT",
                 step_n,
@@ -62,14 +64,6 @@ def make_gated_tool_call(node_log, trajectory_id, tenant_id, step_n, seq, tool_n
             )
             raise BlockedNeedsGate(step_n, tool_name)
 
-        node_log.append(
-            "TOOL_CALL",
-            step_n,
-            {"tool": tool_name, "args": kwargs},
-            trajectory_id,
-            tenant_id,
-            seq,
-        )
         result = tool_fn(**kwargs)
         node_log.append(
             "TOOL_RESULT",

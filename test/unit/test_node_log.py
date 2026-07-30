@@ -1,9 +1,10 @@
 import os
 import tempfile
+import threading
 
 import pytest
 
-from trajectory_ir.runtime.log import NodeLog
+from trajectory_ir.runtime.log import NodeLog, SlotConflictError
 
 
 @pytest.fixture
@@ -48,3 +49,42 @@ def test_append_is_idempotent_by_content(log):
     )
     assert n1.id == n2.id
     assert log.count(n1.id) == 1
+
+
+def test_claim_tool_call_atomic_single_winner(log):
+    wins = []
+
+    def worker():
+        claimed = log.claim_tool_call(
+            1,
+            {"tool": "deploy", "args": {"v": "1"}},
+            "t1",
+            "demo",
+            2,
+        )
+        wins.append(claimed)
+
+    threads = [threading.Thread(target=worker) for _ in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert sum(1 for w in wins if w) == 1
+    assert sum(1 for w in wins if not w) == 7
+    assert log.has("t1", 1, "TOOL_CALL", seq=2)
+
+
+def test_list_nodes_tenant_filter(log):
+    log.append("DECISION", 1, {"plan": "a"}, "t1", "tenant-a", 1)
+    log.append("DECISION", 1, {"plan": "b"}, "t1", "tenant-b", 2)
+    only_a = log.list_nodes("t1", tenant_id="tenant-a")
+    assert len(only_a) == 1
+    assert only_a[0]["tenant_id"] == "tenant-a"
+    all_nodes = log.list_nodes("t1")
+    assert len(all_nodes) == 2
+
+
+def test_slot_conflict_different_payload(log):
+    log.append("DECISION", 1, {"plan": "a"}, "t1", "demo", 1)
+    with pytest.raises(SlotConflictError):
+        log.append("DECISION", 1, {"plan": "b"}, "t1", "demo", 1)

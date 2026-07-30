@@ -2,7 +2,7 @@ import time
 
 import pytest
 
-from trajectory_ir.runtime.nodes import Node
+from trajectory_ir.runtime.nodes import Node, NodeValidationError
 
 
 def test_identical_payload_different_key_order_same_hash():
@@ -47,7 +47,7 @@ def test_ts_never_affects_hash():
 
 
 def test_unknown_kind_rejected():
-    with pytest.raises(AssertionError):
+    with pytest.raises(NodeValidationError):
         Node(
             kind="NOT_A_KIND",
             trajectory_id="t1",
@@ -59,7 +59,7 @@ def test_unknown_kind_rejected():
 
 
 def test_ts_key_in_payload_rejected():
-    with pytest.raises(AssertionError):
+    with pytest.raises(NodeValidationError):
         Node(
             kind="STATE_SET",
             trajectory_id="t1",
@@ -67,4 +67,28 @@ def test_ts_key_in_payload_rejected():
             step_n=1,
             seq=1,
             payload={"ts": 123},
+        )
+
+
+def test_pipe_in_tenant_id_rejected():
+    with pytest.raises(NodeValidationError, match="delimiter"):
+        Node(
+            kind="STATE_SET",
+            trajectory_id="t1",
+            tenant_id="a|b",
+            step_n=1,
+            seq=1,
+            payload={"a": 1},
+        )
+
+
+def test_pipe_in_trajectory_id_rejected():
+    with pytest.raises(NodeValidationError, match="delimiter"):
+        Node(
+            kind="STATE_SET",
+            trajectory_id="x|y",
+            tenant_id="demo",
+            step_n=1,
+            seq=1,
+            payload={"a": 1},
         )

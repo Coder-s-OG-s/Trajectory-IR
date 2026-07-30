@@ -23,9 +23,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Go kill mid deploy demo under `go/examples/kill-mid-deploy` using trajir/client.
 - Dependabot DCO exclusion in CI; Actions and modernc.org/sqlite dependency bumps.
 - Python `.tir` thin/fat export and import with node hash verification (R05).
-
-
-
+- Security hardening: `.tir` zip size/path limits, atomic TOOL_CALL claim (Python + Go),
+  identity delimiter validation, tenant-scoped list/export, redacted export mode,
+  Temporal TLS/API key config, safer import verification API.
 
 
 

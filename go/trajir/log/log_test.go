@@ -154,3 +154,54 @@ func TestUnknownKindRejected(t *testing.T) {
 		t.Fatal("expected unknown kind error")
 	}
 }
+
+func TestClaimToolCallSingleWinner(t *testing.T) {
+	nl := openTemp(t)
+	claimed1, err := nl.ClaimToolCall(1, map[string]any{"tool": "a", "args": map[string]any{}}, "t1", "demo", 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !claimed1 {
+		t.Fatal("first claim should win")
+	}
+	claimed2, err := nl.ClaimToolCall(1, map[string]any{"tool": "a", "args": map[string]any{}}, "t1", "demo", 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if claimed2 {
+		t.Fatal("second claim should lose")
+	}
+	seq := 2
+	ok, err := nl.Has("t1", 1, "TOOL_CALL", &seq)
+	if err != nil || !ok {
+		t.Fatalf("TOOL_CALL present=%v err=%v", ok, err)
+	}
+}
+
+func TestListNodesTenantFilter(t *testing.T) {
+	nl := openTemp(t)
+	step := 1
+	if _, err := nl.Append("DECISION", &step, map[string]any{"plan": "a"}, "t1", "tenant-a", 1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := nl.Append("DECISION", &step, map[string]any{"plan": "b"}, "t1", "tenant-b", 2); err != nil {
+		t.Fatal(err)
+	}
+	tenant := "tenant-a"
+	rows, err := nl.ListNodes("t1", &tenant)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 || rows[0]["tenant_id"] != "tenant-a" {
+		t.Fatalf("rows=%v", rows)
+	}
+}
+
+func TestPipeInTenantRejected(t *testing.T) {
+	nl := openTemp(t)
+	step := 1
+	_, err := nl.Append("DECISION", &step, map[string]any{"plan": "x"}, "t1", "a|b", 1)
+	if err == nil {
+		t.Fatal("expected delimiter rejection")
+	}
+}

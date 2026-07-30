@@ -1,8 +1,13 @@
 import json
 import sqlite3
+import threading
 from typing import Any
 
 from trajectory_ir.runtime.nodes import Node
+
+
+class SlotConflictError(ValueError):
+    """Raised when a different payload is written to an occupied (trajectory, step, seq, kind) slot."""
 
 
 class NodeLog:
@@ -13,13 +18,17 @@ class NodeLog:
     workflow replay safe to layer on top of -- re-running an already-appended
     step produces the same node id and is silently absorbed instead of
     duplicating history, so there is no separate "seal" operation needed.
+
+    Concurrent writers are serialized with a lock and ``BEGIN IMMEDIATE`` so
+    the block-and-gate claim path cannot double-run a non-idempotent tool.
     """
 
     def __init__(self, db_path: str):
         # check_same_thread=False: the durable backend replays a crashed
         # workflow on its own recovery thread, so the log must be writable from a
-        # thread other than the one that opened it. Only one thread executes a
-        # given workflow body at a time, so no extra locking is needed.
+        # thread other than the one that opened it. Access is serialized via
+        # self._lock; only one thread mutates the connection at a time.
+        self._lock = threading.RLock()
         self._conn = sqlite3.connect(db_path, check_same_thread=False)
         self._conn.execute(
             """
@@ -33,6 +42,20 @@ class NodeLog:
                 payload_json TEXT NOT NULL,
                 ts REAL NOT NULL
             )
+            """,
+        )
+        # Logical slot uniqueness per tenant: same content id is still
+        # INSERT OR IGNORE; a different payload at the same slot is rejected.
+        self._conn.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_nodes_slot
+            ON nodes (tenant_id, trajectory_id, IFNULL(step_n, -1), seq, kind)
+            """,
+        )
+        self._conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_nodes_traj_tenant
+            ON nodes (trajectory_id, tenant_id)
             """,
         )
         self._conn.commit()
@@ -54,22 +77,97 @@ class NodeLog:
             seq=seq,
             payload=payload,
         )
-        self._conn.execute(
-            "INSERT OR IGNORE INTO nodes (id, trajectory_id, tenant_id, step_n, seq, kind, payload_json, ts) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (
-                node.id,
-                node.trajectory_id,
-                node.tenant_id,
-                node.step_n,
-                node.seq,
-                node.kind,
-                json.dumps(node.payload),
-                node.ts,
-            ),
-        )
-        self._conn.commit()
+        with self._lock:
+            self._conn.execute(
+                "INSERT OR IGNORE INTO nodes "
+                "(id, trajectory_id, tenant_id, step_n, seq, kind, payload_json, ts) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    node.id,
+                    node.trajectory_id,
+                    node.tenant_id,
+                    node.step_n,
+                    node.seq,
+                    node.kind,
+                    json.dumps(node.payload),
+                    node.ts,
+                ),
+            )
+            # INSERT OR IGNORE also swallows unique-slot conflicts. Detect a
+            # different payload occupying this logical slot and fail closed.
+            cur = self._conn.execute(
+                "SELECT id FROM nodes WHERE tenant_id = ? AND trajectory_id = ? "
+                "AND IFNULL(step_n, -1) = IFNULL(?, -1) AND seq = ? AND kind = ?",
+                (tenant_id, trajectory_id, step_n, seq, kind),
+            )
+            row = cur.fetchone()
+            if row is not None and row[0] != node.id:
+                self._conn.rollback()
+                raise SlotConflictError(
+                    f"slot conflict trajectory={trajectory_id!r} step={step_n} "
+                    f"seq={seq} kind={kind!r}: different payload already stored"
+                )
+            self._conn.commit()
         return node
+
+    def claim_tool_call(
+        self,
+        step_n: int,
+        payload: dict,
+        trajectory_id: str,
+        tenant_id: str,
+        seq: int,
+    ) -> bool:
+        """Atomically claim a TOOL_CALL slot.
+
+        Returns True if this caller inserted the TOOL_CALL (may run the tool).
+        Returns False if a TOOL_CALL already occupied this (trajectory, step, seq).
+        """
+        node = Node(
+            kind="TOOL_CALL",
+            trajectory_id=trajectory_id,
+            tenant_id=tenant_id,
+            step_n=step_n,
+            seq=seq,
+            payload=payload,
+        )
+        with self._lock:
+            try:
+                self._conn.execute("BEGIN IMMEDIATE")
+                cur = self._conn.execute(
+                    "SELECT 1 FROM nodes WHERE tenant_id = ? AND trajectory_id = ? "
+                    "AND step_n = ? AND kind = ? AND seq = ? LIMIT 1",
+                    (tenant_id, trajectory_id, step_n, "TOOL_CALL", seq),
+                )
+                if cur.fetchone() is not None:
+                    self._conn.execute("COMMIT")
+                    return False
+                self._conn.execute(
+                    "INSERT INTO nodes "
+                    "(id, trajectory_id, tenant_id, step_n, seq, kind, payload_json, ts) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        node.id,
+                        node.trajectory_id,
+                        node.tenant_id,
+                        node.step_n,
+                        node.seq,
+                        node.kind,
+                        json.dumps(node.payload),
+                        node.ts,
+                    ),
+                )
+                self._conn.execute("COMMIT")
+                return True
+            except sqlite3.IntegrityError:
+                self._conn.execute("ROLLBACK")
+                return False
+            except Exception:
+                try:
+                    self._conn.execute("ROLLBACK")
+                except sqlite3.Error:
+                    pass
+                raise
 
     def has(self, trajectory_id: str, step_n: int, kind: str, seq: int | None = None) -> bool:
         """Does a node of `kind` exist for this trajectory/step?
@@ -85,39 +183,54 @@ class NodeLog:
         if seq is not None:
             sql += " AND seq = ?"
             params.append(seq)
-        cur = self._conn.execute(sql + " LIMIT 1", params)
-        return cur.fetchone() is not None
+        with self._lock:
+            cur = self._conn.execute(sql + " LIMIT 1", params)
+            return cur.fetchone() is not None
 
     def count(self, node_id: str) -> int:
-        cur = self._conn.execute("SELECT COUNT(*) FROM nodes WHERE id = ?", (node_id,))
-        return cur.fetchone()[0]
+        with self._lock:
+            cur = self._conn.execute("SELECT COUNT(*) FROM nodes WHERE id = ?", (node_id,))
+            return cur.fetchone()[0]
 
-    def list_nodes(self, trajectory_id: str) -> list[dict[str, Any]]:
-        """Return all stored nodes for a trajectory ordered by step then seq."""
-        cur = self._conn.execute(
-            """
+    def list_nodes(
+        self,
+        trajectory_id: str,
+        *,
+        tenant_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Return stored nodes for a trajectory ordered by step then seq.
+
+        When ``tenant_id`` is set, only that tenant's rows are returned
+        (multi-tenant isolation at the read path).
+        """
+        sql = """
             SELECT id, trajectory_id, tenant_id, step_n, seq, kind, payload_json, ts
             FROM nodes
             WHERE trajectory_id = ?
-            ORDER BY COALESCE(step_n, -1), seq
-            """,
-            (trajectory_id,),
-        )
-        rows: list[dict[str, Any]] = []
-        for row in cur.fetchall():
-            rows.append(
-                {
-                    "id": row[0],
-                    "trajectory_id": row[1],
-                    "tenant_id": row[2],
-                    "step_n": row[3],
-                    "seq": row[4],
-                    "kind": row[5],
-                    "payload": json.loads(row[6]),
-                    "ts": row[7],
-                }
-            )
-        return rows
+            """
+        params: list[object] = [trajectory_id]
+        if tenant_id is not None:
+            sql += " AND tenant_id = ?"
+            params.append(tenant_id)
+        sql += " ORDER BY COALESCE(step_n, -1), seq"
+        with self._lock:
+            cur = self._conn.execute(sql, params)
+            rows: list[dict[str, Any]] = []
+            for row in cur.fetchall():
+                rows.append(
+                    {
+                        "id": row[0],
+                        "trajectory_id": row[1],
+                        "tenant_id": row[2],
+                        "step_n": row[3],
+                        "seq": row[4],
+                        "kind": row[5],
+                        "payload": json.loads(row[6]),
+                        "ts": row[7],
+                    }
+                )
+            return rows
 
     def close(self):
-        self._conn.close()
+        with self._lock:
+            self._conn.close()

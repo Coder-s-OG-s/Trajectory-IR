@@ -61,7 +61,10 @@ func TestHashVectorsMatchPythonGoldens(t *testing.T) {
 			if ph != c.PayloadHash {
 				t.Fatalf("payload_hash\n got %s\nwant %s", ph, c.PayloadHash)
 			}
-			id := nodes.NodeID(c.TenantID, c.TrajectoryID, c.StepN, c.Seq, c.Kind, ph)
+			id, err := nodes.NodeID(c.TenantID, c.TrajectoryID, c.StepN, c.Seq, c.Kind, ph)
+			if err != nil {
+				t.Fatalf("NodeID: %v", err)
+			}
 			if id != c.NodeID {
 				t.Fatalf("node_id\n got %s\nwant %s", id, c.NodeID)
 			}

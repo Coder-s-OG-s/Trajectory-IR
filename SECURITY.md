@@ -37,7 +37,28 @@ Based on the [Infrastructure Blueprint](infrastructure.md) and [Master Spec](REA
 - **Cache Poisoning (`k8s-fluid` profile)**: Exploits where a stale or poisoned Fluid Dataset FUSE mount can trick the runtime into bypassing the direct S3/MinIO CAS hash-verification fallback.
 
 ### C. Data & Export Plane (`.tir` Packages)
-- **Sensitive Data Leakage**: Flaws where nodes marked with the `SENSITIVE` effect class fail to be stripped or hashed properly during a `redacted` `.tir` package export.
+- **Sensitive Data Leakage**: Flaws where secret-like fields or thoughts leak during a `redacted` `.tir` package export.
+- **Package resource exhaustion**: Zip bombs / oversized members must be rejected by load limits (`TirLimitError`).
+- **Unverified import**: `import_tir` always verifies; `load_tir(verify=False)` is disabled. Inspection without verification requires explicit `load_tir_unverified()` and must never write to a durable NodeLog.
+- **Integrity vs provenance**: Node hash verification proves content integrity, not publisher authenticity. Package signatures remain reserved / unimplemented until a cryptography-focused design lands.
+
+### D. Execution concurrency
+- **Block-and-gate races**: Claiming a `TOOL_CALL` slot must be atomic so concurrent workers cannot double-run a `NON_IDEMPOTENT_WRITE` tool (R02).
+
+### E. Implemented vs planned (be honest)
+| Control | Status |
+| ------- | ------ |
+| Fail-closed MCP effect mapping | Implemented |
+| Atomic TOOL_CALL claim (gate) | Implemented |
+| `.tir` size / path safety limits | Implemented |
+| Redacted export (secret-like keys + thoughts) | Implemented (basic) |
+| Package digital signatures | Not implemented (reserved) |
+| Full multi-tenant SaaS isolation | Not a product surface yet; tenant_id filter on list/export exists |
+| Fluid / k8s cache poisoning controls | Design only (future profile) |
+
+### F. Continuous dependency scanning
+- **Go**: `govulncheck ./...` runs in CI.
+- **Python**: maintainers should run `pip install pip-audit && pip-audit --skip-editable` in a clean venv after `pip install -e ".[dev]"` before release. Adding a permanent CI job requires a token with the GitHub `workflow` scope when editing `.github/workflows/ci.yml`.
 
 ## 4. Security Accountability for Contributors
 

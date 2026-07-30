@@ -34,3 +34,17 @@ def test_destructive_hint_true_fails_closed_even_if_idempotent():
 def test_contradictory_readonly_and_destructive_fails_closed():
     annotations = {"readOnlyHint": True, "destructiveHint": True}
     assert classify_from_mcp(annotations) == EffectClass.NON_IDEMPOTENT_WRITE
+
+
+def test_open_world_idempotent_write_fails_closed():
+    annotations = {
+        "readOnlyHint": False,
+        "idempotentHint": True,
+        "destructiveHint": False,
+        "openWorldHint": True,
+    }
+    assert classify_from_mcp(annotations) == EffectClass.NON_IDEMPOTENT_WRITE
+
+
+def test_non_dict_annotations_fail_closed():
+    assert classify_from_mcp(None) == EffectClass.NON_IDEMPOTENT_WRITE  # type: ignore[arg-type]

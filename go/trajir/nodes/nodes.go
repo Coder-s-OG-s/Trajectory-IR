@@ -12,7 +12,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gowebpki/jcs"
 )
@@ -35,6 +37,24 @@ var NODE_KINDS = map[string]struct{}{
 	"COMMIT_STEP":     {},
 	"ABORT":           {},
 	"REDACTION":       {},
+}
+
+// ValidateIDComponent rejects empty values and characters that break the
+// '|' joined node_id preimage (delimiter / control injection).
+func ValidateIDComponent(name, value string) error {
+	if value == "" {
+		return fmt.Errorf("%s must be a non-empty string", name)
+	}
+	if !utf8.ValidString(value) {
+		return fmt.Errorf("%s must be valid UTF-8", name)
+	}
+	if strings.ContainsAny(value, "|\n\r\x00") {
+		return fmt.Errorf("%s must not contain '|' or control characters (identity delimiter safety)", name)
+	}
+	if len(value) > 512 {
+		return fmt.Errorf("%s exceeds maximum length 512", name)
+	}
+	return nil
 }
 
 // PayloadHash returns SHA-256 hex of the RFC 8785 canonical form of payload.
@@ -61,14 +81,20 @@ func PayloadHash(payload map[string]any) (string, error) {
 
 // NodeID builds the content-addressed id string used by the Python reference.
 // stepN nil is formatted as "None" so it matches Python f-string None.
-func NodeID(tenantID, trajectoryID string, stepN *int, seq int, kind, phash string) string {
+func NodeID(tenantID, trajectoryID string, stepN *int, seq int, kind, phash string) (string, error) {
+	if err := ValidateIDComponent("tenant_id", tenantID); err != nil {
+		return "", err
+	}
+	if err := ValidateIDComponent("trajectory_id", trajectoryID); err != nil {
+		return "", err
+	}
 	step := "None"
 	if stepN != nil {
 		step = strconv.Itoa(*stepN)
 	}
 	raw := fmt.Sprintf("%s|%s|%s|%d|%s|%s", tenantID, trajectoryID, step, seq, kind, phash)
 	sum := sha256.Sum256([]byte(raw))
-	return hex.EncodeToString(sum[:])
+	return hex.EncodeToString(sum[:]), nil
 }
 
 // Node is a hashed IR event. Identity fields are computed on construction.
@@ -89,10 +115,20 @@ func NewNode(kind, trajectoryID, tenantID string, stepN *int, seq int, payload m
 	if _, ok := NODE_KINDS[kind]; !ok {
 		return nil, fmt.Errorf("unknown node kind: %s", kind)
 	}
+	if err := ValidateIDComponent("tenant_id", tenantID); err != nil {
+		return nil, err
+	}
+	if err := ValidateIDComponent("trajectory_id", trajectoryID); err != nil {
+		return nil, err
+	}
 	if payload == nil {
 		payload = map[string]any{}
 	}
 	phash, err := PayloadHash(payload)
+	if err != nil {
+		return nil, err
+	}
+	id, err := NodeID(tenantID, trajectoryID, stepN, seq, kind, phash)
 	if err != nil {
 		return nil, err
 	}
@@ -105,6 +141,6 @@ func NewNode(kind, trajectoryID, tenantID string, stepN *int, seq int, payload m
 		Payload:      payload,
 		TS:           float64(time.Now().UnixNano()) / 1e9,
 		PHash:        phash,
-		ID:           NodeID(tenantID, trajectoryID, stepN, seq, kind, phash),
+		ID:           id,
 	}, nil
 }
