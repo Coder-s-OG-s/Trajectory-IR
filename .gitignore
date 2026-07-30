@@ -75,3 +75,9 @@ venv.bak/
 # OS generated files
 .DS_Store
 Thumbs.db
+
+# Build and runtime artifacts
+*.sqlite
+test_model_call_count.txt
+test_deploy_side_effect_count.txt
+*.marker
