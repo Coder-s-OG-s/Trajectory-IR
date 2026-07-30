@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Go effect classes and fail closed MCP mapping under `go/trajir/effects`.
 - Go durable backend package (`trajir/durable`): local SQLite and memory step memoization; Temporal named as production target.
 - Go block and gate under `go/trajir/resume` for non idempotent tool re-entry.
+- Go RunStep seal path (project, durable infer, DECISION, tools, COMMIT_STEP).
+
 
 
 

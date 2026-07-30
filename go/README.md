@@ -10,7 +10,7 @@ Second language implementation of Trajectory IR primitives. Python remains the P
 | `trajir/log` | SQLite append only NodeLog |
 | `trajir/effects` | Effect classes and fail closed MCP mapping |
 | `trajir/durable` | Pluggable step memoization backend |
-| `trajir/resume` | Block and gate for NON_IDEMPOTENT_WRITE tools |
+| `trajir/resume` | Block and gate, and RunStep seal path for one agent step |
 
 ## Durable backend decision (issue #16)
 
