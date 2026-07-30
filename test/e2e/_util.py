@@ -11,9 +11,13 @@ AGENT_SCRIPT = os.path.join(REPO_ROOT, "examples", "kill-mid-deploy", "agent.py"
 # the crashed run's databases, so scenarios isolate themselves by working
 # directory rather than by deleting these between the crash and the resume.
 ARTIFACTS = (
-    "test_model_call_count.txt", "test_deploy_side_effect_count.txt",
-    "decision_sealed.marker", "tool_started.marker", "inference_started.marker",
-    "kill_mid_deploy.sqlite", "kill-mid-deploy.sqlite",
+    "test_model_call_count.txt",
+    "test_deploy_side_effect_count.txt",
+    "decision_sealed.marker",
+    "tool_started.marker",
+    "inference_started.marker",
+    "kill_mid_deploy.sqlite",
+    "kill-mid-deploy.sqlite",
 )
 
 
@@ -29,7 +33,8 @@ def start_agent(*args: str, cwd: str, log_path: str) -> subprocess.Popen:
     Output goes to a file rather than a pipe: a hard-killed process's piped
     output is lost, and these runs are killed by design.
     """
-    log = open(log_path, "w")
+    # Handle must stay open for the life of the child; closed in hard_kill.
+    log = open(log_path, "w", encoding="utf-8")  # noqa: SIM115
     proc = subprocess.Popen(agent_cmd(*args), cwd=cwd, stdout=log, stderr=subprocess.STDOUT)
     proc._log_file = log  # keep the handle alive until the process is reaped
     return proc
@@ -38,7 +43,12 @@ def start_agent(*args: str, cwd: str, log_path: str) -> subprocess.Popen:
 def run_agent(*args: str, cwd: str, timeout: float = 120.0) -> subprocess.CompletedProcess:
     """Run the agent to completion, capturing its output."""
     return subprocess.run(
-        agent_cmd(*args), cwd=cwd, capture_output=True, text=True, timeout=timeout
+        agent_cmd(*args),
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        check=False,
     )
 
 
@@ -65,7 +75,8 @@ def wait_for_marker(path: str, timeout: float = 60.0) -> None:
 def read_counter(path: str) -> int:
     if not os.path.exists(path):
         return 0
-    return int(open(path).read().strip() or "0")
+    with open(path, encoding="utf-8") as f:
+        return int(f.read().strip() or "0")
 
 
 def cleanup(*paths: str) -> None:

@@ -5,10 +5,17 @@ the same durable workflow id.
 Each scenario gets its own working directory so the node log and the durable
 backend's system database survive the crash but never leak between scenarios.
 """
+
 import os
 import sqlite3
 
-from test.e2e._util import hard_kill, read_counter, run_agent, start_agent, wait_for_marker
+from test.e2e._util import (
+    hard_kill,
+    read_counter,
+    run_agent,
+    start_agent,
+    wait_for_marker,
+)
 
 MODEL_COUNT = "test_model_call_count.txt"
 DEPLOY_COUNT = "test_deploy_side_effect_count.txt"
@@ -29,7 +36,11 @@ def _logged_kinds(workdir):
 
 def _report(workdir, result):
     crash_log = os.path.join(workdir, "crash_run.log")
-    crash_output = open(crash_log).read() if os.path.exists(crash_log) else "<none>"
+    if os.path.exists(crash_log):
+        with open(crash_log, encoding="utf-8") as f:
+            crash_output = f.read()
+    else:
+        crash_output = "<none>"
     return (
         f"\n--- crashed run output ---\n{crash_output}"
         f"\n--- resume run stdout ---\n{result.stdout}"
@@ -137,8 +148,8 @@ def test_crash_mid_nonidempotent_tool_blocks_not_retries(tmp_path):
     # This asserts the typed exception was reconstructed and caught by the
     # agent, which is the only path that both prints this line and exits 0.
     assert result.returncode == 0, _report(workdir, result)
-    assert "BLOCKED_NEEDS_GATE: step 1: 'deploy_server'" in result.stdout + result.stderr, (
-        _report(workdir, result)
+    assert "BLOCKED_NEEDS_GATE: step 1: 'deploy_server'" in result.stdout + result.stderr, _report(
+        workdir, result
     )
     assert read_counter(os.path.join(workdir, DEPLOY_COUNT)) <= 1, (
         "deploy_server side effect ran more than once" + _report(workdir, result)

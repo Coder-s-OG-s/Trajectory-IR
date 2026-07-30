@@ -14,12 +14,20 @@ def test_read_only_hint_classified_read_only():
 
 
 def test_explicit_idempotent_write_classified_correctly():
-    annotations = {"readOnlyHint": False, "idempotentHint": True, "destructiveHint": False}
+    annotations = {
+        "readOnlyHint": False,
+        "idempotentHint": True,
+        "destructiveHint": False,
+    }
     assert classify_from_mcp(annotations) == EffectClass.IDEMPOTENT_WRITE
 
 
 def test_destructive_hint_true_fails_closed_even_if_idempotent():
-    annotations = {"readOnlyHint": False, "idempotentHint": True, "destructiveHint": True}
+    annotations = {
+        "readOnlyHint": False,
+        "idempotentHint": True,
+        "destructiveHint": True,
+    }
     assert classify_from_mcp(annotations) == EffectClass.NON_IDEMPOTENT_WRITE
 
 

@@ -1,0 +1,36 @@
+name: Spec question
+description: The master README or design docs are unclear. Do not invent behavior.
+title: "spec: "
+labels: ["SPEC-QUESTION"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this when the spec is ambiguous. Wait for a resolution before coding around the gap.
+
+  - type: input
+    id: location
+    attributes:
+      label: Where
+      description: File and section (README §…, design doc, issue number).
+    validations:
+      required: true
+
+  - type: textarea
+    id: question
+    attributes:
+      label: What is unclear
+    validations:
+      required: true
+
+  - type: textarea
+    id: options
+    attributes:
+      label: Options you see (optional)
+      description: If you already have two readings, list them. Do not implement either yet.
+
+  - type: textarea
+    id: blocked
+    attributes:
+      label: What this blocks
+      description: Which PR or task is stuck until this is answered.

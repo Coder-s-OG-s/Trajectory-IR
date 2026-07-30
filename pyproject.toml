@@ -19,3 +19,38 @@ packages = ["pkg/trajectory_ir", "drivers", "client"]
 
 [tool.pytest.ini_options]
 testpaths = ["test", "conformance"]
+addopts = [
+    "-ra",
+    "--strict-markers",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["pkg", "drivers", "client", "test", "conformance", "examples"]
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "F",
+    "I",
+    "UP",
+    "B",
+]
+ignore = [
+    "E501",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Fixture agent adjusts sys.path before local imports on purpose.
+"examples/kill-mid-deploy/agent.py" = ["E402"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["trajectory_ir", "drivers", "client", "test"]
+
+[tool.mypy]
+python_version = "3.11"
+mypy_path = "pkg"
+packages = ["trajectory_ir"]
+warn_unused_configs = true
+show_error_codes = true

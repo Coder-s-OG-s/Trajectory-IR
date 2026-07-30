@@ -1,19 +1,81 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
   pull_request:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
 
 jobs:
-  test:
+  dco:
+    name: DCO
     runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
-          python-version: "3.11"
-      - run: pip install -e ".[dev]"
-      - run: pytest test/unit -v
-      - run: pytest test/e2e -v
-      - run: pytest conformance/ -v
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dco-check
+        run: pip install --upgrade pip dco-check
+
+      - name: Verify Signed-off-by on PR commits
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: dco-check --verbose
+
+  quality:
+    name: Quality (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install package and dev tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Ruff lint
+        run: ruff check pkg drivers client test conformance examples
+
+      - name: Ruff format check
+        run: ruff format --check pkg drivers client test conformance examples
+
+      - name: Mypy
+        run: mypy pkg/trajectory_ir
+
+      - name: Unit tests
+        run: pytest test/unit -q
+
+      - name: E2E crash/resume tests
+        run: pytest test/e2e -q
+
+      - name: Conformance R01/R02
+        run: pytest conformance/ -q

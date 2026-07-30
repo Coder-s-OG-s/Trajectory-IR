@@ -7,8 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Added
-- Boilerplate directory structure initialization for Phase 1A python components (`pkg/`, `client/`, `drivers/`, `conformance/`, `spec/`).
-- GitHub workflow CI/CD documentation and DCO requirements.
+- Phase 1A buildable core (nodes, NodeLog, effects, DBOS adapter, seal/resume gate, client SDK, kill-mid-deploy, R01/R02).
+- Issue templates, PR template, DCO CI job, Ruff/Mypy in CI alongside unit/e2e/conformance.
+- Maintainer note for branch protection on `main`.
+
+### Changed
+- CONTRIBUTING and infrastructure docs describe the CI gates that actually run.
+- Lint cleanups for Ruff/Mypy on the core package and test harness.
 
 ## [v0.1.0-draft] - 2026-07-27
 ### Added

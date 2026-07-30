@@ -8,6 +8,7 @@ Usage:
     python examples/kill-mid-deploy/run_demo.py --resume
     # expected output: "Resumed. deploy_server executed exactly once."
 """
+
 import subprocess
 import sys
 

@@ -53,19 +53,31 @@ def make_gated_tool_call(node_log, trajectory_id, tenant_id, step_n, seq, tool_n
         # missing one, and the same silent re-run follows.
         if node_log.has(trajectory_id, step_n, "TOOL_CALL", seq=seq):
             node_log.append(
-                "ABORT", step_n, {"reason": "BLOCKED_NEEDS_GATE", "tool": tool_name},
-                trajectory_id, tenant_id, seq + 1,
+                "ABORT",
+                step_n,
+                {"reason": "BLOCKED_NEEDS_GATE", "tool": tool_name},
+                trajectory_id,
+                tenant_id,
+                seq + 1,
             )
             raise BlockedNeedsGate(step_n, tool_name)
 
         node_log.append(
-            "TOOL_CALL", step_n, {"tool": tool_name, "args": kwargs},
-            trajectory_id, tenant_id, seq,
+            "TOOL_CALL",
+            step_n,
+            {"tool": tool_name, "args": kwargs},
+            trajectory_id,
+            tenant_id,
+            seq,
         )
         result = tool_fn(**kwargs)
         node_log.append(
-            "TOOL_RESULT", step_n, {"result": result},
-            trajectory_id, tenant_id, seq + 1,
+            "TOOL_RESULT",
+            step_n,
+            {"result": result},
+            trajectory_id,
+            tenant_id,
+            seq + 1,
         )
         return result
 
