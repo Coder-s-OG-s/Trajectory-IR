@@ -110,7 +110,17 @@ def test_crash_mid_nonidempotent_tool_blocks_not_retries(tmp_path):
 
     result = run_agent("--resume", cwd=workdir)
 
-    assert "BLOCKED_NEEDS_GATE" in result.stdout + result.stderr, _report(workdir, result)
+    # Exit 0 plus the agent's *own* printed prefix. A bare "BLOCKED_NEEDS_GATE"
+    # substring is not evidence: the same string appears in the durable
+    # backend's framework error log when the exception fails to survive its
+    # pickle round trip, so the loose match passed even when
+    # `except BlockedNeedsGate` never fired and the process died on a TypeError.
+    # This asserts the typed exception was reconstructed and caught by the
+    # agent, which is the only path that both prints this line and exits 0.
+    assert result.returncode == 0, _report(workdir, result)
+    assert "BLOCKED_NEEDS_GATE: step 1: 'deploy_server'" in result.stdout + result.stderr, (
+        _report(workdir, result)
+    )
     assert read_counter(os.path.join(workdir, DEPLOY_COUNT)) <= 1, (
         "deploy_server side effect ran more than once" + _report(workdir, result)
     )
