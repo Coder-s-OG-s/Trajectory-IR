@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Go crash resume conformance tests (R01/R02 style) via cmd/crashagent.
 - Go Temporal durable backend adapter under `go/trajir/durable/temporal` (optional cluster).
 - Go client SDK under `go/trajir/client` (open, project, seal, exec, commit, resume, RunStep).
+- Dependabot for Go, pip, and Actions; CI hash golden gates and govulncheck; CONTRIBUTING Go section.
+
 
 
 

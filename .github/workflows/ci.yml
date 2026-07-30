@@ -71,6 +71,9 @@ jobs:
       - name: Mypy
         run: mypy pkg/trajectory_ir
 
+      - name: Cross language hash goldens (Python)
+        run: pytest test/unit/test_hash_vectors.py test/unit/test_node_identity.py -q
+
       - name: Unit tests
         run: pytest test/unit -q
 
@@ -90,9 +93,19 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.22.x"
+          go-version: "1.25.x"
           cache-dependency-path: go/go.sum
+
+      - name: Cross language hash goldens (Go)
+        working-directory: go
+        run: go test ./trajir/nodes -count=1 -run 'TestHashVectors|TestKeyOrder'
 
       - name: Test Go IR core
         working-directory: go
-        run: go test ./...
+        run: go test ./... -count=1
+
+      - name: govulncheck
+        working-directory: go
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
