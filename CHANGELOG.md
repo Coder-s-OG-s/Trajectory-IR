@@ -26,6 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Security hardening: `.tir` zip size/path limits, atomic TOOL_CALL claim (Python + Go),
   identity delimiter validation, tenant-scoped list/export, redacted export mode,
   Temporal TLS/API key config, safer import verification API.
+- CI: `pip-audit` gate in Python unit tests under CI (parity with Go `govulncheck`);
+  `pip-audit` added to the `dev` extra.
 
 
 

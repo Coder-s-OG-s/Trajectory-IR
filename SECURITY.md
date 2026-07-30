@@ -57,8 +57,8 @@ Based on the [Infrastructure Blueprint](infrastructure.md) and [Master Spec](REA
 | Fluid / k8s cache poisoning controls | Design only (future profile) |
 
 ### F. Continuous dependency scanning
-- **Go**: `govulncheck ./...` runs in CI.
-- **Python**: maintainers should run `pip install pip-audit && pip-audit --skip-editable` in a clean venv after `pip install -e ".[dev]"` before release. Adding a permanent CI job requires a token with the GitHub `workflow` scope when editing `.github/workflows/ci.yml`.
+- **Go**: `govulncheck ./...` runs in the CI `Go` job.
+- **Python**: `pip-audit --skip-editable` runs under CI via `test/unit/test_pip_audit.py` (part of the Quality unit suite when `CI=true`). Locally: `RUN_PIP_AUDIT=1 pytest test/unit/test_pip_audit.py -q` in a clean venv after `pip install -e ".[dev]"`.
 
 ## 4. Security Accountability for Contributors
 
