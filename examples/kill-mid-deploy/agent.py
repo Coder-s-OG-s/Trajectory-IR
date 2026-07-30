@@ -19,6 +19,7 @@ All artifacts (node log, DBOS system database, counters, markers) are written
 relative to the current working directory, so callers isolate runs by cd'ing
 into a scratch directory.
 """
+
 import argparse
 import os
 import sys
@@ -34,11 +35,11 @@ for _path in (_REPO_ROOT, os.path.join(_REPO_ROOT, "pkg")):
 from dbos import SetWorkflowID
 
 from drivers.durable_backend.dbos.adapter import init_backend
-from trajectory_ir.runtime.log import NodeLog
-from trajectory_ir.runtime.tool import Tool
 from trajectory_ir.effects import EffectClass
 from trajectory_ir.resume.gate import BlockedNeedsGate
 from trajectory_ir.resume.step import make_run_step
+from trajectory_ir.runtime.log import NodeLog
+from trajectory_ir.runtime.tool import Tool
 
 TRAJECTORY_ID = "kill-mid-deploy-demo"
 TENANT_ID = "demo"
@@ -61,9 +62,13 @@ _CRASH_DURING_INFERENCE = False
 
 
 def _bump_counter(path: str) -> int:
-    n = int(open(path).read().strip() or "0") if os.path.exists(path) else 0
+    if os.path.exists(path):
+        with open(path, encoding="utf-8") as f:
+            n = int(f.read().strip() or "0")
+    else:
+        n = 0
     n += 1
-    with open(path, "w") as f:
+    with open(path, "w", encoding="utf-8") as f:
         f.write(str(n))
     return n
 
@@ -102,7 +107,11 @@ def main():
     _CRASH_DURING_INFERENCE = args.crash_during == "inference"
 
     if not args.resume:
-        for marker in (DECISION_SEALED_MARKER, TOOL_STARTED_MARKER, INFERENCE_STARTED_MARKER):
+        for marker in (
+            DECISION_SEALED_MARKER,
+            TOOL_STARTED_MARKER,
+            INFERENCE_STARTED_MARKER,
+        ):
             if os.path.exists(marker):
                 os.remove(marker)
 
@@ -112,7 +121,11 @@ def main():
         return deploy_server(version, crash_during=(args.crash_during == "tool_call"))
 
     tool_registry = {
-        "deploy_server": Tool(name="deploy_server", fn=deploy_wrapper, effect_class=EffectClass.NON_IDEMPOTENT_WRITE),
+        "deploy_server": Tool(
+            name="deploy_server",
+            fn=deploy_wrapper,
+            effect_class=EffectClass.NON_IDEMPOTENT_WRITE,
+        ),
     }
 
     def seal_marker_hook():
@@ -126,7 +139,13 @@ def main():
     # DBOS looks up pending workflows for recovery at launch time and resolves
     # them by registered name, and it derives the application version (which
     # pending-workflow lookup is keyed on) from the registered workflows.
-    run_step = make_run_step(node_log, TENANT_ID, TRAJECTORY_ID, tool_registry, on_decision_sealed=seal_marker_hook)
+    run_step = make_run_step(
+        node_log,
+        TENANT_ID,
+        TRAJECTORY_ID,
+        tool_registry,
+        on_decision_sealed=seal_marker_hook,
+    )
 
     init_backend(app_name="kill-mid-deploy")
 

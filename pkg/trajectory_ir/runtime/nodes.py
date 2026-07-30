@@ -1,15 +1,29 @@
 import hashlib
 import time
 from dataclasses import dataclass, field
-from typing import Optional
 
 import rfc8785
 
-NODE_KINDS = frozenset({
-    "INPUT", "CONSTRAINT", "STATE_SET", "PROJECT_CONTEXT", "THOUGHT",
-    "DECISION", "TOOL_CALL", "TOOL_RESULT", "ARTIFACT_PUT", "ARTIFACT_REF",
-    "LTM_QUERY", "LTM_HIT", "LTM_PROJECT", "COMMIT_STEP", "ABORT", "REDACTION",
-})
+NODE_KINDS = frozenset(
+    {
+        "INPUT",
+        "CONSTRAINT",
+        "STATE_SET",
+        "PROJECT_CONTEXT",
+        "THOUGHT",
+        "DECISION",
+        "TOOL_CALL",
+        "TOOL_RESULT",
+        "ARTIFACT_PUT",
+        "ARTIFACT_REF",
+        "LTM_QUERY",
+        "LTM_HIT",
+        "LTM_PROJECT",
+        "COMMIT_STEP",
+        "ABORT",
+        "REDACTION",
+    }
+)
 
 
 def payload_hash(payload: dict) -> str:
@@ -19,7 +33,14 @@ def payload_hash(payload: dict) -> str:
     return hashlib.sha256(canon).hexdigest()
 
 
-def node_id(tenant_id: str, trajectory_id: str, step_n: Optional[int], seq: int, kind: str, phash: str) -> str:
+def node_id(
+    tenant_id: str,
+    trajectory_id: str,
+    step_n: int | None,
+    seq: int,
+    kind: str,
+    phash: str,
+) -> str:
     raw = f"{tenant_id}|{trajectory_id}|{step_n}|{seq}|{kind}|{phash}".encode()
     return hashlib.sha256(raw).hexdigest()
 
@@ -29,7 +50,7 @@ class Node:
     kind: str
     trajectory_id: str
     tenant_id: str
-    step_n: Optional[int]
+    step_n: int | None
     seq: int
     payload: dict
     ts: float = field(default_factory=time.time)
@@ -38,5 +59,10 @@ class Node:
         assert self.kind in NODE_KINDS, f"unknown node kind: {self.kind}"
         self.phash = payload_hash(self.payload)
         self.id = node_id(
-            self.tenant_id, self.trajectory_id, self.step_n, self.seq, self.kind, self.phash
+            self.tenant_id,
+            self.trajectory_id,
+            self.step_n,
+            self.seq,
+            self.kind,
+            self.phash,
         )

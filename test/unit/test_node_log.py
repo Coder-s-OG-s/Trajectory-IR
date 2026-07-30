@@ -17,13 +17,34 @@ def log():
 
 
 def test_append_then_has(log):
-    log.append("DECISION", step_n=1, payload={"plan": "x"}, trajectory_id="t1", tenant_id="demo", seq=1)
+    log.append(
+        "DECISION",
+        step_n=1,
+        payload={"plan": "x"},
+        trajectory_id="t1",
+        tenant_id="demo",
+        seq=1,
+    )
     assert log.has("t1", 1, "DECISION")
     assert not log.has("t1", 1, "TOOL_RESULT")
 
 
 def test_append_is_idempotent_by_content(log):
-    n1 = log.append("DECISION", step_n=1, payload={"plan": "x"}, trajectory_id="t1", tenant_id="demo", seq=1)
-    n2 = log.append("DECISION", step_n=1, payload={"plan": "x"}, trajectory_id="t1", tenant_id="demo", seq=1)
+    n1 = log.append(
+        "DECISION",
+        step_n=1,
+        payload={"plan": "x"},
+        trajectory_id="t1",
+        tenant_id="demo",
+        seq=1,
+    )
+    n2 = log.append(
+        "DECISION",
+        step_n=1,
+        payload={"plan": "x"},
+        trajectory_id="t1",
+        tenant_id="demo",
+        seq=1,
+    )
     assert n1.id == n2.id
     assert log.count(n1.id) == 1

@@ -1,13 +1,24 @@
 """Conformance test for R01: model inference not reinvoked after decision seal."""
+
 import os
 
-from test.e2e._util import hard_kill, read_counter, run_agent, start_agent, wait_for_marker
+from test.e2e._util import (
+    hard_kill,
+    read_counter,
+    run_agent,
+    start_agent,
+    wait_for_marker,
+)
 
 
 def _report(workdir, result):
     """Diagnostic helper for resume run failures."""
     crash_log = os.path.join(workdir, "crash_run.log")
-    crash_output = open(crash_log).read() if os.path.exists(crash_log) else "<none>"
+    if os.path.exists(crash_log):
+        with open(crash_log, encoding="utf-8") as f:
+            crash_output = f.read()
+    else:
+        crash_output = "<none>"
     return (
         f"\n--- crashed run output ---\n{crash_output}"
         f"\n--- resume run stdout ---\n{result.stdout}"
@@ -37,9 +48,7 @@ def test_r01_no_reinfer_after_seal(tmp_path):
     result = run_agent("--resume", cwd=workdir)
 
     # Assert resume completed successfully
-    assert result.returncode == 0, (
-        "resume failed" + _report(workdir, result)
-    )
+    assert result.returncode == 0, "resume failed" + _report(workdir, result)
 
     # Assert model was invoked exactly once across both runs
     model_count = read_counter(os.path.join(workdir, "test_model_call_count.txt"))
@@ -49,6 +58,6 @@ def test_r01_no_reinfer_after_seal(tmp_path):
 
     # Assert tool side effect executed exactly once
     deploy_count = read_counter(os.path.join(workdir, "test_deploy_side_effect_count.txt"))
-    assert deploy_count == 1, (
-        f"tool side effect ran {deploy_count} times, expected 1" + _report(workdir, result)
+    assert deploy_count == 1, f"tool side effect ran {deploy_count} times, expected 1" + _report(
+        workdir, result
     )

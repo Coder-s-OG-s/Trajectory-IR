@@ -1,0 +1,41 @@
+name: Feature or enhancement
+description: Propose new behavior that fits the project scope.
+title: "feat: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Trajectory IR follows the master README. Features that reimplement durable
+        execution (custom crash engines, retry loops) or pull Fluid/CAMI into
+        Phase 1A are usually out of scope.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What is hard or missing today?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: What should change? Keep it concrete.
+    validations:
+      required: true
+
+  - type: input
+    id: spec
+    attributes:
+      label: Spec reference
+      description: README section or file under docs/. Use "none yet" if unsure.
+    validations:
+      required: true
+
+  - type: textarea
+    id: out_of_scope
+    attributes:
+      label: Explicitly not part of this idea
+      placeholder: Not asking for a Restate adapter yet.

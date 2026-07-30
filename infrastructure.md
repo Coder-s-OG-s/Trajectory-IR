@@ -69,9 +69,9 @@ To ensure high quality, deterministic builds, and rapid iteration, we enforce st
    - Type Checking: **Mypy** (Strict mode enabled for all core IR packages).
 
 2. **Core Dependencies**:
-   - `canonicaljson`: For RFC 8785 strict canonical hashing.
-   - `dbos`: For the embedded durable execution Phase 1A backend.
-   - `pytest` & `pytest-cov`: For the conformance suite.
+   - `rfc8785`: RFC 8785 JCS for stable payload hashing (do not use `canonicaljson`).
+   - `dbos`: Embedded durable execution backend for Phase 1A.
+   - `pytest` & `pytest-cov`: Unit, e2e, and conformance (R01/R02).
 
 ### 2.2 AI Agent Workflow (ECC Integration)
 
@@ -83,42 +83,35 @@ This repository is maintained by human owners collaborating with AI agents (spec
 
 ### 2.3 CI/CD Pipeline (GitHub Actions)
 
-Every pull request runs through a strict automated CI pipeline. All four validation stages function as hard blocking gates upon failure:
+Workflow: `.github/workflows/ci.yml`.
 
 ```mermaid
 sequenceDiagram
     participant PR as Pull Request
-    participant DCO as DCO Verifier
-    participant Lint as Ruff & Mypy
-    participant Unit as Pytest (Unit)
-    participant Conf as Conformance (R01/R02)
+    participant DCO as DCO job
+    participant Q as Quality job
 
-    PR->>DCO: Check "Signed-off-by" trailer
-    alt DCO Check Fails
-        DCO-->>PR: Block Merge (Missing Sign-off)
-    else DCO Check Passes
-        PR->>Lint: Static Analysis & Type Checking
-        alt Lint / Mypy Fails
-            Lint-->>PR: Block Merge (Static Analysis Error)
-        else Static Analysis Passes
-            PR->>Unit: Execute Fast Localized Unit Tests
-            alt Unit Tests Fail
-                Unit-->>PR: Block Merge (Unit Test Failure)
-            else Unit Tests Pass
-                PR->>Conf: Execute Durable Conformance Gates (R01/R02)
-                alt Conformance Suite Fails
-                    Conf-->>PR: Block Merge (Durable Gate Failure)
-                else All Stages Pass Cleanly
-                    Conf-->>PR: Allow Merge
-                end
-            end
+    PR->>DCO: Signed-off-by on each commit
+    alt DCO fails
+        DCO-->>PR: Block
+    else DCO passes
+        PR->>Q: Ruff, Mypy, unit, e2e, R01/R02
+        alt Quality fails
+            Q-->>PR: Block
+        else Quality passes
+            Q-->>PR: Allow merge from CI side
         end
     end
 ```
 
-- **DCO Sign-off (Automated Hard Gate)**: Every commit must carry a Developer Certificate of Origin (`Signed-off-by: Name <email>`). Commits without this are hard-blocked by CI.
-- **Conformance Gates (Automated Hard Gate)**: Features are not complete unless tests `R01` (Safe Resume) and `R02` (Block-and-Gate) pass cleanly in automated CI.
-- **Security & Architectural Sign-off (Procedural Review Policy)**: Changes modifying tool effect classification or block-and-gate resumption require explicit procedural peer review and human maintainer approval before PR merge.
+| Gate | Status |
+|------|--------|
+| DCO | Hard gate on pull requests |
+| Ruff + Mypy + unit + e2e + R01/R02 | Hard gate (Python 3.11 and 3.12) |
+| Branch protection on `main` | Maintainer settings; see `docs/maintainer-branch-protection.md` |
+| Effects / resume review | Procedural human review |
+
+Milestone product gate for Phase 1A was R01/R02 green with a real kill/resume path (delivered in #8).
 
 ### 2.4 Codebase Mapping
 

@@ -1,13 +1,24 @@
 """Conformance test for R02: non-idempotent tool crash blocks, not retries."""
+
 import os
 
-from test.e2e._util import hard_kill, read_counter, run_agent, start_agent, wait_for_marker
+from test.e2e._util import (
+    hard_kill,
+    read_counter,
+    run_agent,
+    start_agent,
+    wait_for_marker,
+)
 
 
 def _report(workdir, result):
     """Diagnostic helper for resume run failures."""
     crash_log = os.path.join(workdir, "crash_run.log")
-    crash_output = open(crash_log).read() if os.path.exists(crash_log) else "<none>"
+    if os.path.exists(crash_log):
+        with open(crash_log, encoding="utf-8") as f:
+            crash_output = f.read()
+    else:
+        crash_output = "<none>"
     return (
         f"\n--- crashed run output ---\n{crash_output}"
         f"\n--- resume run stdout ---\n{result.stdout}"
@@ -40,8 +51,8 @@ def test_r02_crash_mid_tool_blocks_not_retries(tmp_path):
     # Assert resume completed successfully (exit 0) and the exception was caught
     # by the agent's except BlockedNeedsGate block (the only path that exits 0
     # and prints the exact block message with the correct prefix).
-    assert result.returncode == 0, (
-        "resume failed or exception not caught" + _report(workdir, result)
+    assert result.returncode == 0, "resume failed or exception not caught" + _report(
+        workdir, result
     )
     assert "BLOCKED_NEEDS_GATE: step 1: 'deploy_server'" in result.stdout + result.stderr, (
         "resume did not report BLOCKED_NEEDS_GATE with correct prefix" + _report(workdir, result)

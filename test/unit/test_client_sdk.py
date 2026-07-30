@@ -1,14 +1,15 @@
-import os
-import tempfile
-
 import pytest
 
 from client.python.trajectory_client import (
-    open_trajectory, project, seal_decision, exec_tool, commit_step,
+    commit_step,
+    exec_tool,
+    open_trajectory,
+    project,
+    seal_decision,
 )
-from trajectory_ir.runtime.tool import Tool
 from trajectory_ir.effects import EffectClass
 from trajectory_ir.runtime.log import NodeLog
+from trajectory_ir.runtime.tool import Tool
 
 
 @pytest.fixture

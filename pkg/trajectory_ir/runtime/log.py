@@ -1,6 +1,5 @@
 import json
 import sqlite3
-from typing import Optional
 
 from trajectory_ir.runtime.nodes import Node
 
@@ -37,20 +36,41 @@ class NodeLog:
         )
         self._conn.commit()
 
-    def append(self, kind: str, step_n: Optional[int], payload: dict, trajectory_id: str, tenant_id: str, seq: int) -> Node:
+    def append(
+        self,
+        kind: str,
+        step_n: int | None,
+        payload: dict,
+        trajectory_id: str,
+        tenant_id: str,
+        seq: int,
+    ) -> Node:
         node = Node(
-            kind=kind, trajectory_id=trajectory_id, tenant_id=tenant_id,
-            step_n=step_n, seq=seq, payload=payload,
+            kind=kind,
+            trajectory_id=trajectory_id,
+            tenant_id=tenant_id,
+            step_n=step_n,
+            seq=seq,
+            payload=payload,
         )
         self._conn.execute(
             "INSERT OR IGNORE INTO nodes (id, trajectory_id, tenant_id, step_n, seq, kind, payload_json, ts) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (node.id, node.trajectory_id, node.tenant_id, node.step_n, node.seq, node.kind, json.dumps(node.payload), node.ts),
+            (
+                node.id,
+                node.trajectory_id,
+                node.tenant_id,
+                node.step_n,
+                node.seq,
+                node.kind,
+                json.dumps(node.payload),
+                node.ts,
+            ),
         )
         self._conn.commit()
         return node
 
-    def has(self, trajectory_id: str, step_n: int, kind: str, seq: Optional[int] = None) -> bool:
+    def has(self, trajectory_id: str, step_n: int, kind: str, seq: int | None = None) -> bool:
         """Does a node of `kind` exist for this trajectory/step?
 
         `seq` narrows the question to one exact node slot. Without it, a step
@@ -60,10 +80,10 @@ class NodeLog:
         step-level kinds (DECISION, COMMIT_STEP) that occur at most once.
         """
         sql = "SELECT 1 FROM nodes WHERE trajectory_id = ? AND step_n = ? AND kind = ?"
-        params = (trajectory_id, step_n, kind)
+        params: list[object] = [trajectory_id, step_n, kind]
         if seq is not None:
             sql += " AND seq = ?"
-            params += (seq,)
+            params.append(seq)
         cur = self._conn.execute(sql + " LIMIT 1", params)
         return cur.fetchone() is not None
 

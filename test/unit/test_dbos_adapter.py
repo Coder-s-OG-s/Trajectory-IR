@@ -1,4 +1,8 @@
-from drivers.durable_backend.dbos.adapter import durable_infer, durable_tool, durable_workflow, init_backend
+from drivers.durable_backend.dbos.adapter import (
+    durable_infer,
+    durable_workflow,
+    init_backend,
+)
 
 
 def test_wrapped_workflow_runs_and_returns_result(tmp_path, monkeypatch):
