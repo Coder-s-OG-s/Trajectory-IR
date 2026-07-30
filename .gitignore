@@ -49,6 +49,8 @@ coverage.xml
 *.py,cover
 .hypothesis/
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
 cover/
 
 # Environments
@@ -65,6 +67,17 @@ venv.bak/
 
 # Trajectory IR specific
 .trajectory-ir/
+*.db
+*.sqlite
+*.sqlite3
+
+# Local runtime / demo state (sentinel files, counters, CAS)
+*.marker
+test_model_call_count.txt
+cas/
+
+# Build caches
+.hatchling/
 
 # IDEs
 .vscode/

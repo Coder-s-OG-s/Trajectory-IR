@@ -12,11 +12,35 @@ Trajectory IR acts as a semantic layer for AI agents, wrapping your agent's exec
 
 ## 1. Installation
 
-Install the Trajectory IR SDK and the official `dbos` durable execution backend package:
+### From this repository (Phase 1A development)
+
+Until a release is published to PyPI, install from a local clone:
 
 ```bash
-pip install trajectory-ir dbos
+python -m venv .venv
+# Windows: .\.venv\Scripts\activate
+# Unix:    source .venv/bin/activate
+pip install -U pip
+pip install -e ".[dev]"
 ```
+
+That pulls in the package plus Phase 1A deps (`dbos`, `rfc8785`) and dev tools (`pytest`, `ruff`, `mypy`, …).
+
+Smoke check:
+
+```bash
+python -c "import trajectory_ir; print(trajectory_ir.__version__)"
+python -c "from dbos import DBOS, DBOSConfig; print('DBOS import OK')"
+python -c "import rfc8785; print(rfc8785.dumps({'b': 1, 'a': 2}))"
+```
+
+### From PyPI (later)
+
+```bash
+pip install trajectory-ir
+```
+
+`dbos` and `rfc8785` are declared dependencies of the package; you should not need to install them separately once a release is published.
 
 ## 2. Initialize the Local Environment
 

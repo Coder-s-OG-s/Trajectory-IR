@@ -1,0 +1,115 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "trajectory-ir"
+dynamic = ["version"]
+description = "Typed, portable intermediate representation for agent execution"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.11"
+authors = [
+    { name = "Trajectory IR contributors" },
+]
+keywords = [
+    "agents",
+    "trajectory",
+    "durable-execution",
+    "intermediate-representation",
+    "cncf",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Typing :: Typed",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+    "dbos",
+    "rfc8785",
+]
+
+[project.optional-dependencies]
+dev = [
+    "hatch",
+    "mypy",
+    "pytest",
+    "pytest-cov",
+    "ruff",
+]
+
+[project.urls]
+Homepage = "https://github.com/Coder-s-OG-s/Trajectory-IR"
+Documentation = "https://github.com/Coder-s-OG-s/Trajectory-IR#readme"
+Repository = "https://github.com/Coder-s-OG-s/Trajectory-IR"
+Issues = "https://github.com/Coder-s-OG-s/Trajectory-IR/issues"
+Changelog = "https://github.com/Coder-s-OG-s/Trajectory-IR/blob/main/CHANGELOG.md"
+
+[tool.hatch.version]
+path = "pkg/trajectory_ir/__init__.py"
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/pkg",
+    "/spec",
+    "/README.md",
+    "/LICENSE",
+    "/CHANGELOG.md",
+    "/pyproject.toml",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["pkg/trajectory_ir"]
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = [
+    "test",
+    "conformance",
+]
+pythonpath = [
+    "pkg",
+]
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["pkg"]
+extend-exclude = [
+    ".venv",
+    "docs/history",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "F",
+    "I",
+    "UP",
+    "B",
+    "RUF",
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["trajectory_ir"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+mypy_path = "pkg"
+packages = ["trajectory_ir"]
+warn_unused_configs = true
+show_error_codes = true
