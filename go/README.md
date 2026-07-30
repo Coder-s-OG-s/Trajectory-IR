@@ -12,6 +12,7 @@ Second language implementation of Trajectory IR primitives. Python remains the P
 | `trajir/durable` | Pluggable step memoization backend |
 | `trajir/durable/temporal` | Temporal Backend + worker registration |
 | `trajir/resume` | Block and gate, and RunStep seal path for one agent step |
+| `trajir/client` | Thin SDK: open, project, seal, exec, commit, resume, RunStep |
 
 ## Durable backend decision (issues #16 and #24)
 
@@ -41,6 +42,26 @@ Default `go test ./...` does **not** need Temporal. Optional live check:
 # with Temporal listening on localhost:7233 and a worker on trajectory-ir
 go test -tags=temporal_integration ./trajir/durable/temporal -count=1 -v
 ```
+
+## Client usage
+
+```go
+tr, err := client.OpenTrajectory("demo", "t1", client.Options{WorkDir: dir})
+// ...
+results, err := tr.RunStep(ctx, 1, model, tools, map[string]any{"k": "v"})
+// reopen same workdir
+tr2, err := client.Resume("demo", "t1", client.Options{WorkDir: dir})
+```
+
+| Go | Python |
+|----|--------|
+| `OpenTrajectory` | `open_trajectory` |
+| `Resume` | `resume` |
+| `Project` | `project` |
+| `SealDecision` | `seal_decision` |
+| `ExecTool` | `exec_tool` |
+| `CommitStep` | `commit_step` |
+| `RunStep` | full step via runtime (convenience) |
 
 ## Test
 
