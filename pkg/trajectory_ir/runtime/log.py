@@ -1,5 +1,6 @@
 import json
 import sqlite3
+from typing import Any
 
 from trajectory_ir.runtime.nodes import Node
 
@@ -90,6 +91,33 @@ class NodeLog:
     def count(self, node_id: str) -> int:
         cur = self._conn.execute("SELECT COUNT(*) FROM nodes WHERE id = ?", (node_id,))
         return cur.fetchone()[0]
+
+    def list_nodes(self, trajectory_id: str) -> list[dict[str, Any]]:
+        """Return all stored nodes for a trajectory ordered by step then seq."""
+        cur = self._conn.execute(
+            """
+            SELECT id, trajectory_id, tenant_id, step_n, seq, kind, payload_json, ts
+            FROM nodes
+            WHERE trajectory_id = ?
+            ORDER BY COALESCE(step_n, -1), seq
+            """,
+            (trajectory_id,),
+        )
+        rows: list[dict[str, Any]] = []
+        for row in cur.fetchall():
+            rows.append(
+                {
+                    "id": row[0],
+                    "trajectory_id": row[1],
+                    "tenant_id": row[2],
+                    "step_n": row[3],
+                    "seq": row[4],
+                    "kind": row[5],
+                    "payload": json.loads(row[6]),
+                    "ts": row[7],
+                }
+            )
+        return rows
 
     def close(self):
         self._conn.close()

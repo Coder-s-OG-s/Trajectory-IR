@@ -22,6 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Dependabot for Go, pip, and Actions; CI hash golden gates and govulncheck; CONTRIBUTING Go section.
 - Go kill mid deploy demo under `go/examples/kill-mid-deploy` using trajir/client.
 - Dependabot DCO exclusion in CI; Actions and modernc.org/sqlite dependency bumps.
+- Python `.tir` thin/fat export and import with node hash verification (R05).
+
 
 
 

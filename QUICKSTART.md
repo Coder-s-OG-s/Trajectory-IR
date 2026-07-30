@@ -78,6 +78,27 @@ python agent.py
 
 Because of the **Block-and-Gate** policy, if your agent crashes inside `deploy_server`, the next time you run `python agent.py`, it will recognize the interrupted `NON_IDEMPOTENT_WRITE` and halt execution, requesting human intervention rather than blindly repeating the destructive action.
 
+## Export and import a `.tir` package
+
+Portable thin/fat packages (master README §9, R05):
+
+```python
+from trajectory_ir.package import export_tir, import_tir, ArtifactRef
+from trajectory_ir.runtime.log import NodeLog
+
+src = NodeLog("run.sqlite")
+# ... append nodes for trajectory_id="t1" ...
+
+export_tir(src, "t1", "run.tir", mode="thin")
+
+dst = NodeLog("imported.sqlite")
+pkg = import_tir("run.tir", dst)  # verifies node ids; appends idempotently
+print(pkg.manifest["node_count"], pkg.manifest["mode"])
+```
+
+Fat mode embeds artifact bytes when you pass `artifacts=` and `artifact_bytes=`.
+Import fails if any node id does not match RFC 8785 + SHA-256 identity rules.
+
 ## What's Next?
 - Read the [Infrastructure Design](infrastructure.md) to learn how to scale this to `server-s3` or `k8s-fluid`.
 - Read the [Contributing Guide](CONTRIBUTING.md) if you want to help build the project!
