@@ -53,6 +53,19 @@ results, err := tr.RunStep(ctx, 1, model, tools, map[string]any{"k": "v"})
 tr2, err := client.Resume("demo", "t1", client.Options{WorkDir: dir})
 ```
 
+## Demo: kill mid deploy
+
+Human runnable story (seal, kill, resume):
+
+```bash
+cd go
+go run ./examples/kill-mid-deploy -workdir ./kill-mid-deploy-data -crash-during=tool_call
+# kill when deploy starts, then:
+go run ./examples/kill-mid-deploy -workdir ./kill-mid-deploy-data -resume
+```
+
+See [examples/kill-mid-deploy/README.md](examples/kill-mid-deploy/README.md).
+
 | Go | Python |
 |----|--------|
 | `OpenTrajectory` | `open_trajectory` |
