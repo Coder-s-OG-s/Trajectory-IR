@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Issue templates, PR template, DCO CI job, Ruff/Mypy in CI alongside unit/e2e/conformance.
 - Maintainer note for branch protection on `main`.
 - Go IR core hashing package under `go/` with shared `testdata/hash_vectors.json` parity tests against Python.
+- Go SQLite NodeLog under `go/trajir/log` matching the Python append only IR log.
+
 
 
 ### Changed
