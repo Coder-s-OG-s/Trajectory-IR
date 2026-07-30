@@ -20,15 +20,26 @@ def test_installed_dependency_tree_has_no_known_vulns() -> None:
     if os.environ.get("CI") != "true" and os.environ.get("RUN_PIP_AUDIT") != "1":
         pytest.skip("set RUN_PIP_AUDIT=1 to run pip-audit outside CI")
 
-    # Prefer already-installed pip-audit (dev extra); install if missing.
+    # Ensure audit tooling and known-vulnerable build backends are current.
+    # Hosted Python 3.11 images can ship an older setuptools that pip-audit flags.
     install = subprocess.run(
-        [sys.executable, "-m", "pip", "install", "-q", "pip-audit"],
+        [
+            sys.executable,
+            "-m",
+            "pip",
+            "install",
+            "-q",
+            "-U",
+            "pip",
+            "setuptools>=83",
+            "pip-audit",
+        ],
         capture_output=True,
         text=True,
         check=False,
     )
     if install.returncode != 0:
-        pytest.fail(f"could not install pip-audit:\n{install.stdout}\n{install.stderr}")
+        pytest.fail(f"could not install pip-audit tooling:\n{install.stdout}\n{install.stderr}")
 
     # --skip-editable: ignore the local trajectory-ir package (not on PyPI).
     audit = subprocess.run(
