@@ -82,7 +82,11 @@ def test_export_import_round_trip_thin(sample_log: NodeLog, tmp_path: Path) -> N
         for n in pkg.nodes:
             assert payload_hash(n["payload"]) == payload_hash(
                 sample_log.list_nodes("t-export")[
-                    next(i for i, x in enumerate(sample_log.list_nodes("t-export")) if x["id"] == n["id"])
+                    next(
+                        i
+                        for i, x in enumerate(sample_log.list_nodes("t-export"))
+                        if x["id"] == n["id"]
+                    )
                 ]["payload"]
             )
         reloaded = dest.list_nodes("t-export")

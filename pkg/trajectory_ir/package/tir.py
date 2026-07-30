@@ -143,9 +143,7 @@ def export_tir(
         for ref in artifacts:
             data = artifact_bytes.get(ref.content_hash)
             if data is None:
-                raise TirError(
-                    f"fat export missing bytes for content_hash={ref.content_hash}"
-                )
+                raise TirError(f"fat export missing bytes for content_hash={ref.content_hash}")
             if _content_hash(data) != ref.content_hash:
                 raise TirError(f"artifact bytes do not match content_hash={ref.content_hash}")
     else:
@@ -167,7 +165,9 @@ def export_tir(
             "logical_path": a.logical_path,
             "content_hash": a.content_hash,
             "uri": a.uri,
-            "size": a.size if a.size is not None else (
+            "size": a.size
+            if a.size is not None
+            else (
                 len(artifact_bytes[a.content_hash]) if a.content_hash in artifact_bytes else None
             ),
         }
@@ -250,9 +250,7 @@ def load_tir(path: str | Path, *, verify: bool = True) -> TirPackage:
             if got is None:
                 raise TirVerificationError(f"missing seal for decision node {exp['node_id']}")
             if got.get("content_hash") != exp["content_hash"]:
-                raise TirVerificationError(
-                    f"seal content_hash mismatch for {exp['node_id']}"
-                )
+                raise TirVerificationError(f"seal content_hash mismatch for {exp['node_id']}")
         mode = manifest.get("mode", "thin")
         if mode == "fat":
             for entry in artifacts_manifest:
@@ -296,9 +294,7 @@ def import_tir(
         )
         # Node regenerates id from payload; must equal package record.
         if node.id != n["id"]:
-            raise TirVerificationError(
-                f"rebuilt node id {node.id} != package id {n['id']}"
-            )
+            raise TirVerificationError(f"rebuilt node id {node.id} != package id {n['id']}")
         node_log.append(
             node.kind,
             node.step_n,
