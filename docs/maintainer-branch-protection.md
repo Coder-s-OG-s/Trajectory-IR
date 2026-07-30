@@ -17,11 +17,13 @@ GitHub → Settings → Branches → Branch protection rule for `main`:
 Match the names shown in the Actions UI:
 
 1. `DCO` (pull requests only; may appear after the first PR with the DCO job)
-2. `Quality (Python 3.11)`
-3. `Quality (Python 3.12)`
-4. `Go`
+2. `Quality (Python 3.11)` — includes `pip-audit` via unit tests
+3. `Quality (Python 3.12)` — includes `pip-audit` via unit tests
+4. `Go` (includes `govulncheck`)
 
 If GitHub shows a slightly different label, use the exact string from the check run.
+
+Also enable org/repo **secret scanning** and **push protection** when available (Settings → Code security).
 
 ## Order
 
