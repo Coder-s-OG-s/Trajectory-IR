@@ -23,6 +23,10 @@ git commit -s -m "feat: short description"
 
 Pull requests with unsigned commits fail the **DCO** job in CI.
 
+Dependabot bot commits are excluded from the DCO email match (the bot signs as
+`support@github.com` but authors as `users.noreply.github.com`). Human commits
+still require a matching `Signed-off-by`.
+
 ## 3. Pull requests
 
 1. Prefer a linked issue (`Closes #N`).

@@ -1,5 +1,7 @@
 version: 2
 updates:
+  # DCO CI skips dependabot[bot] authors (sign-off email cannot match the bot
+  # noreply author). Prefer grouped Action bumps to avoid thrashing ci.yml.
   - package-ecosystem: gomod
     directory: /go
     schedule:
@@ -8,6 +10,9 @@ updates:
     labels:
       - dependencies
       - go
+    commit-message:
+      prefix: "build"
+      include: "scope"
 
   - package-ecosystem: pip
     directory: /
@@ -16,6 +21,9 @@ updates:
     open-pull-requests-limit: 5
     labels:
       - dependencies
+    commit-message:
+      prefix: "build"
+      include: "scope"
 
   - package-ecosystem: github-actions
     directory: /
@@ -24,3 +32,10 @@ updates:
     open-pull-requests-limit: 5
     labels:
       - dependencies
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "build"
+      include: "scope"
