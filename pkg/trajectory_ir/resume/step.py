@@ -1,0 +1,42 @@
+from trajectory_ir.effects import EffectClass
+from trajectory_ir.resume.gate import make_gated_tool_call
+from drivers.durable_backend.dbos.adapter import durable_infer, durable_tool, durable_workflow
+
+
+def make_run_step(node_log, tenant_id, trajectory_id, tool_registry, on_decision_sealed=None):
+    @durable_workflow
+    def run_step(step_n: int, model_call, context: dict):
+        node_log.append("PROJECT_CONTEXT", step_n, context, trajectory_id, tenant_id, seq=0)
+
+        # Model inference wrapped as a durable step -- fix from spec §1. Without
+        # durable_infer here, a crash after this line but before the DECISION
+        # is sealed would cause DBOS to re-invoke model_call on resume even
+        # though its output would be discarded once replay reaches DECISION.
+        infer = durable_infer(model_call)
+        plan = infer(context)
+
+        # append() is idempotent by content, so this doubles as the "seal":
+        # replaying it after a crash produces the same node id and is a no-op.
+        node_log.append("DECISION", step_n, {"plan": plan}, trajectory_id, tenant_id, seq=1)
+        if on_decision_sealed is not None:
+            on_decision_sealed()
+
+        results = []
+        for i, call in enumerate(plan["tool_calls"]):
+            tool = tool_registry[call["name"]]
+            seq = 2 + i
+            if tool.effect_class == EffectClass.NON_IDEMPOTENT_WRITE:
+                gated = make_gated_tool_call(
+                    node_log, trajectory_id, tenant_id, step_n, seq, call["name"], tool.fn
+                )
+                result = durable_tool(gated)(**call["args"])
+            else:
+                result = durable_tool(tool.fn)(**call["args"])
+            results.append(result)
+
+        node_log.append(
+            "COMMIT_STEP", step_n, {}, trajectory_id, tenant_id, seq=2 + len(plan["tool_calls"])
+        )
+        return results
+
+    return run_step
