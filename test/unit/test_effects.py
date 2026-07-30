@@ -21,3 +21,8 @@ def test_explicit_idempotent_write_classified_correctly():
 def test_destructive_hint_true_fails_closed_even_if_idempotent():
     annotations = {"readOnlyHint": False, "idempotentHint": True, "destructiveHint": True}
     assert classify_from_mcp(annotations) == EffectClass.NON_IDEMPOTENT_WRITE
+
+
+def test_contradictory_readonly_and_destructive_fails_closed():
+    annotations = {"readOnlyHint": True, "destructiveHint": True}
+    assert classify_from_mcp(annotations) == EffectClass.NON_IDEMPOTENT_WRITE

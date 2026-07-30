@@ -11,8 +11,11 @@ class EffectClass(Enum):
 
 
 def classify_from_mcp(annotations: dict) -> EffectClass:
-    """Fail-closed per spec §7.2. Any missing or ambiguous annotation -> NON_IDEMPOTENT_WRITE."""
-    if annotations.get("readOnlyHint") is True:
+    """Fail-closed per spec §7.2. Any missing or ambiguous annotation -> NON_IDEMPOTENT_WRITE.
+
+    Contradictory annotations (e.g., readOnlyHint=True AND destructiveHint=True) fail-close to NON_IDEMPOTENT_WRITE.
+    """
+    if annotations.get("readOnlyHint") is True and annotations.get("destructiveHint") is not True:
         return EffectClass.READ_ONLY
     if (
         annotations.get("readOnlyHint") is False
