@@ -10,6 +10,11 @@ Run it twice against the same working directory to exercise crash recovery:
     python examples/kill-mid-deploy/agent.py --crash-during=tool_call   # then kill -9
     python examples/kill-mid-deploy/agent.py --resume
 
+Crash points, each idling at a marker file so a harness can hard-kill there:
+`--crash-during=inference` (before the decision is sealed),
+`--crash-after=decision_sealed` (sealed, before the side effect starts),
+`--crash-during=tool_call` (inside the non-idempotent side effect).
+
 All artifacts (node log, DBOS system database, counters, markers) are written
 relative to the current working directory, so callers isolate runs by cd'ing
 into a scratch directory.
@@ -42,10 +47,17 @@ MODEL_CALL_COUNT_FILE = "test_model_call_count.txt"
 DEPLOY_COUNT_FILE = "test_deploy_side_effect_count.txt"
 DECISION_SEALED_MARKER = "decision_sealed.marker"
 TOOL_STARTED_MARKER = "tool_started.marker"
+INFERENCE_STARTED_MARKER = "inference_started.marker"
 
 # How long a crash-injecting run idles at its crash point, giving an external
 # harness time to see the marker file and hard-kill the process.
 CRASH_WINDOW_SECONDS = 30
+
+# Set from --crash-during=inference. A module-level flag rather than a closure
+# because `model_call` is handed to the durable backend as-is and the backend
+# keys a step's memoized output on the function's qualified name: wrapping it
+# per-run would change that name and break the memoization scenario 2 asserts.
+_CRASH_DURING_INFERENCE = False
 
 
 def _bump_counter(path: str) -> int:
@@ -59,6 +71,13 @@ def _bump_counter(path: str) -> int:
 def model_call(context: dict) -> dict:
     _bump_counter(MODEL_CALL_COUNT_FILE)
     print("INFERENCE: model_call invoked", flush=True)
+    if _CRASH_DURING_INFERENCE:
+        # Crash point strictly *before* the DECISION seal: inference has run but
+        # its result has not been returned, so the durable backend has not
+        # memoized this step and no DECISION node exists yet.
+        with open(INFERENCE_STARTED_MARKER, "w") as f:
+            f.write("started")
+        time.sleep(CRASH_WINDOW_SECONDS)  # window for the harness to hard-kill us
     return {"tool_calls": [{"name": "deploy_server", "args": {"version": "1.0.0"}}]}
 
 
@@ -76,11 +95,14 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--crash-after", choices=["decision_sealed"], default=None)
-    parser.add_argument("--crash-during", choices=["tool_call"], default=None)
+    parser.add_argument("--crash-during", choices=["inference", "tool_call"], default=None)
     args = parser.parse_args()
 
+    global _CRASH_DURING_INFERENCE
+    _CRASH_DURING_INFERENCE = args.crash_during == "inference"
+
     if not args.resume:
-        for marker in (DECISION_SEALED_MARKER, TOOL_STARTED_MARKER):
+        for marker in (DECISION_SEALED_MARKER, TOOL_STARTED_MARKER, INFERENCE_STARTED_MARKER):
             if os.path.exists(marker):
                 os.remove(marker)
 

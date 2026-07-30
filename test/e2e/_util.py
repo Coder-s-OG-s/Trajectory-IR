@@ -12,8 +12,8 @@ AGENT_SCRIPT = os.path.join(REPO_ROOT, "examples", "kill-mid-deploy", "agent.py"
 # directory rather than by deleting these between the crash and the resume.
 ARTIFACTS = (
     "test_model_call_count.txt", "test_deploy_side_effect_count.txt",
-    "decision_sealed.marker", "tool_started.marker", "kill_mid_deploy.sqlite",
-    "kill-mid-deploy.sqlite",
+    "decision_sealed.marker", "tool_started.marker", "inference_started.marker",
+    "kill_mid_deploy.sqlite", "kill-mid-deploy.sqlite",
 )
 
 

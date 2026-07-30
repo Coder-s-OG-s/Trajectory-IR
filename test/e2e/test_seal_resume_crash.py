@@ -14,6 +14,7 @@ MODEL_COUNT = "test_model_call_count.txt"
 DEPLOY_COUNT = "test_deploy_side_effect_count.txt"
 DECISION_SEALED_MARKER = "decision_sealed.marker"
 TOOL_STARTED_MARKER = "tool_started.marker"
+INFERENCE_STARTED_MARKER = "inference_started.marker"
 NODE_LOG = "kill_mid_deploy.sqlite"
 
 
@@ -42,20 +43,38 @@ def test_crash_before_seal_allows_reinference(tmp_path):
     inference is allowed (cheap, no side effect has happened yet)."""
     workdir = str(tmp_path)
 
-    proc = start_agent(cwd=workdir, log_path=os.path.join(workdir, "crash_run.log"))
-    hard_kill(proc)  # kill immediately, before the seal marker can appear
+    # Crash *inside* inference, so the durable workflow is genuinely registered
+    # and left pending and the resume below is a real crash-recovery replay.
+    # Killing right after Popen instead would land before the backend launches,
+    # leaving nothing pending and making the "resume" a cold first run.
+    proc = start_agent(
+        "--crash-during=inference",
+        cwd=workdir,
+        log_path=os.path.join(workdir, "crash_run.log"),
+    )
+    wait_for_marker(os.path.join(workdir, INFERENCE_STARTED_MARKER))
+    hard_kill(proc)
 
-    assert not os.path.exists(os.path.join(workdir, DECISION_SEALED_MARKER))
+    # The kill landed in the intended pre-seal window: inference had started but
+    # the decision was never sealed, so no DECISION node exists to replay from.
+    kinds = _logged_kinds(workdir)
+    assert "DECISION" not in kinds, kinds
     assert read_counter(os.path.join(workdir, DEPLOY_COUNT)) == 0
+    assert not os.path.exists(os.path.join(workdir, TOOL_STARTED_MARKER))
 
     result = run_agent("--resume", cwd=workdir)
 
     assert result.returncode == 0, _report(workdir, result)
+    # Nothing was sealed before the crash, so the replay redoes inference and
+    # completes the step. Re-inference is deliberately NOT asserted to be
+    # once-only here: pre-seal it is cheap and expected. Scenario 2 owns the
+    # "model is not re-invoked" invariant, which only applies after the seal.
     assert read_counter(os.path.join(workdir, MODEL_COUNT)) >= 1, _report(workdir, result)
-    # Nothing was sealed before the crash, so the resumed run completes the
-    # whole step from scratch: re-inference is allowed and harmless.
+    kinds = _logged_kinds(workdir)
+    assert "DECISION" in kinds and "COMMIT_STEP" in kinds, _report(workdir, result)
+    # The one invariant that must hold regardless of how often inference ran:
+    # the non-idempotent side effect happened exactly once.
     assert read_counter(os.path.join(workdir, DEPLOY_COUNT)) == 1, _report(workdir, result)
-    assert "COMMIT_STEP" in _logged_kinds(workdir), _report(workdir, result)
 
 
 def test_crash_after_seal_before_tool_completes_no_reinfer(tmp_path):
