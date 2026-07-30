@@ -13,6 +13,7 @@ Second language implementation of Trajectory IR primitives. Python remains the P
 | `trajir/durable/temporal` | Temporal Backend + worker registration |
 | `trajir/resume` | Block and gate, and RunStep seal path for one agent step |
 | `trajir/client` | Thin SDK: open, project, seal, exec, commit, resume, RunStep |
+| `trajir/tir` | Portable `.tir` package export / import (thin and fat) |
 
 ## Durable backend decision (issues #16 and #24)
 
@@ -75,6 +76,38 @@ See [examples/kill-mid-deploy/README.md](examples/kill-mid-deploy/README.md).
 | `ExecTool` | `exec_tool` |
 | `CommitStep` | `commit_step` |
 | `RunStep` | full step via runtime (convenience) |
+
+## Portable packages (`.tir`)
+
+Matches the Python reference in `pkg/trajectory_ir/package/tir.py` (README §9).
+
+```go
+import (
+    nodelog "github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/log"
+    "github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/tir"
+)
+
+// Export thin package
+path, err := tir.Export(nl, "t-export", "out.tir", tir.ExportOptions{Mode: tir.ModeThin})
+
+// Import (always verifies node ids; idempotent append)
+pkg, err := tir.Import(path, nl)
+
+// Load without writing to a log
+pkg, err = tir.Load(path)
+```
+
+| Go | Python |
+|----|--------|
+| `tir.Export` | `export_tir` |
+| `tir.Import` | `import_tir` |
+| `tir.Load` | `load_tir` |
+| `tir.LoadUnverified` | `load_tir_unverified` |
+
+Fat mode uses the same CAS layout: `artifacts/cas/<2-char-shard>/<sha256>`.
+Package signatures stay null/unimplemented. Redacted export is Python-only for now.
+
+Cross-language fixture: `testdata/sample_thin.tir` (regenerate with `python scripts/gen_tir_fixture.py`).
 
 ## Test
 
