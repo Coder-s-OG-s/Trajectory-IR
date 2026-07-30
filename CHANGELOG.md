@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Phase 1A buildable core (nodes, NodeLog, effects, DBOS adapter, seal/resume gate, client SDK, kill-mid-deploy, R01/R02).
 - Issue templates, PR template, DCO CI job, Ruff/Mypy in CI alongside unit/e2e/conformance.
 - Maintainer note for branch protection on `main`.
+- Go IR core hashing package under `go/` with shared `testdata/hash_vectors.json` parity tests against Python.
+
 
 ### Changed
 - CONTRIBUTING and infrastructure docs describe the CI gates that actually run.

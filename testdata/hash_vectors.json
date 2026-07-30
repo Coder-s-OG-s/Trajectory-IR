@@ -1,0 +1,93 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "name": "key_order_independent",
+      "tenant_id": "demo",
+      "trajectory_id": "t1",
+      "step_n": 1,
+      "seq": 1,
+      "kind": "STATE_SET",
+      "payload": {
+        "a": 1,
+        "b": 2
+      },
+      "payload_hash": "43258cff783fe7036d8a43033f830adfc60ec037382473548ac742b888292777",
+      "node_id": "b7ac266b0c1068ac49c9497dd95d56fe34ab5e811f708a350c449381e9bef11b"
+    },
+    {
+      "name": "key_order_reversed_same_as_above",
+      "tenant_id": "demo",
+      "trajectory_id": "t1",
+      "step_n": 1,
+      "seq": 1,
+      "kind": "STATE_SET",
+      "payload": {
+        "b": 2,
+        "a": 1
+      },
+      "payload_hash": "43258cff783fe7036d8a43033f830adfc60ec037382473548ac742b888292777",
+      "node_id": "b7ac266b0c1068ac49c9497dd95d56fe34ab5e811f708a350c449381e9bef11b"
+    },
+    {
+      "name": "simple_a1",
+      "tenant_id": "demo",
+      "trajectory_id": "t1",
+      "step_n": 1,
+      "seq": 1,
+      "kind": "STATE_SET",
+      "payload": {
+        "a": 1
+      },
+      "payload_hash": "015abd7f5cc57a2dd94b7590f04ad8084273905ee33ec5cebeae62276a97f862",
+      "node_id": "4becda0479e3e1729739d866f75e99c4c3dcb27b7c5426453447bd7b5386f746"
+    },
+    {
+      "name": "null_step",
+      "tenant_id": "demo",
+      "trajectory_id": "t1",
+      "step_n": null,
+      "seq": 0,
+      "kind": "INPUT",
+      "payload": {
+        "msg": "hello"
+      },
+      "payload_hash": "faf0237414bb4de6d09919f02006843e237179c7a3a866d6cc77e967688d6e02",
+      "node_id": "cad6334b5cd72f3b66cc2baf6b586868b407a4554936133ed06e02602f83fa90"
+    },
+    {
+      "name": "nested_decision_like",
+      "tenant_id": "acme",
+      "trajectory_id": "run-9",
+      "step_n": 2,
+      "seq": 3,
+      "kind": "DECISION",
+      "payload": {
+        "plan": {
+          "tool_calls": [
+            {
+              "name": "pure.echo",
+              "args": {
+                "x": true,
+                "n": 3
+              }
+            }
+          ]
+        }
+      },
+      "payload_hash": "c9af6e9490de1e1ffbba43a56fcd1517ec888bcb7b5067dbc870676800d6dbfe",
+      "node_id": "a917ff215987efb2f9247eb60efafc1469da4cbd40b803e45344c500fbca272f"
+    },
+    {
+      "name": "empty_payload",
+      "tenant_id": "demo",
+      "trajectory_id": "t2",
+      "step_n": 1,
+      "seq": 7,
+      "kind": "COMMIT_STEP",
+      "payload": {},
+      "payload_hash": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "node_id": "61c104870a222bdaf8e73f88cba233c68ac78be1f49b4a88dde3a46d205696d9"
+    }
+  ]
+}
