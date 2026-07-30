@@ -55,3 +55,35 @@ func TestValidateRejectsEmpty(t *testing.T) {
 		t.Fatal("expected error")
 	}
 }
+
+func TestConfigTLSAndAPIKeyFromEnv(t *testing.T) {
+	t.Setenv("TEMPORAL_TLS", "true")
+	t.Setenv("TEMPORAL_API_KEY", "test-key")
+	c := temporal.ConfigFromEnv()
+	if !c.TLS {
+		t.Fatal("expected TLS true")
+	}
+	if c.APIKey != "test-key" {
+		t.Fatalf("APIKey=%q", c.APIKey)
+	}
+	if err := c.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	opts := c.ClientOptions()
+	if opts.ConnectionOptions.TLS == nil {
+		t.Fatal("expected TLS config on client options")
+	}
+}
+
+func TestValidateAPIKeyRequiresTLS(t *testing.T) {
+	err := temporal.Config{
+		HostPort:  "x:7233",
+		Namespace: "default",
+		TaskQueue: "q",
+		APIKey:    "k",
+		TLS:       false,
+	}.Validate()
+	if err == nil {
+		t.Fatal("expected APIKey requires TLS")
+	}
+}

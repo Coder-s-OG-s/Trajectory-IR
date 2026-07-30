@@ -25,13 +25,13 @@ func (e *BlockedNeedsGate) Error() string {
 // ToolFunc is a tool body that receives a free-form args map.
 type ToolFunc func(args map[string]any) (any, error)
 
-// MakeGatedToolCall wraps toolFn so re-entry after TOOL_CALL was logged blocks.
+// MakeGatedToolCall wraps toolFn so re-entry after TOOL_CALL was claimed blocks.
 //
 // Seq layout matches Python: TOOL_CALL at seq, TOOL_RESULT or ABORT at seq+1.
 // Callers should space tools as seq = 2 + 2*i for tool index i inside a step.
 //
-// The gate keys only on TOOL_CALL at this exact seq. It does not require a
-// missing TOOL_RESULT (that pattern fails open after a partial crash window).
+// The claim is atomic (transactional insert). Concurrent workers cannot both
+// win the same (trajectory, step, seq) TOOL_CALL slot.
 func MakeGatedToolCall(
 	log *nodelog.NodeLog,
 	trajectoryID, tenantID string,
@@ -45,11 +45,17 @@ func MakeGatedToolCall(
 		}
 		step := stepN
 
-		ok, err := log.Has(trajectoryID, stepN, "TOOL_CALL", &seq)
+		claimed, err := log.ClaimToolCall(
+			stepN,
+			map[string]any{"tool": toolName, "args": args},
+			trajectoryID,
+			tenantID,
+			seq,
+		)
 		if err != nil {
 			return nil, err
 		}
-		if ok {
+		if !claimed {
 			if _, err := log.Append(
 				"ABORT",
 				&step,
@@ -61,17 +67,6 @@ func MakeGatedToolCall(
 				return nil, err
 			}
 			return nil, &BlockedNeedsGate{StepN: stepN, ToolName: toolName}
-		}
-
-		if _, err := log.Append(
-			"TOOL_CALL",
-			&step,
-			map[string]any{"tool": toolName, "args": args},
-			trajectoryID,
-			tenantID,
-			seq,
-		); err != nil {
-			return nil, err
 		}
 
 		result, err := toolFn(args)

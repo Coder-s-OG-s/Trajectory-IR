@@ -34,10 +34,7 @@ func Dial(ctx context.Context, cfg Config) (*Backend, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
-	c, err := client.Dial(client.Options{
-		HostPort:  cfg.HostPort,
-		Namespace: cfg.Namespace,
-	})
+	c, err := client.Dial(cfg.ClientOptions())
 	if err != nil {
 		return nil, fmt.Errorf("temporal dial: %w", err)
 	}

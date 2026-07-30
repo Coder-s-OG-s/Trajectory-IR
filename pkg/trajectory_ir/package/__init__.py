@@ -5,11 +5,13 @@ from trajectory_ir.package.tir import (
     PACKAGE_FORMAT_VERSION,
     ArtifactRef,
     TirError,
+    TirLimitError,
     TirPackage,
     TirVerificationError,
     export_tir,
     import_tir,
     load_tir,
+    load_tir_unverified,
 )
 
 __all__ = [
@@ -17,9 +19,11 @@ __all__ = [
     "PACKAGE_FORMAT_VERSION",
     "ArtifactRef",
     "TirError",
+    "TirLimitError",
     "TirPackage",
     "TirVerificationError",
     "export_tir",
     "import_tir",
     "load_tir",
+    "load_tir_unverified",
 ]
