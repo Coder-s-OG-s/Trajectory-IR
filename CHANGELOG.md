@@ -8,7 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 ### Added
 - Boilerplate directory structure initialization for Phase 1A python components (`pkg/`, `client/`, `drivers/`, `conformance/`, `spec/`).
-- GitHub workflow CI/CD documentation and DCO requirements.
+- GitHub Actions CI (DCO, Ruff, Mypy, import smoke, pytest on Python 3.11/3.12).
+- Issue templates (bug, feature, spec question) and pull request template.
+- Maintainer notes for branch protection on `main`.
+- Unit smoke tests under `test/unit/` so CI has a real pytest entrypoint.
+
+### Changed
+- CONTRIBUTING and infrastructure docs now describe the CI gates that actually run, and mark R01/R02 as future hard gates when conformance tests land.
 
 ## [v0.1.0-draft] - 2026-07-27
 ### Added

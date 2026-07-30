@@ -1,0 +1,61 @@
+name: Bug report
+description: Something is broken or behaves differently than the spec or docs say.
+title: "bug: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. Please skip secrets, tokens, and private trajectory data.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened
+      description: Short description of the bug.
+      placeholder: On resume after a sealed decision, ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+      description: Correct behavior according to the docs or your understanding.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Minimal steps. Commands are welcome.
+      placeholder: |
+        1. Clone the repo
+        2. pip install -e ".[dev]"
+        3. ...
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Environment
+      description: "OS, Python version, install method (for example Windows 11 / Python 3.12 / editable install)."
+      placeholder: Windows 11, Python 3.12.10, pip install -e ".[dev]"
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or output
+      description: Paste relevant output. Redact secrets.
+      render: text
+
+  - type: input
+    id: spec
+    attributes:
+      label: Related spec section (optional)
+      description: README section, issue number, or file under spec/.
+      placeholder: README §8 / seals-and-resume.md

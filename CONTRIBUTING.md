@@ -1,67 +1,106 @@
 # Contributing to Trajectory IR
 
-First off, thank you for considering contributing to Trajectory IR! 
+Thanks for helping. Trajectory IR is a portable semantic layer for agent runs
+(seals, effect classes, `.tir`, honest resume). The root `README.md` is the
+master specification. Code and docs should follow it.
 
-This document outlines the workflow and strict requirements for getting your code merged. Because Trajectory IR functions as an authoritative, portable master specification, we enforce high standards for code changes and documentation.
+## 1. Spec before code
 
-## 1. The Golden Rule: Spec Before Code
+1. Read the root `README.md` and the relevant files under `spec/`.
+2. Do not implement behavior that is not defined there.
+3. Do not reimplement durable execution (retry, lease, custom crash engines).
+   That belongs to the backend adapter (`drivers/durable-backend/`), defaulting
+   to DBOS in Phase 1A.
+4. If something is ambiguous, open a **Spec question** issue and wait. Do not
+   invent APIs, node kinds, or resume rules.
 
-The `README.md` (and the technical specifications inside `spec/`) acts as the single source of truth. 
-* **Do not** implement behavior that isn't defined in the spec.
-* **Do not** derive undefined behavior from general familiarity with high-level AI orchestration or state frameworks (e.g., LangGraph, CrewAI). *Note: The one deliberate exception is our pluggable durable execution backend (§3.1, such as DBOS or Restate), whose documented transactional replay, retry, and checkpoint behavior should be relied upon directly without redundant wrapper logic.*
-* If a design point is ambiguous, open an issue tagged `SPEC-QUESTION` and wait for a resolution. **Do not guess**.
+## 2. Developer Certificate of Origin (DCO)
 
-## 2. Developer Certificate of Origin (DCO) Sign-off
-
-**This is a hard requirement.** We enforce the DCO for all commits to ensure that contributors have the right to submit the code under the Apache-2.0 license.
-
-Every single commit must contain the following trailer at the end of the commit message:
-
-```text
-Signed-off-by: Jane Doe <jane.doe@example.com>
-```
-
-You can add this automatically to your commits by using the `-s` or `--signoff` flag with git:
+Required on every commit under the Apache-2.0 license.
 
 ```bash
-git commit -s -m "feat: add basic DBOS adapter framework"
+git commit -s -m "feat: short description"
 ```
 
-**Pull Requests with unsigned commits will be automatically rejected by CI.**
+That adds a trailer like:
 
-## 3. Pull Request Process & Quality Gates
+```text
+Signed-off-by: Your Name <you@example.com>
+```
 
-We enforce a layered governance model combining automated continuous integration checks with rigorous human and AI developer procedural review policies.
+Use the same name and email as your GitHub account. Pull requests with unsigned
+commits fail the **DCO** job in CI.
 
-### A. AI Agent Working Agreements (ECC Integration)
-If you are an AI coding agent (like Claude Code or Antigravity) or a developer leveraging AI assistants, you are strictly bound by the rules in `README.md` Section 15. Specifically, our codebase integrates the **Everything Claude Code (ECC)** subagent suite and mandates three specialized gate roles:
-- Use the **Planner Agent** to conduct architectural research and create an `implementation_plan.md` before writing core logic.
-- Use the **TDD-Guide Agent** to build test-first modules in `pkg/` and `drivers/`, enforcing >80% test coverage.
-- Use the **Security-Review Agent** as a mandatory procedural code review step before submitting any modifications to `pkg/effects/` or `pkg/resume/`.
+## 3. Pull requests
 
-### B. Automated vs Procedural Gates
-- **Automated Hard CI Gates**: No PR will be merged if it violates automated continuous integration checks. Commits lacking DCO sign-offs or failing static analysis (Ruff/Mypy) will be blocked. Crucially, the conformance tests defined in `conformance/`—specifically **R01 (Safe Resume)** and **R02 (Block-and-Gate)**—are automated hard blockers for Phase 1A.
-- **Procedural Governance Gates**: Peer review by a human maintainer and Security-Review Agent verification are mandatory policy rules for any PR modifying safety boundaries or block-and-gate resumption.
+1. Prefer a linked issue (`Closes #N` or `Part of #2`).
+2. Keep the change focused. Scaffold, process, and runtime work should not land
+   in one giant PR without a good reason.
+3. Fill in the PR template (summary, tests, safety, AI disclosure if needed).
+4. Wait for CI to go green.
 
-### C. Formatting and Linting
-We use modern Python tooling:
-- Run `ruff check .` to lint.
-- Run `ruff format .` to format your code.
-- Run `mypy .` to ensure strict type safety.
+### Automated CI (what actually runs today)
 
-## 4. Setting up your environment
+Defined in `.github/workflows/ci.yml`:
 
-1. Clone the repository.
-2. We recommend using **Hatch** (`pip install hatch`) to manage the Python environment.
-3. Run `hatch shell` to enter the virtual environment.
-4. Run `pytest` to run the existing test suite.
+| Check | What it does |
+|-------|----------------|
+| **DCO** | Every commit on the PR has `Signed-off-by` |
+| **Quality** | `pip install -e ".[dev]"`, Ruff, Mypy on `pkg/trajectory_ir`, import smoke (`trajectory_ir`, `dbos`, `rfc8785`), `pytest` |
 
-We look forward to reviewing your pull requests!
+Python **3.11** and **3.12** both run the quality job.
 
-## 5. AI Contribution Disclosure
+### Conformance R01 / R02
 
-Trajectory IR is heavily developed in collaboration with AI tools (like the Antigravity IDE, Claude Code, and the Everything Claude Code [ECC] agent suite). We strongly embrace AI-assisted development! However, to maintain code quality, accountability, and clarity of origin, **human contributors must adhere to the following:**
+R01 (safe resume) and R02 (block-and-gate) are the Phase 1A product gates from
+the master README and issue #2. They are **not** wired into CI until those tests
+exist under `conformance/`. When they land, they become required checks. Do not
+treat them as already blocking merges today.
 
-1. **Disclosure**: If you used an AI coding assistant (Copilot, Cursor, Claude, Antigravity, ChatGPT, etc.) to generate a significant portion of the logic in your PR, please mention it in the Pull Request description (e.g., "This PR was generated with the help of Antigravity IDE").
-2. **Accountability**: You, the human contributor, are 100% responsible for the code you submit. You must review the AI-generated code to ensure it adheres to the `README.md` spec, passes all conformance tests, and does not introduce security or performance regressions. 
-3. **No Hallucinations**: Do not let an AI agent invent APIs, node kinds, or durable execution mechanics that are not explicitly documented in the Trajectory IR master spec.
+### Procedural review (humans + safety)
+
+Changes to tool effect classification or resume / block-and-gate need careful
+human review. Treat `pkg/trajectory_ir/effects/` and `pkg/trajectory_ir/resume/`
+as high sensitivity once real logic exists there.
+
+If you use AI tools for a meaningful share of a change, say so in the PR. You
+are still responsible for correctness against the spec.
+
+## 4. Local setup
+
+```bash
+git clone https://github.com/Coder-s-OG-s/Trajectory-IR.git
+cd Trajectory-IR
+python -m venv .venv
+# Windows: .\.venv\Scripts\activate
+# Unix:    source .venv/bin/activate
+pip install -U pip
+pip install -e ".[dev]"
+```
+
+Useful commands:
+
+```bash
+ruff check pkg test
+ruff format pkg test
+mypy pkg/trajectory_ir
+pytest
+```
+
+Hatch is optional (`hatch shell`) if you prefer it; plain venv + pip is enough.
+
+## 5. Issues
+
+Use the issue forms when you can:
+
+1. **Bug report** for broken behavior
+2. **Feature or enhancement** for new work in scope
+3. **Spec question** when the README or `spec/` is unclear
+
+Security issues go through private vulnerability reporting (see `SECURITY.md`),
+not public issues.
+
+## 6. Maintainer note
+
+After CI is green on `main`, turn on branch protection as described in
+`docs/maintainer-branch-protection.md`.

@@ -1,0 +1,42 @@
+name: Spec question
+description: The master README or a file under spec/ is unclear. Do not invent behavior.
+title: "spec: "
+labels: ["SPEC-QUESTION"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this when the spec is ambiguous. Per CONTRIBUTING, wait for a resolution before coding around the gap.
+
+  - type: input
+    id: location
+    attributes:
+      label: Where
+      description: File and section (README §…, spec/seals-and-resume.md, issue #2, etc.).
+      placeholder: README §8.2 / spec/seals-and-resume.md
+    validations:
+      required: true
+
+  - type: textarea
+    id: question
+    attributes:
+      label: What is unclear
+      description: Quote or paraphrase the conflicting or missing text.
+    validations:
+      required: true
+
+  - type: textarea
+    id: options
+    attributes:
+      label: Options you see (optional)
+      description: If you already have two readings, list them. Do not implement either yet.
+      placeholder: |
+        A) Treat missing MCP hints as NON_IDEMPOTENT_WRITE
+        B) ...
+
+  - type: textarea
+    id: blocked
+    attributes:
+      label: What this blocks
+      description: Which PR or task is stuck until this is answered.
+      placeholder: Cannot finish block-and-gate mid-tool path in resume.
