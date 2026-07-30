@@ -16,7 +16,11 @@ class NodeLog:
     """
 
     def __init__(self, db_path: str):
-        self._conn = sqlite3.connect(db_path)
+        # check_same_thread=False: the durable backend replays a crashed
+        # workflow on its own recovery thread, so the log must be writable from a
+        # thread other than the one that opened it. Only one thread executes a
+        # given workflow body at a time, so no extra locking is needed.
+        self._conn = sqlite3.connect(db_path, check_same_thread=False)
         self._conn.execute(
             """
             CREATE TABLE IF NOT EXISTS nodes (
