@@ -2,13 +2,14 @@
 //
 // Decision (issue #16)
 //
-//   Coding default: LocalSQLite (and Memory for pure unit tests).
-//   It memoizes step results by workflow id and step key so re-entry skips
-//   re-running model inference and tools. No separate Temporal or Restate
-//   server is required for Phase 1B Go development.
+//	Coding default: LocalSQLite (and Memory for pure unit tests).
+//	It memoizes step results by workflow id and step key so re-entry skips
+//	re-running model inference and tools. No separate Temporal or Restate
+//	server is required for Phase 1B Go development.
 //
-//   Production target: Temporal as the first full Go adapter. Restate remains
-//   a welcome second adapter later, consistent with the master README.
+//	Production target: Temporal as the first full Go adapter
+//	(go/trajir/durable/temporal, issue #24). Restate remains a welcome
+//	second adapter later, consistent with the master README.
 //
 // Rules (same as Python + DBOS)
 //
