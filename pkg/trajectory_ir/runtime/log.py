@@ -50,11 +50,21 @@ class NodeLog:
         self._conn.commit()
         return node
 
-    def has(self, trajectory_id: str, step_n: int, kind: str) -> bool:
-        cur = self._conn.execute(
-            "SELECT 1 FROM nodes WHERE trajectory_id = ? AND step_n = ? AND kind = ? LIMIT 1",
-            (trajectory_id, step_n, kind),
-        )
+    def has(self, trajectory_id: str, step_n: int, kind: str, seq: Optional[int] = None) -> bool:
+        """Does a node of `kind` exist for this trajectory/step?
+
+        `seq` narrows the question to one exact node slot. Without it, a step
+        containing several tool calls cannot distinguish them: one completed
+        call's TOOL_RESULT would answer for a different, interrupted call. Left
+        as None the query is unscoped, which is the right question for
+        step-level kinds (DECISION, COMMIT_STEP) that occur at most once.
+        """
+        sql = "SELECT 1 FROM nodes WHERE trajectory_id = ? AND step_n = ? AND kind = ?"
+        params = (trajectory_id, step_n, kind)
+        if seq is not None:
+            sql += " AND seq = ?"
+            params += (seq,)
+        cur = self._conn.execute(sql + " LIMIT 1", params)
         return cur.fetchone() is not None
 
     def count(self, node_id: str) -> int:

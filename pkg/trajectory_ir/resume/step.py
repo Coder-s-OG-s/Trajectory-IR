@@ -24,7 +24,13 @@ def make_run_step(node_log, tenant_id, trajectory_id, tool_registry, on_decision
         results = []
         for i, call in enumerate(plan["tool_calls"]):
             tool = tool_registry[call["name"]]
-            seq = 2 + i
+            # Two slots per tool call: TOOL_CALL at `seq`, its outcome
+            # (TOOL_RESULT or ABORT) at `seq + 1`. Stride 1 would make tool i's
+            # outcome collide with tool i+1's TOOL_CALL, which breaks seq as a
+            # total order *and* breaks the gate: it resolves "was this exact
+            # call already attempted" by looking up (step_n, seq), so seq has to
+            # identify one call unambiguously.
+            seq = 2 + 2 * i
             if tool.effect_class == EffectClass.NON_IDEMPOTENT_WRITE:
                 gated = make_gated_tool_call(
                     node_log, trajectory_id, tenant_id, step_n, seq, call["name"], tool.fn
@@ -35,7 +41,8 @@ def make_run_step(node_log, tenant_id, trajectory_id, tool_registry, on_decision
             results.append(result)
 
         node_log.append(
-            "COMMIT_STEP", step_n, {}, trajectory_id, tenant_id, seq=2 + len(plan["tool_calls"])
+            "COMMIT_STEP", step_n, {}, trajectory_id, tenant_id,
+            seq=2 + 2 * len(plan["tool_calls"]),
         )
         return results
 
