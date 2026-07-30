@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `pip-audit` added to the `dev` extra.
 - Go `.tir` thin/fat export and import (`trajir/tir`) with Python layout parity,
   hash verification, zip limits/path safety, and cross-language golden fixture.
+- R05 conformance tests for `.tir` thin/fat round-trip and golden fixture load.
 
 
 

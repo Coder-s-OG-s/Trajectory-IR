@@ -296,7 +296,7 @@ These are runnable tests, not descriptions of intent. R01 and R02 are the hard g
 | **R02** | A non idempotent tool (e.g. simulated deploy) is killed mid execution; on resume, the system does not double execute it, it follows the block and gate path. |
 | R03 | A `PURE` tool may be recomputed freely on resume. |
 | R04 | A `CONSTRAINT` node is never silently dropped under budget pressure; the system either includes it or raises a hard error. |
-| R05 | Export and re import of a `.tir` package preserves all node hashes and seals exactly. |
+| R05 | Export and re import of a `.tir` package preserves all node hashes and seals exactly. Runnable: `conformance/r05_tir_roundtrip_test.py` (and Go `go test ./trajir/tir`). |
 | R06 | A sandbox/what if branch rejects any real `NON_IDEMPOTENT_WRITE` execution. |
 | R07 | Grafting an artifact between agents transfers only the artifact reference, never private `THOUGHT` nodes. |
 | R08 | Redaction removes secrets/flagged content from what gets projected into context. |
