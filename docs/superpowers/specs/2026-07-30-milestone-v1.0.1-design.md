@@ -79,10 +79,14 @@ implementation step, not assumed up front.
 
 - Follow the issue's own §12 build order: scaffold → node model → DBOS adapter →
   effect classes → seal/resume → client SDK → R01/R02 conformance → demo.
-- TDD rhythm per section: write the test (red), commit it, implement to green,
-  commit that. This produces the fine-grained commit history requested (~15-20
-  commits) using conventional prefixes matching the existing git log style
-  (`feat:`, `test:`, `chore:`, `docs:`, `build:`).
+- TDD rhythm (test red → commit → implement green → commit) applies to sections
+  with real logic to verify: node hashing, effect classification, seal/resume,
+  and the R01/R02 conformance tests. Structural sections without meaningful
+  test-first steps — env setup, repo scaffold, the adapter's thin DBOS wrappers,
+  the client SDK's thin call wrappers — get one commit each instead of a forced
+  pair.
+- Conventional prefixes matching the existing git log style: `feat:`, `test:`,
+  `chore:`, `docs:`, `build:`.
 - A formal implementation plan (via the writing-plans skill) follows this spec,
   broken into the same section order, before any code is written.
 
