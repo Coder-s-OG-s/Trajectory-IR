@@ -28,6 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Temporal TLS/API key config, safer import verification API.
 - CI: `pip-audit` gate in Python unit tests under CI (parity with Go `govulncheck`);
   `pip-audit` added to the `dev` extra.
+- Go `.tir` thin/fat export and import (`trajir/tir`) with Python layout parity,
+  hash verification, zip limits/path safety, and cross-language golden fixture.
 
 
 
