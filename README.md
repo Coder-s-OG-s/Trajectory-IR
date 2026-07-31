@@ -294,7 +294,7 @@ These are runnable tests, not descriptions of intent. R01 and R02 are the hard g
 |---|---|
 | **R01** | Seal a decision, kill the process, resume: the model is not invoked again; tools execute from the seal. |
 | **R02** | A non idempotent tool (e.g. simulated deploy) is killed mid execution; on resume, the system does not double execute it, it follows the block and gate path. |
-| R03 | A `PURE` tool may be recomputed freely on resume. |
+| R03 | A `PURE` tool may be recomputed freely on resume. Runnable: `conformance/r03_pure_recompute_test.py` (and Go `go test ./trajir/resume -run R03`). |
 | R04 | A `CONSTRAINT` node is never silently dropped under budget pressure; the system either includes it or raises a hard error. |
 | R05 | Export and re import of a `.tir` package preserves all node hashes and seals exactly. Runnable: `conformance/r05_tir_roundtrip_test.py` (and Go `go test ./trajir/tir`). |
 | R06 | A sandbox/what if branch rejects any real `NON_IDEMPOTENT_WRITE` execution. |

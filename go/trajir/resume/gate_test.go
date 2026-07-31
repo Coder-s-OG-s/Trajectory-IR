@@ -110,4 +110,50 @@ func TestErrorTextIncludesStepAndTool(t *testing.T) {
 	}
 }
 
+// TestR03PureRecomputeNotBlocked locks R03: PURE tools are not claim-gated.
+// A prior TOOL_CALL at the same seq would block under MakeGatedToolCall (R02),
+// but the non-gated path may call the body freely and recompute.
+func TestR03PureRecomputeNotBlocked(t *testing.T) {
+	nl := openLog(t)
+	step := 1
+	if _, err := nl.Append(
+		"TOOL_CALL",
+		&step,
+		map[string]any{"tool": "compute", "args": map[string]any{}},
+		"t1",
+		"demo",
+		2,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	calls := 0
+	pure := func(map[string]any) (any, error) {
+		calls++
+		return calls, nil
+	}
+
+	// Non-gated path (RunStep else branch for PURE): recompute freely.
+	if _, err := pure(nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pure(nil); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 2 {
+		t.Fatalf("calls=%d want 2", calls)
+	}
+
+	// Same history under the gate would block (R02 dual).
+	gated := resume.MakeGatedToolCall(nl, "t1", "demo", 1, 2, "compute", pure)
+	_, err := gated(nil)
+	var blocked *resume.BlockedNeedsGate
+	if !errors.As(err, &blocked) {
+		t.Fatalf("want BlockedNeedsGate, got %v", err)
+	}
+	if calls != 2 {
+		t.Fatalf("gate re-ran body: calls=%d", calls)
+	}
+}
+
 func intPtr(v int) *int { return &v }

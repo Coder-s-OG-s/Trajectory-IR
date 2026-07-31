@@ -31,6 +31,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Go `.tir` thin/fat export and import (`trajir/tir`) with Python layout parity,
   hash verification, zip limits/path safety, and cross-language golden fixture.
 - R05 conformance tests for `.tir` thin/fat round-trip and golden fixture load.
+- R03 PURE recompute-on-resume: `requires_block_and_gate` / `RequiresBlockAndGate`,
+  conformance + Go tests; only NON_IDEMPOTENT_WRITE is gated.
 
 
 

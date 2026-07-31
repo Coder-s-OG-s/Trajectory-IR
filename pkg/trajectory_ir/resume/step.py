@@ -3,11 +3,20 @@ from drivers.durable_backend.dbos.adapter import (
     durable_tool,
     durable_workflow,
 )
-from trajectory_ir.effects import EffectClass
+from trajectory_ir.effects import requires_block_and_gate
 from trajectory_ir.resume.gate import make_gated_tool_call
 
 
 def make_run_step(node_log, tenant_id, trajectory_id, tool_registry, on_decision_sealed=None):
+    """Build a durable run_step workflow for one agent step.
+
+    Resume matrix (README §8, R02 / R03):
+    - ``NON_IDEMPOTENT_WRITE``: block-and-gate via ``make_gated_tool_call`` (R02).
+    - ``PURE`` and other non-gated classes: no gate; body may re-run on resume
+      when durable memo is absent (R03 for PURE). Prior TOOL_CALL rows alone
+      must not raise ``BlockedNeedsGate`` for these classes.
+    """
+
     @durable_workflow
     def run_step(step_n: int, model_call, context: dict):
         node_log.append("PROJECT_CONTEXT", step_n, context, trajectory_id, tenant_id, seq=0)
@@ -35,7 +44,7 @@ def make_run_step(node_log, tenant_id, trajectory_id, tool_registry, on_decision
             # call already attempted" by looking up (step_n, seq), so seq has to
             # identify one call unambiguously.
             seq = 2 + 2 * i
-            if tool.effect_class == EffectClass.NON_IDEMPOTENT_WRITE:
+            if requires_block_and_gate(tool.effect_class):
                 gated = make_gated_tool_call(
                     node_log,
                     trajectory_id,
@@ -47,6 +56,7 @@ def make_run_step(node_log, tenant_id, trajectory_id, tool_registry, on_decision
                 )
                 result = durable_tool(gated)(**call["args"])
             else:
+                # R03: PURE (and other non-gated classes) are not claim-gated.
                 result = durable_tool(tool.fn)(**call["args"])
                 # Plain tools still need IR history audit; gate path already logs.
                 node_log.append(

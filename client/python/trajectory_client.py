@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from drivers.durable_backend.dbos.adapter import init_backend
-from trajectory_ir.effects import EffectClass
+from trajectory_ir.effects import requires_block_and_gate
 from trajectory_ir.resume.gate import make_gated_tool_call
 from trajectory_ir.runtime.log import NodeLog
 from trajectory_ir.runtime.tool import Tool
@@ -79,7 +79,7 @@ def exec_tool(trajectory: Trajectory, step_n: int, call: dict, tool: Tool, seq: 
         ToolResult with the tool execution result
     """
     log = NodeLog(trajectory.db_path)
-    if tool.effect_class == EffectClass.NON_IDEMPOTENT_WRITE:
+    if requires_block_and_gate(tool.effect_class):
         fn = make_gated_tool_call(
             log,
             trajectory.trajectory_id,

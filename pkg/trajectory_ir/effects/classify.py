@@ -10,6 +10,17 @@ class EffectClass(Enum):
     SENSITIVE = "SENSITIVE"
 
 
+def requires_block_and_gate(effect: EffectClass) -> bool:
+    """Whether resume must gate this effect class (README §8 / R02).
+
+    Only ``NON_IDEMPOTENT_WRITE`` is block-and-gated. ``PURE`` (R03) and other
+    non-gated classes may re-execute on resume without raising
+    ``BlockedNeedsGate``; durable memoization may still skip re-running the body
+    when a prior step result was already recorded.
+    """
+    return effect is EffectClass.NON_IDEMPOTENT_WRITE
+
+
 def classify_from_mcp(annotations: dict) -> EffectClass:
     """Fail-closed per spec §7.2. Any missing or ambiguous annotation -> NON_IDEMPOTENT_WRITE.
 
