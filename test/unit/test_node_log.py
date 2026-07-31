@@ -80,7 +80,7 @@ def test_list_nodes_tenant_filter(log):
     only_a = log.list_nodes("t1", tenant_id="tenant-a")
     assert len(only_a) == 1
     assert only_a[0]["tenant_id"] == "tenant-a"
-    all_nodes = log.list_nodes("t1")
+    all_nodes = log.list_nodes_all_tenants("t1")
     assert len(all_nodes) == 2
 
 

@@ -187,13 +187,19 @@ func TestListNodesTenantFilter(t *testing.T) {
 	if _, err := nl.Append("DECISION", &step, map[string]any{"plan": "b"}, "t1", "tenant-b", 2); err != nil {
 		t.Fatal(err)
 	}
-	tenant := "tenant-a"
-	rows, err := nl.ListNodes("t1", &tenant)
+	rows, err := nl.ListNodes("t1", "tenant-a")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(rows) != 1 || rows[0]["tenant_id"] != "tenant-a" {
 		t.Fatalf("rows=%v", rows)
+	}
+	allRows, err := nl.ListNodesAllTenants("t1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(allRows) != 2 {
+		t.Fatalf("allRows=%v", allRows)
 	}
 }
 

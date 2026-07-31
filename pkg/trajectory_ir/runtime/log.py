@@ -196,13 +196,32 @@ class NodeLog:
         self,
         trajectory_id: str,
         *,
-        tenant_id: str | None = None,
+        tenant_id: str,
     ) -> list[dict[str, Any]]:
         """Return stored nodes for a trajectory ordered by step then seq.
 
-        When ``tenant_id`` is set, only that tenant's rows are returned
-        (multi-tenant isolation at the read path).
+        ``tenant_id`` is required so this method always enforces tenant
+        isolation at the read path. Callers that genuinely need rows across
+        tenants (e.g. ``export_tir``'s own mixed-tenant check) must use
+        ``list_nodes_all_tenants`` explicitly instead.
         """
+        return self._list_nodes(trajectory_id, tenant_id=tenant_id)
+
+    def list_nodes_all_tenants(self, trajectory_id: str) -> list[dict[str, Any]]:
+        """Return stored nodes for a trajectory across all tenants.
+
+        This bypasses tenant isolation and should only be used by code that
+        performs its own tenant-scoping check on the result, such as
+        ``export_tir`` detecting a trajectory with mixed ``tenant_id`` values.
+        """
+        return self._list_nodes(trajectory_id, tenant_id=None)
+
+    def _list_nodes(
+        self,
+        trajectory_id: str,
+        *,
+        tenant_id: str | None,
+    ) -> list[dict[str, Any]]:
         sql = """
             SELECT id, trajectory_id, tenant_id, step_n, seq, kind, payload_json, ts
             FROM nodes
