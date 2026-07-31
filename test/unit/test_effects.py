@@ -1,4 +1,4 @@
-from trajectory_ir.effects import EffectClass, classify_from_mcp
+from trajectory_ir.effects import EffectClass, classify_from_mcp, requires_block_and_gate
 
 
 def test_missing_annotations_fail_closed():
@@ -48,3 +48,12 @@ def test_open_world_idempotent_write_fails_closed():
 
 def test_non_dict_annotations_fail_closed():
     assert classify_from_mcp(None) == EffectClass.NON_IDEMPOTENT_WRITE  # type: ignore[arg-type]
+
+
+def test_requires_block_and_gate_only_non_idempotent():
+    assert requires_block_and_gate(EffectClass.NON_IDEMPOTENT_WRITE) is True
+    assert requires_block_and_gate(EffectClass.PURE) is False
+    assert requires_block_and_gate(EffectClass.READ_ONLY) is False
+    assert requires_block_and_gate(EffectClass.IDEMPOTENT_WRITE) is False
+    assert requires_block_and_gate(EffectClass.AGENT_SPAWN) is False
+    assert requires_block_and_gate(EffectClass.SENSITIVE) is False

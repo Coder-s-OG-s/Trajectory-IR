@@ -24,6 +24,9 @@ def make_gated_tool_call(node_log, trajectory_id, tenant_id, step_n, seq, tool_n
     """Wrap a NON_IDEMPOTENT_WRITE tool so that a crash anywhere after the call
     started blocks instead of silently re-running the side effect on resume.
 
+    Only for effects where ``requires_block_and_gate`` is true (R02). PURE tools
+    (R03) must not use this wrapper — they may recompute freely on resume.
+
     Uses our own content-addressed NodeLog as the source of truth for "was this
     call already attempted," rather than DBOS's internal workflow-status API --
     this avoids depending on an internal API that may change between DBOS

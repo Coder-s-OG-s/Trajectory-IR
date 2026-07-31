@@ -173,7 +173,7 @@ func (t *Trajectory) ExecTool(stepN, seq int, tool resume.Tool, args map[string]
 		args = map[string]any{}
 	}
 	fn := tool.Fn
-	if tool.Effect == effects.NON_IDEMPOTENT_WRITE {
+	if effects.RequiresBlockAndGate(tool.Effect) {
 		fn = resume.MakeGatedToolCall(
 			t.log,
 			t.TrajectoryID,

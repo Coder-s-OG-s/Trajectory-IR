@@ -14,6 +14,13 @@ const (
 	SENSITIVE            EffectClass = "SENSITIVE"
 )
 
+// RequiresBlockAndGate reports whether resume must gate this effect (R02).
+// Only NON_IDEMPOTENT_WRITE is gated. PURE (R03) and other classes may
+// re-execute on resume without BlockedNeedsGate.
+func RequiresBlockAndGate(e EffectClass) bool {
+	return e == NON_IDEMPOTENT_WRITE
+}
+
 // ClassifyFromMCP maps MCP tool annotations to an EffectClass.
 // Missing or ambiguous input becomes NON_IDEMPOTENT_WRITE.
 //

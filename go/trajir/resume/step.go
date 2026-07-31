@@ -32,7 +32,10 @@ type RunStepConfig struct {
 }
 
 // RunStep executes one agent step: project context, durable infer, DECISION seal,
-// tools (gated when NON_IDEMPOTENT_WRITE), then COMMIT_STEP.
+// tools (gated when RequiresBlockAndGate), then COMMIT_STEP.
+//
+// Resume matrix (README §8, R02 / R03): NON_IDEMPOTENT_WRITE is block-and-gated;
+// PURE and other non-gated classes may recompute on resume without BlockedNeedsGate.
 //
 // Seq layout matches Python make_run_step:
 //
@@ -110,7 +113,7 @@ func RunStep(
 
 		var result any
 		stepKey := fmt.Sprintf("%s@%d", call.Name, seq)
-		if tool.Effect == effects.NON_IDEMPOTENT_WRITE {
+		if effects.RequiresBlockAndGate(tool.Effect) {
 			gated := MakeGatedToolCall(
 				cfg.Log,
 				cfg.TrajectoryID,

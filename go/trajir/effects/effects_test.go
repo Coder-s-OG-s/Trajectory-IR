@@ -6,6 +6,23 @@ import (
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/effects"
 )
 
+func TestRequiresBlockAndGate(t *testing.T) {
+	if !effects.RequiresBlockAndGate(effects.NON_IDEMPOTENT_WRITE) {
+		t.Fatal("NON_IDEMPOTENT_WRITE must be gated (R02)")
+	}
+	for _, e := range []effects.EffectClass{
+		effects.PURE,
+		effects.READ_ONLY,
+		effects.IDEMPOTENT_WRITE,
+		effects.AGENT_SPAWN,
+		effects.SENSITIVE,
+	} {
+		if effects.RequiresBlockAndGate(e) {
+			t.Fatalf("%s must not be gated (R03 matrix)", e)
+		}
+	}
+}
+
 func TestMissingAnnotationsFailClosed(t *testing.T) {
 	if got := effects.ClassifyFromMCP(map[string]any{}); got != effects.NON_IDEMPOTENT_WRITE {
 		t.Fatalf("got %s, want NON_IDEMPOTENT_WRITE", got)
