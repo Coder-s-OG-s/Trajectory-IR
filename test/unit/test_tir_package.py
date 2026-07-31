@@ -212,6 +212,63 @@ def test_redacted_export_strips_secrets(sample_log: NodeLog, tmp_path: Path) -> 
     assert tool_calls[0]["payload"]["args"]["user"] == "a"
 
 
+def test_redacted_export_strips_missed_key_patterns(
+    sample_log: NodeLog, tmp_path: Path
+) -> None:
+    sample_log.append(
+        "TOOL_CALL",
+        2,
+        {
+            "tool": "login",
+            "args": {
+                "pass_phrase": "correct horse battery staple",
+                "client_aws_access_key": "irrelevant-by-key",
+                "user": "a",
+            },
+        },
+        trajectory_id="t-export",
+        tenant_id="demo",
+        seq=11,
+    )
+    out = tmp_path / "redacted-keys.tir"
+    export_tir(sample_log, "t-export", out, mode="thin", redacted=True)
+    pkg = load_tir(out)
+    tool_calls = [n for n in pkg.nodes if n["kind"] == "TOOL_CALL" and n["seq"] == 11]
+    assert tool_calls[0]["payload"]["args"]["pass_phrase"] == "[REDACTED]"
+    assert tool_calls[0]["payload"]["args"]["client_aws_access_key"] == "[REDACTED]"
+    assert tool_calls[0]["payload"]["args"]["user"] == "a"
+
+
+def test_redacted_export_strips_secret_shaped_values(
+    sample_log: NodeLog, tmp_path: Path
+) -> None:
+    sample_log.append(
+        "TOOL_CALL",
+        2,
+        {
+            "tool": "note",
+            "args": {
+                "note": "found it: AKIAABCDEFGHIJKLMNOP",
+                "header": "Authorization: Bearer abcdefghijklmnopqrstuvwxyz",
+                "message": "just a normal string",
+            },
+        },
+        trajectory_id="t-export",
+        tenant_id="demo",
+        seq=12,
+    )
+    out = tmp_path / "redacted-values.tir"
+    export_tir(sample_log, "t-export", out, mode="thin", redacted=True)
+    pkg = load_tir(out)
+    tool_calls = [n for n in pkg.nodes if n["kind"] == "TOOL_CALL" and n["seq"] == 12]
+    args = tool_calls[0]["payload"]["args"]
+    # Neither "note" nor "header" match _SECRET_KEY_RE; both are caught by
+    # the value-shape pass (AWS access key id, bearer token).
+    assert args["note"] == "[REDACTED]"
+    assert args["header"] == "[REDACTED]"
+    assert args["message"] == "just a normal string"
+
+
 def test_export_tenant_scope(sample_log: NodeLog, tmp_path: Path) -> None:
     other = NodeLog(str(tmp_path / "mixed.sqlite"))
     try:
