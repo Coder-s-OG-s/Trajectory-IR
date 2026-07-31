@@ -48,6 +48,23 @@ def make_run_step(node_log, tenant_id, trajectory_id, tool_registry, on_decision
                 result = durable_tool(gated)(**call["args"])
             else:
                 result = durable_tool(tool.fn)(**call["args"])
+                # Plain tools still need IR history audit; gate path already logs.
+                node_log.append(
+                    "TOOL_CALL",
+                    step_n,
+                    {"tool": call["name"], "args": call["args"]},
+                    trajectory_id,
+                    tenant_id,
+                    seq=seq,
+                )
+                node_log.append(
+                    "TOOL_RESULT",
+                    step_n,
+                    {"result": result},
+                    trajectory_id,
+                    tenant_id,
+                    seq=seq + 1,
+                )
             results.append(result)
 
         node_log.append(
