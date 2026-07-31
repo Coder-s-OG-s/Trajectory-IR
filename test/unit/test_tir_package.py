@@ -212,9 +212,7 @@ def test_redacted_export_strips_secrets(sample_log: NodeLog, tmp_path: Path) -> 
     assert tool_calls[0]["payload"]["args"]["user"] == "a"
 
 
-def test_redacted_export_strips_missed_key_patterns(
-    sample_log: NodeLog, tmp_path: Path
-) -> None:
+def test_redacted_export_strips_missed_key_patterns(sample_log: NodeLog, tmp_path: Path) -> None:
     sample_log.append(
         "TOOL_CALL",
         2,
@@ -239,9 +237,7 @@ def test_redacted_export_strips_missed_key_patterns(
     assert tool_calls[0]["payload"]["args"]["user"] == "a"
 
 
-def test_redacted_export_strips_secret_shaped_values(
-    sample_log: NodeLog, tmp_path: Path
-) -> None:
+def test_redacted_export_strips_secret_shaped_values(sample_log: NodeLog, tmp_path: Path) -> None:
     sample_log.append(
         "TOOL_CALL",
         2,
