@@ -1,0 +1,157 @@
+"""Default context projector (README §9 policy note / R04).
+
+Metric: ``json_chars`` — UTF-8 length of a compact, sort-keyed JSON object
+``{"kind": ..., "payload": ...}`` for each included node. This is deliberately
+not a model-specific tokenizer; it is enough to enforce CONSTRAINT budget
+safety for conformance R04.
+
+Default policy (no projector-policy.yaml):
+- Always include every CONSTRAINT node
+- Always include explicitly pinned node ids
+- If must-include set alone exceeds budget → ``BudgetImpossible`` (never
+  silent drop of a CONSTRAINT or pinned node)
+- Other kinds fill remaining budget in deterministic order
+  (step_n ascending, null last; then seq; then id)
+"""
+
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass
+from typing import Any
+
+
+class BudgetImpossible(Exception):
+    """Raised when CONSTRAINT/pinned nodes alone exceed the projection budget (R04)."""
+
+    def __init__(self, message: str, *, required_size: int, budget: int):
+        self.required_size = required_size
+        self.budget = budget
+        super().__init__(message)
+
+
+@dataclass(frozen=True)
+class ProjectResult:
+    """Outcome of default projection."""
+
+    included_ids: tuple[str, ...]
+    dropped_ids: tuple[str, ...]
+    context: dict[str, Any]
+    size_units: int
+    budget: int
+    metric: str = "json_chars"
+
+
+def node_size_units(node: dict[str, Any]) -> int:
+    """Size of one node under the json_chars metric."""
+    kind = node.get("kind", "")
+    payload = node.get("payload", {})
+    raw = json.dumps({"kind": kind, "payload": payload}, sort_keys=True, default=str)
+    return len(raw.encode("utf-8"))
+
+
+def _sort_key(node: dict[str, Any]) -> tuple[int, int, str]:
+    step = node.get("step_n")
+    step_ord = step if isinstance(step, int) else 10**9
+    seq = node.get("seq")
+    seq_ord = int(seq) if seq is not None else 10**9
+    nid = str(node.get("id") or "")
+    return (step_ord, seq_ord, nid)
+
+
+def project_context(
+    nodes: list[dict[str, Any]],
+    *,
+    budget: int,
+    pinned_ids: set[str] | frozenset[str] | None = None,
+) -> ProjectResult:
+    """Project nodes into a budgeted context under the default policy.
+
+    Args:
+        nodes: Node records (must include ``id``, ``kind``, ``payload``; optionally
+            ``step_n``, ``seq`` for ordering).
+        budget: Maximum total ``json_chars`` size units.
+        pinned_ids: Node ids that must always appear when present in ``nodes``.
+
+    Returns:
+        ProjectResult with included/dropped ids and an assembled context payload
+        suitable for recording as PROJECT_CONTEXT.
+
+    Raises:
+        BudgetImpossible: if CONSTRAINT + pinned nodes alone exceed ``budget``.
+        ValueError: if ``budget`` is negative.
+    """
+    if budget < 0:
+        raise ValueError("budget must be non-negative")
+
+    pinned = set(pinned_ids or ())
+
+    must: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for n in nodes:
+        nid = str(n.get("id") or "")
+        if n.get("kind") == "CONSTRAINT" or nid in pinned:
+            if nid and nid not in seen:
+                must.append(n)
+                seen.add(nid)
+
+    must_sorted = sorted(must, key=_sort_key)
+    must_size = sum(node_size_units(n) for n in must_sorted)
+    if must_size > budget:
+        raise BudgetImpossible(
+            f"BUDGET_IMPOSSIBLE: CONSTRAINT/pinned size {must_size} exceeds budget {budget}",
+            required_size=must_size,
+            budget=budget,
+        )
+
+    included: list[dict[str, Any]] = list(must_sorted)
+    included_ids: set[str] = {str(n["id"]) for n in included}
+    used = must_size
+
+    optional = sorted(
+        (n for n in nodes if str(n.get("id") or "") not in included_ids),
+        key=_sort_key,
+    )
+    for n in optional:
+        cost = node_size_units(n)
+        if used + cost > budget:
+            continue
+        included.append(n)
+        included_ids.add(str(n["id"]))
+        used += cost
+
+    # Keep output order deterministic: must-include order then optional fill order.
+    # Re-sort full set for stable packaging.
+    included = sorted(included, key=_sort_key)
+    dropped = tuple(
+        sorted(
+            str(n["id"])
+            for n in nodes
+            if n.get("id") is not None and str(n["id"]) not in included_ids
+        )
+    )
+    items = [
+        {
+            "id": n["id"],
+            "kind": n["kind"],
+            "payload": n.get("payload") or {},
+            "step_n": n.get("step_n"),
+            "seq": n.get("seq"),
+        }
+        for n in included
+    ]
+    context: dict[str, Any] = {
+        "items": items,
+        "included_ids": [str(n["id"]) for n in included],
+        "budget": budget,
+        "size_units": used,
+        "metric": "json_chars",
+    }
+    return ProjectResult(
+        included_ids=tuple(str(n["id"]) for n in included),
+        dropped_ids=dropped,
+        context=context,
+        size_units=used,
+        budget=budget,
+        metric="json_chars",
+    )
