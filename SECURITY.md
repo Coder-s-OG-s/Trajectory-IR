@@ -51,7 +51,7 @@ Based on the [Infrastructure Blueprint](infrastructure.md) and [Master Spec](REA
 | Fail-closed MCP effect mapping | Implemented |
 | Atomic TOOL_CALL claim (gate) | Implemented |
 | `.tir` size / path safety limits | Implemented |
-| Redacted export (secret-like keys + thoughts) | Implemented (basic) |
+| Redacted export (secret-like keys/values + thoughts) | Implemented (basic, keyword/pattern heuristic — not a secret scanner; still review before external sharing) |
 | Package digital signatures | Not implemented (reserved) |
 | Full multi-tenant SaaS isolation | Not a product surface yet; tenant_id filter on list/export exists |
 | Fluid / k8s cache poisoning controls | Design only (future profile) |
