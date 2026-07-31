@@ -272,7 +272,13 @@ func Export(nodeLog *nodelog.NodeLog, trajectoryID, dest string, opts ExportOpti
 		return "", fmt.Errorf("%w: unsupported mode %q; use thin or fat", ErrTir, mode)
 	}
 
-	nodeList, err := nodeLog.ListNodes(trajectoryID, opts.TenantID)
+	var nodeList []map[string]any
+	var err error
+	if opts.TenantID != nil {
+		nodeList, err = nodeLog.ListNodes(trajectoryID, *opts.TenantID)
+	} else {
+		nodeList, err = nodeLog.ListNodesAllTenants(trajectoryID)
+	}
 	if err != nil {
 		return "", err
 	}

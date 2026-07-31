@@ -248,7 +248,10 @@ def export_tir(
     if mode not in ("thin", "fat"):
         raise TirError(f"unsupported mode {mode!r}; use thin or fat")
 
-    nodes = node_log.list_nodes(trajectory_id, tenant_id=tenant_id)
+    if tenant_id is not None:
+        nodes = node_log.list_nodes(trajectory_id, tenant_id=tenant_id)
+    else:
+        nodes = node_log.list_nodes_all_tenants(trajectory_id)
     if not nodes:
         raise TirError(f"no nodes for trajectory_id={trajectory_id!r}")
 

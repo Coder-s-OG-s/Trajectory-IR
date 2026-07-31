@@ -88,11 +88,11 @@ func TestExportImportRoundTripThin(t *testing.T) {
 		t.Fatalf("count=%d err=%v", n, err)
 	}
 
-	srcNodes, err := src.ListNodes("t-export", nil)
+	srcNodes, err := src.ListNodes("t-export", "demo")
 	if err != nil {
 		t.Fatal(err)
 	}
-	dstNodes, err := dest.ListNodes("t-export", nil)
+	dstNodes, err := dest.ListNodes("t-export", "demo")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -188,7 +188,7 @@ func TestIdempotentReimport(t *testing.T) {
 	if _, err := tir.Import(out, dest); err != nil {
 		t.Fatal(err)
 	}
-	nodes, err := dest.ListNodes("t-export", nil)
+	nodes, err := dest.ListNodes("t-export", "demo")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -269,7 +269,7 @@ func TestImportPythonGoldenFixture(t *testing.T) {
 		t.Fatal("empty package")
 	}
 	traj, _ := pkg.Manifest["trajectory_id"].(string)
-	nodes, err := dest.ListNodes(traj, nil)
+	nodes, err := dest.ListNodesAllTenants(traj)
 	if err != nil {
 		t.Fatal(err)
 	}

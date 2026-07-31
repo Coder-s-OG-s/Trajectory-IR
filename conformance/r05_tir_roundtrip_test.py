@@ -63,7 +63,7 @@ def test_r05_thin_export_import_preserves_node_ids_and_seals(tmp_path: Path) -> 
     src = NodeLog(str(tmp_path / "src.sqlite"))
     try:
         _seed_trajectory(src)
-        original = src.list_nodes("r05-traj")
+        original = src.list_nodes("r05-traj", tenant_id="demo")
         original_ids = [n["id"] for n in original]
         original_decision_hashes = {
             n["id"]: payload_hash(n["payload"]) for n in original if n["kind"] == "DECISION"
@@ -75,7 +75,7 @@ def test_r05_thin_export_import_preserves_node_ids_and_seals(tmp_path: Path) -> 
         dest = NodeLog(str(tmp_path / "dest.sqlite"))
         try:
             pkg = import_tir(pkg_path, dest)
-            reloaded = dest.list_nodes("r05-traj")
+            reloaded = dest.list_nodes("r05-traj", tenant_id="demo")
             assert [n["id"] for n in reloaded] == original_ids
             assert len(pkg.seals) == len(original_decision_hashes)
             for seal in pkg.seals:
@@ -116,8 +116,8 @@ def test_r05_fat_export_import_preserves_artifact_hashes(tmp_path: Path) -> None
         dest = NodeLog(str(tmp_path / "dest.sqlite"))
         try:
             pkg = import_tir(pkg_path, dest)
-            original_ids = [n["id"] for n in src.list_nodes("r05-fat")]
-            assert [n["id"] for n in dest.list_nodes("r05-fat")] == original_ids
+            original_ids = [n["id"] for n in src.list_nodes("r05-fat", tenant_id="demo")]
+            assert [n["id"] for n in dest.list_nodes("r05-fat", tenant_id="demo")] == original_ids
             assert pkg.manifest["trajectory_id"] == "r05-fat"
         finally:
             dest.close()
@@ -147,6 +147,6 @@ def test_r05_go_golden_fixture_loads_with_matching_ids(tmp_path: Path) -> None:
     try:
         import_tir(golden, dest)
         traj = pkg.manifest["trajectory_id"]
-        assert [n["id"] for n in dest.list_nodes(traj)] == [n["id"] for n in pkg.nodes]
+        assert [n["id"] for n in dest.list_nodes_all_tenants(traj)] == [n["id"] for n in pkg.nodes]
     finally:
         dest.close()

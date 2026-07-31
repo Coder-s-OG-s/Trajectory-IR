@@ -82,17 +82,19 @@ def test_export_import_round_trip_thin(sample_log: NodeLog, tmp_path: Path) -> N
         # Round-trip preserves hashes
         for n in pkg.nodes:
             assert payload_hash(n["payload"]) == payload_hash(
-                sample_log.list_nodes("t-export")[
+                sample_log.list_nodes("t-export", tenant_id="demo")[
                     next(
                         i
-                        for i, x in enumerate(sample_log.list_nodes("t-export"))
+                        for i, x in enumerate(sample_log.list_nodes("t-export", tenant_id="demo"))
                         if x["id"] == n["id"]
                     )
                 ]["payload"]
             )
-        reloaded = dest.list_nodes("t-export")
+        reloaded = dest.list_nodes("t-export", tenant_id="demo")
         assert len(reloaded) == 5
-        assert [n["id"] for n in reloaded] == [n["id"] for n in sample_log.list_nodes("t-export")]
+        assert [n["id"] for n in reloaded] == [
+            n["id"] for n in sample_log.list_nodes("t-export", tenant_id="demo")
+        ]
     finally:
         dest.close()
 
@@ -143,7 +145,7 @@ def test_idempotent_reimport(sample_log: NodeLog, tmp_path: Path) -> None:
     try:
         import_tir(out, dest)
         import_tir(out, dest)
-        assert len(dest.list_nodes("t-export")) == 5
+        assert len(dest.list_nodes("t-export", tenant_id="demo")) == 5
     finally:
         dest.close()
 

@@ -208,8 +208,23 @@ func (l *NodeLog) Count(nodeID string) (int, error) {
 	return n, err
 }
 
-// ListNodes returns nodes for a trajectory, optionally scoped to tenantID.
-func (l *NodeLog) ListNodes(trajectoryID string, tenantID *string) ([]map[string]any, error) {
+// ListNodes returns nodes for a trajectory scoped to tenantID. tenantID is
+// required so this method always enforces tenant isolation at the read path.
+// Callers that genuinely need rows across tenants (e.g. tir.Export's own
+// mixed-tenant check) must use ListNodesAllTenants explicitly instead.
+func (l *NodeLog) ListNodes(trajectoryID, tenantID string) ([]map[string]any, error) {
+	return l.listNodes(trajectoryID, &tenantID)
+}
+
+// ListNodesAllTenants returns nodes for a trajectory across all tenants.
+// This bypasses tenant isolation and should only be used by code that
+// performs its own tenant-scoping check on the result, such as tir.Export
+// detecting a trajectory with mixed tenant_id values.
+func (l *NodeLog) ListNodesAllTenants(trajectoryID string) ([]map[string]any, error) {
+	return l.listNodes(trajectoryID, nil)
+}
+
+func (l *NodeLog) listNodes(trajectoryID string, tenantID *string) ([]map[string]any, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
