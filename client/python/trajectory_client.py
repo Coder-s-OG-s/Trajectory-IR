@@ -5,6 +5,7 @@ from drivers.durable_backend.dbos.adapter import init_backend
 from trajectory_ir.effects import requires_block_and_gate
 from trajectory_ir.resume.gate import make_gated_tool_call
 from trajectory_ir.runtime.log import NodeLog
+from trajectory_ir.runtime.sandbox import RunMode, assert_tool_allowed_in_mode, normalize_run_mode
 from trajectory_ir.runtime.tool import Tool
 
 
@@ -13,6 +14,7 @@ class Trajectory:
     trajectory_id: str
     tenant_id: str
     db_path: str
+    mode: RunMode = RunMode.LIVE
 
 
 @dataclass
@@ -34,10 +36,20 @@ class ToolResult:
 
 
 def open_trajectory(
-    tenant_id: str, trajectory_id: str, db_path: str = "trajectory.sqlite"
+    tenant_id: str,
+    trajectory_id: str,
+    db_path: str = "trajectory.sqlite",
+    *,
+    mode: RunMode | str = RunMode.LIVE,
 ) -> Trajectory:
+    """Open a trajectory. ``mode=\"sandbox\"`` rejects NON_IDEMPOTENT_WRITE tools (R06)."""
     init_backend(app_name=trajectory_id)
-    return Trajectory(trajectory_id=trajectory_id, tenant_id=tenant_id, db_path=db_path)
+    return Trajectory(
+        trajectory_id=trajectory_id,
+        tenant_id=tenant_id,
+        db_path=db_path,
+        mode=normalize_run_mode(mode),
+    )
 
 
 def project(trajectory: Trajectory, step_n: int, context: dict) -> ProjectContext:
@@ -78,6 +90,11 @@ def exec_tool(trajectory: Trajectory, step_n: int, call: dict, tool: Tool, seq: 
     Returns:
         ToolResult with the tool execution result
     """
+    assert_tool_allowed_in_mode(
+        trajectory.mode,
+        tool_name=tool.name,
+        effect_class=tool.effect_class,
+    )
     log = NodeLog(trajectory.db_path)
     if requires_block_and_gate(tool.effect_class):
         fn = make_gated_tool_call(
@@ -114,7 +131,16 @@ def commit_step(trajectory: Trajectory, step_n: int, seq: int) -> None:
 
 
 def resume(
-    trajectory_id: str, tenant_id: str = "demo", db_path: str = "trajectory.sqlite"
+    trajectory_id: str,
+    tenant_id: str = "demo",
+    db_path: str = "trajectory.sqlite",
+    *,
+    mode: RunMode | str = RunMode.LIVE,
 ) -> Trajectory:
     init_backend(app_name=trajectory_id)
-    return Trajectory(trajectory_id=trajectory_id, tenant_id=tenant_id, db_path=db_path)
+    return Trajectory(
+        trajectory_id=trajectory_id,
+        tenant_id=tenant_id,
+        db_path=db_path,
+        mode=normalize_run_mode(mode),
+    )

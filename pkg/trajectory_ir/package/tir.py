@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -28,6 +27,7 @@ from typing import Any, Literal
 
 from trajectory_ir.runtime.log import NodeLog
 from trajectory_ir.runtime.nodes import Node, NodeValidationError, node_id, payload_hash
+from trajectory_ir.runtime.redact import redact_payload
 
 PackageMode = Literal["thin", "fat"]
 
@@ -56,26 +56,7 @@ _REQUIRED_MEMBERS = frozenset(
     }
 )
 
-# Keys whose values are redacted in redacted export mode (case-insensitive).
-_SECRET_KEY_RE = re.compile(
-    r"(password|passwd|pass[_-]?phrase|secret|token|api[_-]?key|access[_-]?key"
-    r"|authorization|auth|credential|private[_-]?key)",
-    re.IGNORECASE,
-)
-
-# Value shapes that look like a secret regardless of the field's key name
-# (e.g. a bearer token embedded in a free-text "note" field). Not a general
-# secret scanner: a fixed set of common, low-false-positive formats. See
-# SECURITY.md "Redacted export" for the scope and limits of this heuristic.
-_SECRET_VALUE_RE = re.compile(
-    r"(AKIA[0-9A-Z]{16}"  # AWS access key id
-    r"|[Bb]earer\s+[A-Za-z0-9\-_.=]{10,}"  # bearer token
-    r"|gh[pousr]_[A-Za-z0-9]{20,}"  # GitHub token
-    r"|sk-[A-Za-z0-9]{20,}"  # OpenAI-style secret key
-    r"|xox[baprs]-[A-Za-z0-9-]{10,}"  # Slack token
-    r"|-----BEGIN[ A-Z]*PRIVATE KEY-----"  # PEM private key block
-    r"|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})"  # JWT
-)
+# Redaction patterns live in runtime.redact (shared with R08 projection).
 
 
 class TirError(Exception):
@@ -199,28 +180,10 @@ def _seals_from_nodes(nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return seals
 
 
-def _redact_value(key: str, value: Any) -> Any:
-    if _SECRET_KEY_RE.search(key):
-        return "[REDACTED]"
-    if isinstance(value, dict):
-        return {k: _redact_value(str(k), v) for k, v in value.items()}
-    if isinstance(value, list):
-        return [_redact_value(key, item) for item in value]
-    if isinstance(value, str) and _SECRET_VALUE_RE.search(value):
-        return "[REDACTED]"
-    return value
-
-
 def _redact_node(rec: dict[str, Any]) -> dict[str, Any]:
     """Return a copy of a node record with thoughts/secrets stripped for sharing."""
     kind = rec["kind"]
-    payload = rec["payload"]
-    if kind == "THOUGHT":
-        new_payload: dict[str, Any] = {"redacted": True}
-    elif isinstance(payload, dict):
-        new_payload = {k: _redact_value(str(k), v) for k, v in payload.items()}
-    else:
-        new_payload = {"redacted": True}
+    new_payload = redact_payload(kind, rec.get("payload"))
 
     # Rebuild via Node so id matches redacted payload (export is a new package).
     node = Node(

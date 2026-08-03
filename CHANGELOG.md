@@ -33,6 +33,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - R05 conformance tests for `.tir` thin/fat round-trip and golden fixture load.
 - R03 PURE recompute-on-resume: `requires_block_and_gate` / `RequiresBlockAndGate`,
   conformance + Go tests; only NON_IDEMPOTENT_WRITE is gated.
+- R06 sandbox mode (`RunMode.SANDBOX`) rejects NON_IDEMPOTENT_WRITE before side effects.
+- R07 `graft_artifact_ref` / `trajir/graft` transfers artifact refs only (never THOUGHT).
+- R08 projection redaction (`runtime/redact`, `trajir/redact`); shared with `.tir` redacted export.
 
 
 

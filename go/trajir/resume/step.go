@@ -7,6 +7,7 @@ import (
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/durable"
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/effects"
 	nodelog "github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/log"
+	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/sandbox"
 )
 
 // Tool is a named tool with an effect class and implementation.
@@ -29,6 +30,8 @@ type RunStepConfig struct {
 	WorkflowID       string // durable memo scope; often same as TrajectoryID
 	Tools            map[string]Tool
 	OnDecisionSealed func() // optional test hook after DECISION is appended
+	// Mode is live (default) or sandbox (R06: reject NON_IDEMPOTENT_WRITE).
+	Mode sandbox.Mode
 }
 
 // RunStep executes one agent step: project context, durable infer, DECISION seal,
@@ -52,6 +55,9 @@ func RunStep(
 	}
 	if cfg.WorkflowID == "" {
 		cfg.WorkflowID = cfg.TrajectoryID
+	}
+	if cfg.Mode == "" {
+		cfg.Mode = sandbox.ModeLive
 	}
 	if stepContext == nil {
 		stepContext = map[string]any{}
@@ -109,6 +115,9 @@ func RunStep(
 		args := call.Args
 		if args == nil {
 			args = map[string]any{}
+		}
+		if err := sandbox.AssertToolAllowed(cfg.Mode, call.Name, tool.Effect); err != nil {
+			return nil, err
 		}
 
 		var result any
