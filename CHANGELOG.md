@@ -33,6 +33,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - R05 conformance tests for `.tir` thin/fat round-trip and golden fixture load.
 - R03 PURE recompute-on-resume: `requires_block_and_gate` / `RequiresBlockAndGate`,
   conformance + Go tests; only NON_IDEMPOTENT_WRITE is gated.
+- R04 default context projector (`project_context` / `trajir/projector`) with
+  CONSTRAINT+pinned budget safety and `BUDGET_IMPOSSIBLE`.
 
 
 
