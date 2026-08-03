@@ -1,9 +1,9 @@
 """Default context projector (README §9 policy note / R04).
 
-Metric: ``json_chars`` — UTF-8 length of a compact, sort-keyed JSON object
-``{"kind": ..., "payload": ...}`` for each included node. This is deliberately
-not a model-specific tokenizer; it is enough to enforce CONSTRAINT budget
-safety for conformance R04.
+Metric: ``rfc8785_bytes`` — byte length of the RFC 8785 (JCS) canonical form of
+``{"kind": ..., "payload": ...}`` for each included node. Same canonicalization
+as node identity hashing (``rfc8785`` / Go ``jcs``), so Python and Go agree on
+budget thresholds. This is deliberately not a model-specific tokenizer.
 
 Default policy (no projector-policy.yaml):
 - Always include every CONSTRAINT node
@@ -16,9 +16,12 @@ Default policy (no projector-policy.yaml):
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from typing import Any
+
+import rfc8785
+
+SIZE_METRIC = "rfc8785_bytes"
 
 
 class BudgetImpossible(Exception):
@@ -39,15 +42,20 @@ class ProjectResult:
     context: dict[str, Any]
     size_units: int
     budget: int
-    metric: str = "json_chars"
+    metric: str = SIZE_METRIC
 
 
 def node_size_units(node: dict[str, Any]) -> int:
-    """Size of one node under the json_chars metric."""
+    """Size of one node under the rfc8785_bytes metric (JCS canonical length)."""
     kind = node.get("kind", "")
-    payload = node.get("payload", {})
-    raw = json.dumps({"kind": kind, "payload": payload}, sort_keys=True, default=str)
-    return len(raw.encode("utf-8"))
+    payload = node.get("payload")
+    if payload is None:
+        payload = {}
+    if not isinstance(payload, dict):
+        raise TypeError("payload must be an object for size measurement")
+    # RFC 8785 JCS — same stack as runtime.nodes.payload_hash (byte-stable vs Go jcs).
+    canon = rfc8785.dumps({"kind": kind, "payload": payload})
+    return len(canon)
 
 
 def _sort_key(node: dict[str, Any]) -> tuple[int, int, str]:
@@ -145,7 +153,7 @@ def project_context(
         "included_ids": [str(n["id"]) for n in included],
         "budget": budget,
         "size_units": used,
-        "metric": "json_chars",
+        "metric": SIZE_METRIC,
     }
     return ProjectResult(
         included_ids=tuple(str(n["id"]) for n in included),
@@ -153,5 +161,5 @@ def project_context(
         context=context,
         size_units=used,
         budget=budget,
-        metric="json_chars",
+        metric=SIZE_METRIC,
     )

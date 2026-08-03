@@ -14,7 +14,7 @@ Second language implementation of Trajectory IR primitives. Python remains the P
 | `trajir/resume` | Block and gate, and RunStep seal path for one agent step |
 | `trajir/client` | Thin SDK: open, project, seal, exec, commit, resume, RunStep |
 | `trajir/tir` | Portable `.tir` package export / import (thin and fat) |
-| `trajir/projector` | Default context projector (R04 CONSTRAINT budget safety) |
+| `trajir/projector` | Default context projector (R04; size metric = RFC 8785 / JCS bytes) |
 
 ## Durable backend decision (issues #16 and #24)
 

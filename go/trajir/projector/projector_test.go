@@ -1,7 +1,11 @@
 package projector_test
 
 import (
+	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -108,6 +112,47 @@ func TestTrimOptionalKeepConstraints(t *testing.T) {
 	for _, id := range res.DroppedIDs {
 		if id == "c1" {
 			t.Fatal("constraint in dropped set")
+		}
+	}
+}
+
+func TestProjectorSizeVectorsMatchPythonGoldens(t *testing.T) {
+	// Shared goldens with Python test_projector_size_vectors.py (RFC 8785 / JCS).
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("caller")
+	}
+	root := filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", ".."))
+	path := filepath.Join(root, "testdata", "projector_size_vectors.json")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	var doc struct {
+		Version int    `json:"version"`
+		Metric  string `json:"metric"`
+		Cases   []struct {
+			Name      string         `json:"name"`
+			Node      map[string]any `json:"node"`
+			SizeUnits int            `json:"size_units"`
+		} `json:"cases"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatal(err)
+	}
+	if doc.Version != 1 || doc.Metric != projector.SizeMetric {
+		t.Fatalf("header version=%d metric=%q", doc.Version, doc.Metric)
+	}
+	if len(doc.Cases) == 0 {
+		t.Fatal("no cases")
+	}
+	for _, c := range doc.Cases {
+		got, err := projector.NodeSizeUnits(c.Node)
+		if err != nil {
+			t.Fatalf("%s: %v", c.Name, err)
+		}
+		if got != c.SizeUnits {
+			t.Fatalf("%s: size_units got %d want %d", c.Name, got, c.SizeUnits)
 		}
 	}
 }

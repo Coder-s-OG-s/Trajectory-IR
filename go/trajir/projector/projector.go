@@ -1,15 +1,20 @@
 // Package projector implements the default context projector (R04).
 //
-// Metric json_chars: UTF-8 length of compact sort-keyed JSON
-// {"kind":...,"payload":...} per node. Matches Python
-// pkg/trajectory_ir/runtime/projector.py.
+// Metric rfc8785_bytes: length of RFC 8785 (JCS) canonical form of
+// {"kind":...,"payload":...} per node. Same JCS stack as trajir/nodes
+// (github.com/gowebpki/jcs) so size units match Python rfc8785.
 package projector
 
 import (
 	"encoding/json"
 	"fmt"
 	"sort"
+
+	"github.com/gowebpki/jcs"
 )
+
+// SizeMetric is the documented budget unit name (parity with Python SIZE_METRIC).
+const SizeMetric = "rfc8785_bytes"
 
 // BudgetImpossible is raised when CONSTRAINT/pinned nodes alone exceed budget.
 type BudgetImpossible struct {
@@ -35,19 +40,23 @@ type Result struct {
 	Metric      string
 }
 
-// NodeSizeUnits returns the json_chars size of one node record.
+// NodeSizeUnits returns the rfc8785_bytes size of one node record (JCS length).
 func NodeSizeUnits(node map[string]any) (int, error) {
 	kind, _ := node["kind"].(string)
 	payload := node["payload"]
 	if payload == nil {
 		payload = map[string]any{}
 	}
+	// encoding/json then jcs.Transform — same pattern as nodes.PayloadHash.
 	raw, err := json.Marshal(map[string]any{"kind": kind, "payload": payload})
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("json marshal: %w", err)
 	}
-	// encoding/json sorts map keys; matches Python sort_keys=True for this shape.
-	return len(raw), nil
+	canon, err := jcs.Transform(raw)
+	if err != nil {
+		return 0, fmt.Errorf("jcs: %w", err)
+	}
+	return len(canon), nil
 }
 
 type sortKey struct {
@@ -192,11 +201,11 @@ func ProjectContext(nodes []map[string]any, budget int, pinnedIDs map[string]str
 		})
 	}
 	ctx := map[string]any{
-		"items":         items,
-		"included_ids":  ids,
-		"budget":        budget,
-		"size_units":    used,
-		"metric":        "json_chars",
+		"items":        items,
+		"included_ids": ids,
+		"budget":       budget,
+		"size_units":   used,
+		"metric":       SizeMetric,
 	}
 	return &Result{
 		IncludedIDs: ids,
@@ -204,6 +213,6 @@ func ProjectContext(nodes []map[string]any, budget int, pinnedIDs map[string]str
 		Context:     ctx,
 		SizeUnits:   used,
 		Budget:      budget,
-		Metric:      "json_chars",
+		Metric:      SizeMetric,
 	}, nil
 }
