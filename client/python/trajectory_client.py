@@ -53,6 +53,12 @@ def open_trajectory(
 
 
 def project(trajectory: Trajectory, step_n: int, context: dict) -> ProjectContext:
+    """Record a PROJECT_CONTEXT node (caller-supplied or projector-built context).
+
+    For budgeted assembly from the node log, use
+    ``trajectory_ir.runtime.project_context`` first, then pass its
+    ``ProjectResult.context`` here.
+    """
     NodeLog(trajectory.db_path).append(
         "PROJECT_CONTEXT",
         step_n,
