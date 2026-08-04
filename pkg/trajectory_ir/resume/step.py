@@ -5,9 +5,18 @@ from drivers.durable_backend.dbos.adapter import (
 )
 from trajectory_ir.effects import requires_block_and_gate
 from trajectory_ir.resume.gate import make_gated_tool_call
+from trajectory_ir.runtime.sandbox import RunMode, assert_tool_allowed_in_mode, normalize_run_mode
 
 
-def make_run_step(node_log, tenant_id, trajectory_id, tool_registry, on_decision_sealed=None):
+def make_run_step(
+    node_log,
+    tenant_id,
+    trajectory_id,
+    tool_registry,
+    on_decision_sealed=None,
+    *,
+    mode: RunMode | str = RunMode.LIVE,
+):
     """Build a durable run_step workflow for one agent step.
 
     Resume matrix (README §8, R02 / R03):
@@ -15,7 +24,10 @@ def make_run_step(node_log, tenant_id, trajectory_id, tool_registry, on_decision
     - ``PURE`` and other non-gated classes: no gate; body may re-run on resume
       when durable memo is absent (R03 for PURE). Prior TOOL_CALL rows alone
       must not raise ``BlockedNeedsGate`` for these classes.
+
+    Sandbox mode (R06): rejects NON_IDEMPOTENT_WRITE before the tool body runs.
     """
+    run_mode = normalize_run_mode(mode)
 
     @durable_workflow
     def run_step(step_n: int, model_call, context: dict):
@@ -44,6 +56,11 @@ def make_run_step(node_log, tenant_id, trajectory_id, tool_registry, on_decision
             # call already attempted" by looking up (step_n, seq), so seq has to
             # identify one call unambiguously.
             seq = 2 + 2 * i
+            assert_tool_allowed_in_mode(
+                run_mode,
+                tool_name=call["name"],
+                effect_class=tool.effect_class,
+            )
             if requires_block_and_gate(tool.effect_class):
                 gated = make_gated_tool_call(
                     node_log,

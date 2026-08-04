@@ -20,6 +20,7 @@ import (
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/effects"
 	nodelog "github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/log"
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/resume"
+	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/sandbox"
 )
 
 // Options configure workdir paths and optional durable backend injection.
@@ -34,6 +35,8 @@ type Options struct {
 	WorkflowID string
 	// Backend overrides LocalSQLite when non nil. Caller owns Close unless Open created it.
 	Backend durable.Backend
+	// Mode is live (default) or sandbox (R06).
+	Mode sandbox.Mode
 }
 
 // Trajectory is an open IR run handle.
@@ -41,6 +44,7 @@ type Trajectory struct {
 	TrajectoryID string
 	TenantID     string
 	WorkflowID   string
+	Mode         sandbox.Mode
 
 	log         *nodelog.NodeLog
 	backend     durable.Backend
@@ -76,6 +80,13 @@ func OpenTrajectory(tenantID, trajectoryID string, opts Options) (*Trajectory, e
 	if wf == "" {
 		wf = trajectoryID
 	}
+	mode := opts.Mode
+	if mode == "" {
+		mode = sandbox.ModeLive
+	}
+	if mode != sandbox.ModeLive && mode != sandbox.ModeSandbox {
+		return nil, fmt.Errorf("client: unsupported mode %q", mode)
+	}
 
 	nl, err := nodelog.Open(nodesPath)
 	if err != nil {
@@ -99,6 +110,7 @@ func OpenTrajectory(tenantID, trajectoryID string, opts Options) (*Trajectory, e
 		TrajectoryID: trajectoryID,
 		TenantID:     tenantID,
 		WorkflowID:   wf,
+		Mode:         mode,
 		log:          nl,
 		backend:      backend,
 		ownsBackend:  ownsBackend,
@@ -172,6 +184,9 @@ func (t *Trajectory) ExecTool(stepN, seq int, tool resume.Tool, args map[string]
 	if args == nil {
 		args = map[string]any{}
 	}
+	if err := sandbox.AssertToolAllowed(t.Mode, tool.Name, tool.Effect); err != nil {
+		return nil, err
+	}
 	fn := tool.Fn
 	if effects.RequiresBlockAndGate(tool.Effect) {
 		fn = resume.MakeGatedToolCall(
@@ -226,6 +241,7 @@ func (t *Trajectory) RunStep(
 		TrajectoryID: t.TrajectoryID,
 		WorkflowID:   t.WorkflowID,
 		Tools:        tools,
+		Mode:         t.Mode,
 	}
 	if len(opts) > 0 {
 		cfg.OnDecisionSealed = opts[0].OnDecisionSealed

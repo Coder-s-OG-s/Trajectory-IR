@@ -35,6 +35,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   conformance + Go tests; only NON_IDEMPOTENT_WRITE is gated.
 - R04 default context projector (`project_context` / `trajir/projector`) with
   CONSTRAINT+pinned budget safety and `BUDGET_IMPOSSIBLE`.
+- R06 sandbox mode (`RunMode.SANDBOX`) rejects NON_IDEMPOTENT_WRITE before side effects.
+- R07 `graft_artifact_ref` / `trajir/graft` transfers artifact refs only (never THOUGHT).
+- R08 projection redaction (`runtime/redact`, `trajir/redact`); shared with `.tir` redacted export.
 
 
 
