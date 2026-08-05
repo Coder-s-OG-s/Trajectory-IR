@@ -110,3 +110,54 @@ def test_bucket_required():
         raise AssertionError("expected ValueError")
     except ValueError:
         pass
+
+
+class FakeClientError(Exception):
+    """Mimics botocore.exceptions.ClientError with a .response Error.Code."""
+
+    def __init__(self, code: str, message: str = "") -> None:
+        super().__init__(message or code)
+        self.response = {"Error": {"Code": code, "Message": message or code}}
+
+
+class ClientErrorS3:
+    """S3 double that raises a given ClientError code on get/head."""
+
+    def __init__(self, code: str) -> None:
+        self.code = code
+
+    def put_object(self, *, Bucket: str, Key: str, Body: bytes, **kwargs):
+        return {}
+
+    def get_object(self, *, Bucket: str, Key: str, **kwargs):
+        raise FakeClientError(self.code)
+
+    def head_object(self, *, Bucket: str, Key: str, **kwargs):
+        raise FakeClientError(self.code)
+
+
+def test_get_maps_nosuchkey_code_to_not_found():
+    store = S3CAS(ClientErrorS3("NoSuchKey"), "b")
+    h = content_hash(b"missing")
+    try:
+        store.get(h)
+        raise AssertionError("expected CASNotFoundError")
+    except CASNotFoundError:
+        pass
+    assert store.has(h) is False
+
+
+def test_get_and_has_propagate_non_404_client_error():
+    """AccessDenied (and other non-missing codes) must not look like absence."""
+    store = S3CAS(ClientErrorS3("AccessDenied"), "b")
+    h = content_hash(b"secret")
+    try:
+        store.get(h)
+        raise AssertionError("expected AccessDenied to propagate")
+    except FakeClientError as exc:
+        assert exc.response["Error"]["Code"] == "AccessDenied"
+    try:
+        store.has(h)
+        raise AssertionError("expected AccessDenied to propagate from has()")
+    except FakeClientError as exc:
+        assert exc.response["Error"]["Code"] == "AccessDenied"

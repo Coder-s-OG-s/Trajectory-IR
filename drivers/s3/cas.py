@@ -21,6 +21,16 @@ from trajectory_ir.storage.cas import (
     shard_key,
 )
 
+# boto3 ClientError codes that mean the object is absent (not auth/network/5xx).
+_NOT_FOUND_CODES = frozenset(
+    {
+        "NoSuchKey",
+        "NotFound",
+        "404",
+        "NoSuchVersion",
+    }
+)
+
 
 class S3ClientProtocol(Protocol):
     """Minimal subset of boto3 S3 client methods used by :class:`S3CAS`."""
@@ -30,6 +40,38 @@ class S3ClientProtocol(Protocol):
     def get_object(self, *, Bucket: str, Key: str, **kwargs: Any) -> Any: ...
 
     def head_object(self, *, Bucket: str, Key: str, **kwargs: Any) -> Any: ...
+
+
+def _error_code(exc: BaseException) -> str | None:
+    """Extract S3/API error code from a boto3 style ClientError, if present."""
+    response = getattr(exc, "response", None)
+    if not isinstance(response, dict):
+        return None
+    error = response.get("Error")
+    if not isinstance(error, dict):
+        return None
+    code = error.get("Code")
+    if code is None:
+        return None
+    return str(code)
+
+
+def _is_not_found(exc: BaseException) -> bool:
+    """True only when the error means the object is missing.
+
+    Must not treat arbitrary ClientError (AccessDenied, 500, throttling) as
+    absence — those must surface to the caller.
+    """
+    code = _error_code(exc)
+    if code is not None:
+        return code in _NOT_FOUND_CODES
+    # In-memory fakes and some SDKs raise KeyError / NoSuchKey without .response.
+    name = type(exc).__name__
+    if name == "NoSuchKey":
+        return True
+    if isinstance(exc, KeyError):
+        return True
+    return False
 
 
 class S3CAS:
@@ -89,17 +131,7 @@ class S3CAS:
         try:
             resp = self._client.get_object(Bucket=self._bucket, Key=key)
         except Exception as exc:
-            # boto3 raises ClientError with Code NoSuchKey; fakes may raise KeyError.
-            name = type(exc).__name__
-            code = ""
-            if hasattr(exc, "response"):
-                code = str(exc.response.get("Error", {}).get("Code", ""))  # type: ignore[union-attr]
-            if (
-                name in {"NoSuchKey", "ClientError", "KeyError"}
-                or code in {"NoSuchKey", "404", "NotFound"}
-                or "NoSuchKey" in str(exc)
-                or "404" in str(exc)
-            ):
+            if _is_not_found(exc):
                 raise CASNotFoundError(f"no object for content_hash={h}") from exc
             raise
         body = resp["Body"]
@@ -117,8 +149,11 @@ class S3CAS:
         try:
             self._client.head_object(Bucket=self._bucket, Key=key)
             return True
-        except Exception:
-            return False
+        except Exception as exc:
+            if _is_not_found(exc):
+                return False
+            # Auth, network, 5xx, throttling, etc. must not look like "missing".
+            raise
 
 
 def build_s3_client_from_env() -> Any:
