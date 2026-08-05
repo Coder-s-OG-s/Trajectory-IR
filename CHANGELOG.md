@@ -9,8 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Agent host loop example (`examples/host_loop`) using only the public client
-  SDK with a stub model and optional sandbox mode (issue #65).
+- Restate durable backend adapter package (`drivers.durable_backend.restate`)
+  with process local step memo for tests/dev, injectable into `make_run_step`
+  via `durable_infer_fn` / `durable_tool_fn` / `durable_workflow_fn` (issue #66).
 - `put_artifact` helper and optional `cas=` on thin `export_tir` / `import_tir` for fail closed rehydrate (issue #73).
 
 - Local filesystem content addressed store (`trajectory_ir.storage.FileSystemCAS`)
@@ -21,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `make_run_step` accepts optional durable hook functions; default remains DBOS.
 ### Fixed
 
 ## [0.1.0] - 2026-08-05
