@@ -41,7 +41,7 @@ Phase 1A **completion bar** in the master README still treats R01/R02 as the har
 | Package digital signatures | `SIGNATURE` reserved / null |
 | Restate adapter | Spec: after DBOS is solid |
 | Local FS CAS object store product | Shipped: `trajectory_ir.storage.FileSystemCAS` + `rehydrate_artifacts` |
-| Postgres / S3 drivers | Package scaffolds only |
+| Postgres / S3 drivers | S3 CAS shipped (`drivers.s3`); Postgres NodeLog still deferred |
 | Fluid / k8s-fluid profile | Later phase |
 | Full `projector-policy.yaml` DSL | Default built-in policy only |
 | Multi-tenant SaaS control plane | Library trust model |

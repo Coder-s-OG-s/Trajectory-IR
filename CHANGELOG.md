@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Local filesystem content addressed store (`trajectory_ir.storage.FileSystemCAS`)
   with sharded `cas/<2-hex>/<hash>` layout, hash verify on get, and
   `rehydrate_artifacts` for thin `.tir` packages (issue #62).
+- S3 compatible CAS driver (`drivers.s3.S3CAS`) with the same sharded key layout
+  and injectable client for tests; optional `boto3` extra (issue #63).
 
 ### Changed
 
