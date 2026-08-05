@@ -29,9 +29,7 @@ def store(cas_root):
 
 def test_content_hash_known_empty():
     # SHA-256 of empty string (public test vector).
-    assert content_hash(b"") == (
-        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-    )
+    assert content_hash(b"") == ("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
 
 
 def test_shard_key_layout():
