@@ -1,12 +1,14 @@
 # Release process (maintainers)
 
-How to cut a GitHub release after the release-prep PR is merged. **Do not** push tags from unreviewed automation.
+How to cut a GitHub release and optionally publish to PyPI. **Do not** push tags
+from unreviewed automation. Package owner credentials never belong in the repo.
 
 ## Preconditions
 
-1. `main` is green (DCO not required on push to main if merges only; Quality + Go green on the merge commit / latest PR).
-2. Release-prep PR merged (CHANGELOG has a version section; this file is up to date).
+1. `main` is green (Quality + Go green on the merge commit / latest PR).
+2. CHANGELOG has a version section that matches what you intend to ship.
 3. Working tree clean; `git pull origin main`.
+4. You have rights to push tags and (for PyPI) upload the project.
 
 ## Version numbers
 
@@ -14,43 +16,91 @@ How to cut a GitHub release after the release-prep PR is merged. **Do not** push
 |---------|--------|--------|
 | Python package | `pyproject.toml` → `project.version` | Currently `0.1.0` |
 | Git tag | `v0.1.0` | Prefer `v` prefix |
-| Go module | `go/go.mod` | No separate semver tag yet; consumers use commit or future `go/v0.1.0` policy if we split versioning later |
+| Go module | `go/go.mod` | No separate semver tag yet; consumers use commit or a later policy |
 
-## Steps for v0.1.0
+### Choosing 0.1.0 vs 0.1.1
+
+Open storage and host PRs may land after the first release prep. Pick one:
+
+1. **Tag `v0.1.0` from current `main`** (R01–R08 library surface, docs release prep only), then ship **`0.1.1`** after CAS / Postgres / host PRs merge with CHANGELOG updated.
+2. **Wait** until the storage PRs you want in the first public wheel are on `main`, bump `pyproject.toml` if needed, and tag once.
+
+Do not move an already pushed tag. Prefer a new patch version.
+
+## Steps for a GitHub release (example v0.1.0)
 
 ```bash
 git checkout main
 git pull origin main
 
-# Annotated tag (example date; use actual merge day if different)
 git tag -a v0.1.0 -m "Trajectory IR v0.1.0 — Phase 1A library surface (R01–R08, dual .tir)"
 
 git push origin v0.1.0
 ```
 
-Create a **GitHub Release** for `v0.1.0`:
+Create a **GitHub Release** for the tag:
 
 1. Title: `v0.1.0`
-2. Body: paste or adapt [RELEASE_NOTES_0.1.0.md](RELEASE_NOTES_0.1.0.md)
+2. Body: paste or adapt [RELEASE_NOTES_0.1.0.md](RELEASE_NOTES_0.1.0.md) (or a 0.1.1 notes file if that is the tag)
 3. Attach nothing required (source zip is automatic)
 
-Optional PyPI (when ready; not required to call the tag a release):
+## Publish to PyPI (optional but tracked)
+
+PyPI is **not** required for the git tag to be a valid release. When you are ready
+to make `pip install trajectory-ir` work for outsiders:
+
+### One time setup
+
+1. Create or use a PyPI project named consistently with `pyproject.toml` (`trajectory-ir`).
+2. Prefer **Trusted Publishing** (GitHub Actions OIDC) or a PyPI API token stored
+   only in the package owner’s secret store. Never commit tokens.
+3. Confirm the package name is still available (or you own it).
+
+### Build and upload (manual)
+
+From a clean checkout of the **tagged** commit:
 
 ```bash
-pip install build twine
+git checkout v0.1.0
+python -m venv .venv-release
+# Windows: .\.venv-release\Scripts\activate
+# Unix:    source .venv-release/bin/activate
+pip install -U pip build twine
 python -m build
-# twine upload dist/*   # only with package owner credentials
+# Inspect dist/ — sdist and wheel for trajectory-ir 0.1.0
+twine check dist/*
+# Upload only with owner credentials:
+# twine upload dist/*
 ```
+
+### Smoke after upload
+
+```bash
+python -m venv .venv-smoke
+# activate venv
+pip install trajectory-ir==0.1.0
+python -c "import trajectory_ir; print('ok')"
+# Optional: clone still needed for conformance suite paths; at minimum import works.
+```
+
+### Automation later
+
+Trusted Publishing from GitHub Actions can replace manual twine. That is a follow
+up workflow change, not required for the first upload.
 
 ## After the release
 
 1. Confirm the GitHub Release page renders.
 2. If something critical was missed, ship `0.1.1` rather than moving the tag.
-3. Open issues for next work (client integration, FS CAS, etc.) under a clean Unreleased section.
+3. When PyPI is live, update QUICKSTART install section to show `pip install trajectory-ir`
+   as the primary path and keep the git clone path for contributors.
+4. Open or continue issues under a clean Unreleased CHANGELOG section.
 
 ## Checklist
 
-- [ ] CHANGELOG `[0.1.0]` section accurate
-- [ ] Tag pushed
-- [ ] GitHub Release published
-- [ ] Announce (Discord/org) with install-from-git or PyPI link
+1. [ ] CHANGELOG section accurate for the version you tag
+2. [ ] `pyproject.toml` version matches the tag (without the `v` prefix)
+3. [ ] Annotated tag pushed
+4. [ ] GitHub Release published
+5. [ ] (Optional) PyPI wheel uploaded and smoke install works
+6. [ ] Announce with install from git or PyPI link

@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Maintainer PyPI publish steps expanded in `docs/RELEASE.md` (issue #76).
 - PostgreSQL NodeLog driver (`drivers.postgres.PostgresNodeLog`) matching SQLite
   append, claim, list, and tenant isolation semantics; optional `psycopg` extra
   (issue #64).
