@@ -162,4 +162,3 @@ go test ./...
 | [docs/PHASE_1A_STATUS.md](docs/PHASE_1A_STATUS.md) | What shipped vs deferred |
 | [README.md](README.md) | Master specification |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | DCO, CI, local dev |
-| [docs/RELEASE.md](docs/RELEASE.md) | How maintainers cut a release (after merge) |
