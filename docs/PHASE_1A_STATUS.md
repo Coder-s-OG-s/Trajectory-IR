@@ -14,6 +14,7 @@ Honest inventory of what is **on `main`** versus what remains **out of scope** o
 | Sandbox (R06) | `runtime/sandbox.py`, Go `trajir/sandbox` |
 | Graft (R07) | `runtime/graft.py`, Go `trajir/graft` |
 | Redaction (R08 + export) | `runtime/redact.py`, Go `trajir/redact` |
+| Local FS CAS | `trajectory_ir.storage.FileSystemCAS`, thin rehydrate helper |
 | Go IR stack | `go/trajir/*` — nodes, log, effects, durable, Temporal, resume, client |
 | Demos | `examples/kill-mid-deploy/`, `go/examples/kill-mid-deploy/` |
 | CI | DCO, Quality (3.11/3.12: ruff, mypy, unit/e2e/conformance, pip-audit test), Go (tests + govulncheck) |
@@ -39,7 +40,7 @@ Phase 1A **completion bar** in the master README still treats R01/R02 as the har
 |------|--------|
 | Package digital signatures | `SIGNATURE` reserved / null |
 | Restate adapter | Spec: after DBOS is solid |
-| Local FS CAS object store product | Fat `.tir` embeds bytes; thin URI rehydrate not a full CAS service |
+| Local FS CAS object store product | Shipped: `trajectory_ir.storage.FileSystemCAS` + `rehydrate_artifacts` |
 | Postgres / S3 drivers | Package scaffolds only |
 | Fluid / k8s-fluid profile | Later phase |
 | Full `projector-policy.yaml` DSL | Default built-in policy only |
