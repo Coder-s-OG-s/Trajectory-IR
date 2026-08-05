@@ -14,6 +14,11 @@ permissions:
   contents: read
   pull-requests: read
 
+env:
+  # Coverage floors (Phase A). Raise only after measured green baselines improve.
+  PYTHON_COV_FAIL_UNDER: "80"
+  GO_COV_FAIL_UNDER: "50"
+
 jobs:
   dco:
     name: DCO
@@ -80,14 +85,94 @@ jobs:
       - name: Cross language hash goldens (Python)
         run: pytest test/unit/test_hash_vectors.py test/unit/test_node_identity.py -q
 
-      - name: Unit tests
-        run: pytest test/unit -q
+      - name: Unit tests with coverage floor
+        run: |
+          pytest test/unit -q \
+            --cov=trajectory_ir \
+            --cov=drivers \
+            --cov=client \
+            --cov-report=term \
+            --cov-report=xml:coverage-python.xml \
+            --cov-fail-under=${{ env.PYTHON_COV_FAIL_UNDER }}
+
+      - name: Upload Python coverage (unit)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-python-${{ matrix.python-version }}
+          path: coverage-python.xml
+          if-no-files-found: ignore
 
       - name: E2E crash/resume tests
         run: pytest test/e2e -q
 
-      - name: Conformance R01/R02
+      - name: Conformance R01–R08
         run: pytest conformance/ -q
+
+  package-smoke:
+    name: Package smoke
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Build sdist and wheel
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build
+
+      - name: Install wheel into clean environment and smoke import
+        run: |
+          python -m venv .venv-smoke
+          .venv-smoke/bin/pip install --upgrade pip
+          .venv-smoke/bin/pip install dist/trajectory_ir-*.whl
+          .venv-smoke/bin/python -c "\
+          import trajectory_ir; \
+          from trajectory_ir.runtime.nodes import Node; \
+          from trajectory_ir.storage import FileSystemCAS, content_hash; \
+          assert content_hash(b'') == 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'; \
+          print('package smoke ok', getattr(trajectory_ir, '__file__', 'n/a'))"
+
+      - name: Upload dist artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-dist
+          path: dist/*
+          if-no-files-found: error
+
+  security-pip-audit:
+    name: Security (pip-audit)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install package and audit tooling
+        run: |
+          python -m pip install --upgrade pip
+          # Hosted images can ship an older setuptools that pip-audit flags.
+          pip install -U "setuptools>=83"
+          pip install -e ".[dev]"
+          pip install -U pip-audit
+
+      - name: Run pip-audit on installed dependency tree
+        run: |
+          # --skip-editable: local trajectory-ir is not a published PyPI release.
+          pip-audit --skip-editable
 
   go:
     name: Go
@@ -106,9 +191,24 @@ jobs:
         working-directory: go
         run: go test ./trajir/nodes -count=1 -run 'TestHashVectors|TestKeyOrder'
 
-      - name: Test Go IR core
+      - name: Test Go IR core with coverage floor
+        env:
+          GO_COV_FAIL_UNDER: ${{ env.GO_COV_FAIL_UNDER }}
+        run: |
+          chmod +x scripts/check_go_coverage.sh
+          scripts/check_go_coverage.sh
+
+      - name: Full Go test suite
         working-directory: go
         run: go test ./... -count=1
+
+      - name: Upload Go coverage profile
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-go
+          path: go/coverage.out
+          if-no-files-found: ignore
 
       - name: govulncheck
         working-directory: go

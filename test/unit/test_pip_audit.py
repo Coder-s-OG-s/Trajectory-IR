@@ -1,7 +1,12 @@
-"""CI dependency vulnerability gate (Python parity with Go govulncheck).
+"""Local helper for dependency vulnerability scanning (parity with Go govulncheck).
 
-Runs under GitHub Actions (CI=true). Locally: ``RUN_PIP_AUDIT=1 pytest test/unit/test_pip_audit.py``.
-Skip with ``SKIP_PIP_AUDIT=1`` when needed.
+Primary CI gate is the dedicated **Security (pip-audit)** job in
+``.github/workflows/ci.yml``. This unit test remains for local runs:
+
+    RUN_PIP_AUDIT=1 pytest test/unit/test_pip_audit.py -q
+
+Skip with ``SKIP_PIP_AUDIT=1`` when needed. Under GitHub Actions the dedicated
+job owns the gate so Quality does not double-run audit.
 """
 
 from __future__ import annotations
@@ -17,7 +22,10 @@ def test_installed_dependency_tree_has_no_known_vulns() -> None:
     """Fail when pip-audit reports known vulnerabilities in the installed tree."""
     if os.environ.get("SKIP_PIP_AUDIT") == "1":
         pytest.skip("SKIP_PIP_AUDIT=1")
-    if os.environ.get("CI") != "true" and os.environ.get("RUN_PIP_AUDIT") != "1":
+    # CI uses the Security (pip-audit) job; avoid double-running on every Quality matrix cell.
+    if os.environ.get("CI") == "true":
+        pytest.skip("pip-audit runs in the Security (pip-audit) CI job")
+    if os.environ.get("RUN_PIP_AUDIT") != "1":
         pytest.skip("set RUN_PIP_AUDIT=1 to run pip-audit outside CI")
 
     # Ensure audit tooling and known-vulnerable build backends are current.
