@@ -41,10 +41,12 @@ Defined in `.github/workflows/ci.yml`:
 | Check | What it does |
 |-------|----------------|
 | **DCO** | Every commit on the PR has `Signed-off-by` |
-| **Quality** | install, Ruff, Mypy, hash goldens, unit (includes `pip-audit` gate), e2e, R01/R02 (Python 3.11 and 3.12) |
+| **Quality** | install, Ruff, Mypy, hash goldens, unit (includes `pip-audit` gate), e2e, full `conformance/` R01–R08 (Python 3.11 and 3.12) |
 | **Go** | hash goldens, `go test ./...`, `govulncheck` |
 
 Python dependency audit (`pip-audit`) is part of the unit suite under CI (`test/unit/test_pip_audit.py`), so it fails the existing **Quality** checks without a separate job.
+
+Phase 1A inventory (shipped vs deferred): [docs/PHASE_1A_STATUS.md](docs/PHASE_1A_STATUS.md).
 
 Cross language hash vectors live in `testdata/hash_vectors.json` and must stay
 identical in Python (`test/unit/test_hash_vectors.py`) and Go

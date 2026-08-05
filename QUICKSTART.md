@@ -1,104 +1,164 @@
 # Quickstart: Trajectory IR
 
-Welcome to Trajectory IR! This guide will get you up and running with the `local` deployment profile in under 5 minutes. 
+Get a **local** Trajectory IR checkout running. This matches APIs that exist on `main` today (Phase 1A library surface).
 
-Trajectory IR acts as a semantic layer for AI agents, wrapping your agent's execution history in a portable, crash-safe format using pluggable durable execution backends like [DBOS](https://docs.dbos.dev/) or Restate.
+Trajectory IR is a **semantic layer** for agent runs: content-addressed nodes, effect classes, block-and-gate for non-idempotent tools, portable `.tir` packages, and optional sandbox mode. Crash detection and step memoization are delegated to a durable backend (DBOS for Python Phase 1A).
 
 ## Prerequisites
-- Python 3.11+
-- `pip` or [Hatch](https://hatch.pypa.io/) (recommended)
+
+- Python **3.11+**
+- Git
+- Optional: Go **1.25.x** (only if you exercise `go/trajir`)
 
 ---
 
-## 1. Installation
-
-Install the Trajectory IR SDK and the official `dbos` durable execution backend package:
+## 1. Install from a clone
 
 ```bash
-pip install trajectory-ir dbos
+git clone https://github.com/Coder-s-OG-s/Trajectory-IR.git
+cd Trajectory-IR
+python -m venv .venv
+# Windows: .\.venv\Scripts\activate
+# Unix:    source .venv/bin/activate
+pip install -U pip
+pip install -e ".[dev]"
 ```
 
-## 2. Initialize the Local Environment
+PyPI publish of `trajectory-ir` may follow the `v0.1.0` tag; until then, **editable install from git** is the supported path.
 
-Trajectory IR requires a relational store for its metadata (Node tracking, Seals) and a Content Addressed Storage (CAS) layer for artifacts.
+---
 
-In the `local` profile, we use SQLite and the local filesystem:
-
-```bash
-# Initialize the local SQLite DB and sharded CAS directory
-python -m trajectory_ir init --profile local
-```
-This command creates `~/.trajectory-ir/local.db` and `~/.trajectory-ir/cas/`.
-
-## 3. Your First Durable Agent
-
-Create a file called `agent.py`. In this example, we wrap a standard tool call inside Trajectory IR's durable execution context. 
-
-> **Pluggable Backend Architecture Note:** Notice that your code imports only from `trajectory_ir`. Under the hood, `@Trajectory.workflow()` transparently delegates crash detection and replay to the configured durable backend (such as DBOS in Phase 1A or Restate). This guarantees that switching backends in the future requires **zero modifications** to your application logic!
+## 2. Minimal Python flow (client + NodeLog)
 
 ```python
-from trajectory_ir.runtime import Trajectory
+from client.python.trajectory_client import (
+    open_trajectory,
+    project,
+    seal_decision,
+    exec_tool,
+    commit_step,
+)
 from trajectory_ir.effects import EffectClass
+from trajectory_ir.runtime.tool import Tool
 
-# 1. Initialize the Trajectory runtime (auto-launches configured backend like DBOS)
-Trajectory.launch()
+def echo(msg: str) -> str:
+    return msg
 
-# 2. Define a Tool with strict Effect Classification
-@Trajectory.tool(effect_class=EffectClass.NON_IDEMPOTENT_WRITE)
-def deploy_server(server_name: str):
-    print(f"Deploying {server_name}...")
-    return f"Success: {server_name} is live."
+traj = open_trajectory(tenant_id="demo", trajectory_id="qs-1", db_path="qs.sqlite")
+# Optional sandbox (R06): open_trajectory(..., mode="sandbox")  # rejects NON_IDEMPOTENT_WRITE
 
-# 3. Create an Agent Workflow using the backend-agnostic decorator
-@Trajectory.workflow()
-def run_agent():
-    # Start a new semantic Trajectory
-    traj = Trajectory.start(tenant_id="demo-user")
-    
-    # Execute the tool (Trajectory IR wraps this in a crash-safe durable step)
-    result = deploy_server("prod-web-01")
-    
-    # Append the result to the Trajectory Log
-    traj.append_observation(result)
-    
-    # Export the trajectory as a portable .tir package
-    tir_package = traj.export(mode="thin")
-    print(f"Exported Trajectory IR: {tir_package}")
+project(traj, step_n=1, context={"goal": "hello"})
+seal_decision(traj, step_n=1, plan={"tool_calls": [{"name": "echo", "args": {"msg": "hi"}}]})
 
-if __name__ == "__main__":
-    run_agent()
+tool = Tool(name="echo", fn=echo, effect_class=EffectClass.PURE)
+result = exec_tool(traj, step_n=1, call={"args": {"msg": "hi"}}, tool=tool, seq=2)
+print(result.result)  # hi
+
+commit_step(traj, step_n=1, seq=4)
 ```
 
-## 4. Run and Verify
+### Durable step runner (DBOS)
 
-Execute your agent:
+For full seal/resume with DBOS steps, use `make_run_step` as in
+`examples/kill-mid-deploy/agent.py` (used by R01/R02 and e2e tests).
+
 ```bash
-python agent.py
+# From repo root, isolate artifacts in a temp directory:
+# see examples/kill-mid-deploy/README.md
+pytest test/e2e conformance/r01_seal_resume_test.py conformance/r02_non_idempotent_test.py -q
 ```
 
-Because of the **Block-and-Gate** policy, if your agent crashes inside `deploy_server`, the next time you run `python agent.py`, it will recognize the interrupted `NON_IDEMPOTENT_WRITE` and halt execution, requesting human intervention rather than blindly repeating the destructive action.
+---
 
-## Export and import a `.tir` package
-
-Portable thin/fat packages (master README §9, R05):
+## 3. Export / import a `.tir` package (R05)
 
 ```python
-from trajectory_ir.package import export_tir, import_tir, ArtifactRef
+from trajectory_ir.package import export_tir, import_tir
 from trajectory_ir.runtime.log import NodeLog
 
 src = NodeLog("run.sqlite")
-# ... append nodes for trajectory_id="t1" ...
+# ... append nodes for trajectory_id="t1", tenant_id="demo" ...
 
-export_tir(src, "t1", "run.tir", mode="thin")
+export_tir(src, "t1", "run.tir", mode="thin", tenant_id="demo")
 
 dst = NodeLog("imported.sqlite")
 pkg = import_tir("run.tir", dst)  # verifies node ids; appends idempotently
 print(pkg.manifest["node_count"], pkg.manifest["mode"])
 ```
 
-Fat mode embeds artifact bytes when you pass `artifacts=` and `artifact_bytes=`.
-Import fails if any node id does not match RFC 8785 + SHA-256 identity rules.
+- **Fat** mode: pass `artifacts=` and `artifact_bytes=` (see `test/unit/test_tir_package.py`).
+- **Redacted** export: `export_tir(..., redacted=True)` (heuristic; review before sharing).
+- **Import** always verifies; do not use unverified import into a durable log.
 
-## What's Next?
-- Read the [Infrastructure Design](infrastructure.md) to learn how to scale this to `server-s3` or `k8s-fluid`.
-- Read the [Contributing Guide](CONTRIBUTING.md) if you want to help build the project!
+---
+
+## 4. Projector + redaction (R04 / R08)
+
+```python
+from trajectory_ir.runtime.projector import project_context, BudgetImpossible
+from trajectory_ir.runtime.redact import redact_projection_context
+
+# nodes: list of node dicts (id, kind, payload, step_n, seq, ...)
+try:
+    result = project_context(nodes, budget=50_000, pinned_ids=set())
+except BudgetImpossible as e:
+    print(e)  # CONSTRAINT/pinned alone exceed budget — never silent drop
+else:
+    safe = redact_projection_context(result.context)
+    # pass `safe` into client.project(...) or your model call
+```
+
+---
+
+## 5. Sandbox mode (R06)
+
+```python
+from client.python.trajectory_client import open_trajectory, exec_tool
+from trajectory_ir.effects import EffectClass
+from trajectory_ir.runtime.tool import Tool
+
+traj = open_trajectory("demo", "sandbox-1", db_path="s.sqlite", mode="sandbox")
+# NON_IDEMPOTENT_WRITE → SandboxForbidden before the tool body runs
+# PURE / READ_ONLY / etc. still allowed
+```
+
+---
+
+## 6. Graft artifact refs (R07)
+
+```python
+from trajectory_ir.runtime.graft import graft_artifact_ref
+from trajectory_ir.runtime.log import NodeLog
+
+# source_nodes from list_nodes(..., tenant_id=...); must include ARTIFACT_PUT/REF
+# never copies THOUGHT nodes
+graft_artifact_ref(
+    target_log,
+    content_hash="<64-hex>",
+    target_trajectory_id="child",
+    target_tenant_id="demo",
+    seq=0,
+    step_n=1,
+    source_nodes=source_nodes,
+)
+```
+
+---
+
+## 7. Go (optional)
+
+```bash
+cd go
+go test ./...
+# See go/README.md for client, Temporal env vars, and .tir package APIs
+```
+
+---
+
+## What's next
+
+| Doc | Purpose |
+|-----|---------|
+| [docs/PHASE_1A_STATUS.md](docs/PHASE_1A_STATUS.md) | What shipped vs deferred |
+| [README.md](README.md) | Master specification |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | DCO, CI, local dev |
