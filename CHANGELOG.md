@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Go filesystem CAS under `go/trajir/cas` with sharded layout and Rehydrate helper (issue #74).
 - `put_artifact` helper and optional `cas=` on thin `export_tir` / `import_tir` for fail closed rehydrate (issue #73).
 
 - Local filesystem content addressed store (`trajectory_ir.storage.FileSystemCAS`)
