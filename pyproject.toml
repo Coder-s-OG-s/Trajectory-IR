@@ -9,6 +9,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest", "pytest-cov", "ruff", "mypy", "pip-audit"]
+s3 = ["boto3"]
 
 [build-system]
 requires = ["hatchling"]
