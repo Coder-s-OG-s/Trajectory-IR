@@ -25,6 +25,16 @@ If GitHub shows a slightly different label, use the exact string from the check 
 
 Also enable org/repo **secret scanning** and **push protection** when available (Settings → Code security).
 
+## Post-feature landing checklist
+
+After large merges (packages, conformance, security):
+
+1. Latest `main` CI is green.
+2. Required checks still match the names above (rename jobs only with a protection update).
+3. Close GitHub issues that already shipped (link the merge PR).
+4. Skim [QUICKSTART.md](../QUICKSTART.md) and [PHASE_1A_STATUS.md](PHASE_1A_STATUS.md) for fictional APIs.
+5. Prefer Dependabot PRs reviewed weekly; do not bulk-merge without CI.
+
 ## Order
 
 1. Merge a PR that defines or updates `.github/workflows/ci.yml`
