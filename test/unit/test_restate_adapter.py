@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from drivers.durable_backend.restate import (
     durable_infer,
     durable_tool,
@@ -91,3 +93,36 @@ def test_make_run_step_with_restate_local_memo(tmp_path):
     assert node_log.has(TRAJECTORY_ID, 1, "DECISION")
     assert node_log.has(TRAJECTORY_ID, 1, "TOOL_CALL", seq=2)
     assert node_log.has(TRAJECTORY_ID, 1, "COMMIT_STEP")
+
+
+def test_partial_durable_injection_fails_loud(tmp_path):
+    """Partial hooks would mix backends; refuse instead of filling from DBOS."""
+    node_log = NodeLog(str(tmp_path / "nodes.sqlite"))
+    tools = {
+        "echo": Tool(name="echo", fn=lambda *, msg: msg, effect_class=EffectClass.PURE),
+    }
+    with pytest.raises(ValueError, match="must be injected together"):
+        make_run_step(
+            node_log,
+            TENANT_ID,
+            TRAJECTORY_ID,
+            tools,
+            durable_infer_fn=durable_infer,
+            # durable_tool_fn / durable_workflow_fn omitted on purpose
+        )
+
+
+def test_partial_durable_injection_lists_missing_names(tmp_path):
+    node_log = NodeLog(str(tmp_path / "nodes.sqlite"))
+    tools = {
+        "echo": Tool(name="echo", fn=lambda *, msg: msg, effect_class=EffectClass.PURE),
+    }
+    with pytest.raises(ValueError, match="durable_workflow_fn"):
+        make_run_step(
+            node_log,
+            TENANT_ID,
+            "partial-2",
+            tools,
+            durable_infer_fn=durable_infer,
+            durable_tool_fn=durable_tool,
+        )
