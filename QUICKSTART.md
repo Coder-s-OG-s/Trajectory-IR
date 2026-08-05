@@ -155,6 +155,22 @@ go test ./...
 
 ---
 
+## 8. Thin package + local CAS
+
+```python
+from trajectory_ir.package import export_tir, load_tir
+from trajectory_ir.runtime.log import NodeLog
+from trajectory_ir.storage import FileSystemCAS, put_artifact, rehydrate_artifacts
+
+store = FileSystemCAS("./cas_root")
+log = NodeLog("traj.sqlite")
+# ... append nodes as usual ...
+ref = put_artifact(store, b"bytes from a tool", logical_path="out.bin")
+export_tir(log, "my-traj", "run.tir", mode="thin", artifacts=[ref], tenant_id="demo", cas=store)
+pkg = load_tir("run.tir")
+rehydrated = rehydrate_artifacts(store, pkg.artifacts_manifest)
+```
+
 ## What's next
 
 | Doc | Purpose |

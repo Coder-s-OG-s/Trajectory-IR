@@ -10,6 +10,7 @@ S3 and other remote drivers live under ``drivers/`` and implement the same
 rehydrate from any store that verifies hashes on put and get.
 """
 
+from trajectory_ir.storage.artifacts import ensure_artifacts_in_cas, put_artifact
 from trajectory_ir.storage.cas import (
     CAS,
     CASError,
@@ -28,6 +29,8 @@ __all__ = [
     "CASNotFoundError",
     "FileSystemCAS",
     "content_hash",
+    "ensure_artifacts_in_cas",
+    "put_artifact",
     "rehydrate_artifacts",
     "shard_key",
 ]

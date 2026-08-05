@@ -28,6 +28,8 @@ First library-tagged release of the Phase 1A surface: dual-language IR, portable
 
 ### Added
 
+- `put_artifact` helper and optional `cas=` on thin `export_tir` / `import_tir` for fail closed rehydrate (issue #73).
+
 - Phase 1A buildable core (nodes, NodeLog, effects, DBOS adapter, seal/resume gate, client SDK, kill-mid-deploy, R01/R02).
 - Issue templates, PR template, DCO CI job, Ruff/Mypy in CI alongside unit/e2e/conformance.
 - Maintainer note for branch protection on `main`.
@@ -69,6 +71,8 @@ First library-tagged release of the Phase 1A surface: dual-language IR, portable
 ## [v0.1.0-draft] - 2026-07-27
 
 ### Added
+
+- `put_artifact` helper and optional `cas=` on thin `export_tir` / `import_tir` for fail closed rehydrate (issue #73).
 
 - **Master Specification (`README.md`)**: The authoritative definition of Trajectory IR (Spec v0.2-draft).
 - **Infrastructure Blueprint (`infrastructure.md`)**: Detailed DevOps rules targeting `local`, `server-s3`, and `k8s-fluid` profiles. Outlines the sharded CAS layout and fallback mechanisms.
