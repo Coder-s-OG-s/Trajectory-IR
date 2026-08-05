@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- PostgreSQL NodeLog driver (`drivers.postgres.PostgresNodeLog`) matching SQLite
+  append, claim, list, and tenant isolation semantics; optional `psycopg` extra
+  (issue #64).
 - Local filesystem content addressed store (`trajectory_ir.storage.FileSystemCAS`)
   with sharded `cas/<2-hex>/<hash>` layout, hash verify on get, and
   `rehydrate_artifacts` for thin `.tir` packages (issue #62).

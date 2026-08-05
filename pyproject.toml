@@ -9,6 +9,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest", "pytest-cov", "ruff", "mypy", "pip-audit"]
+postgres = ["psycopg[binary]>=3.1"]
 s3 = ["boto3"]
 
 [build-system]
