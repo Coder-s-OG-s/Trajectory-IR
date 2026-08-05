@@ -218,6 +218,7 @@ def export_tir(
     artifact_bytes: dict[str, bytes] | None = None,
     tenant_id: str | None = None,
     redacted: bool = False,
+    cas: Any | None = None,
 ) -> Path:
     """Export a trajectory from ``node_log`` to a ``.tir`` zip at ``dest``.
 
@@ -228,6 +229,9 @@ def export_tir(
             heuristic, not a general secret scanner: it will not catch every
             secret, so ``redacted=True`` output still needs a human review
             pass before being shared outside the tenant.
+        cas: Optional content addressed store. When set and ``mode`` is thin,
+            every artifact content hash must already exist in the store
+            (fail closed). Fat mode ignores this check (bytes are embedded).
     """
     if mode not in ("thin", "fat"):
         raise TirError(f"unsupported mode {mode!r}; use thin or fat")
@@ -270,6 +274,20 @@ def export_tir(
             raise TirLimitError(f"too many artifacts: {len(artifacts)} > {MAX_ARTIFACTS}")
     else:
         artifact_bytes = {}
+
+    if cas is not None and mode == "thin" and artifacts:
+        from trajectory_ir.storage.artifacts import ensure_artifacts_in_cas
+
+        ensure_artifacts_in_cas(
+            cas,
+            [
+                {
+                    "content_hash": a.content_hash,
+                    "logical_path": a.logical_path,
+                }
+                for a in artifacts
+            ],
+        )
 
     seals = _seals_from_nodes(nodes)
     manifest = {
@@ -428,18 +446,37 @@ def import_tir(
     node_log: NodeLog,
     *,
     verify: bool = True,
+    cas: Any | None = None,
+    rehydrate: bool = False,
 ) -> TirPackage:
     """Verify a package and append its nodes into ``node_log`` (idempotent by id).
 
-    Does not acquire a writer lease (README §9). Verification cannot be disabled
-    on import — forged packages must not enter a durable log.
+    Does not acquire a writer lease (README section 9). Verification cannot be
+    disabled on import; forged packages must not enter a durable log.
+
+    Args:
+        cas: Optional CAS. When set, thin package artifact hashes must exist in
+            the store. When ``rehydrate`` is True, resolved bytes are placed on
+            ``pkg.artifact_bytes`` (useful for hosts that want fat in memory
+            after thin transport).
+        rehydrate: Load artifact bytes from ``cas`` into the returned package.
+            Requires ``cas``.
     """
     if not verify:
         raise TirError(
             "import_tir refuses verify=False; forged packages must not enter a NodeLog. "
             "Use load_tir_unverified() only for inspection, never for durable import."
         )
+    if rehydrate and cas is None:
+        raise TirError("import_tir(rehydrate=True) requires cas=")
     pkg = load_tir(path, verify=True)
+    if cas is not None and pkg.manifest.get("mode", "thin") == "thin" and pkg.artifacts_manifest:
+        from trajectory_ir.storage.artifacts import ensure_artifacts_in_cas
+        from trajectory_ir.storage.rehydrate import rehydrate_artifacts
+
+        ensure_artifacts_in_cas(cas, list(pkg.artifacts_manifest))
+        if rehydrate:
+            pkg.artifact_bytes = rehydrate_artifacts(cas, list(pkg.artifacts_manifest))
     for n in pkg.nodes:
         node = Node(
             kind=n["kind"],
