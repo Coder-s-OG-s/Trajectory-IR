@@ -6,7 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
 ### Added
+
+### Changed
+
+### Fixed
+
+## [0.1.0] - 2026-08-05
+
+First library-tagged release of the Phase 1A surface: dual-language IR, portable `.tir`, and runnable R01–R08.
+
+### Added
+
 - Phase 1A buildable core (nodes, NodeLog, effects, DBOS adapter, seal/resume gate, client SDK, kill-mid-deploy, R01/R02).
 - Issue templates, PR template, DCO CI job, Ruff/Mypy in CI alongside unit/e2e/conformance.
 - Maintainer note for branch protection on `main`.
@@ -34,34 +46,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - R03 PURE recompute-on-resume: `requires_block_and_gate` / `RequiresBlockAndGate`,
   conformance + Go tests; only NON_IDEMPOTENT_WRITE is gated.
 - R04 default context projector (`project_context` / `trajir/projector`) with
-  CONSTRAINT+pinned budget safety and `BUDGET_IMPOSSIBLE`.
+  CONSTRAINT+pinned budget safety and `BUDGET_IMPOSSIBLE` (RFC 8785 size metric).
 - R06 sandbox mode (`RunMode.SANDBOX`) rejects NON_IDEMPOTENT_WRITE before side effects.
 - R07 `graft_artifact_ref` / `trajir/graft` transfers artifact refs only (never THOUGHT).
 - R08 projection redaction (`runtime/redact`, `trajir/redact`); shared with `.tir` redacted export.
-
-
-
-
-
-
-
-
-
+- Maintainer release notes and process: `docs/RELEASE.md`, `docs/RELEASE_NOTES_0.1.0.md`.
 
 ### Changed
+
 - CONTRIBUTING and infrastructure docs describe the CI gates that actually run.
 - Lint cleanups for Ruff/Mypy on the core package and test harness.
 
 ## [v0.1.0-draft] - 2026-07-27
+
 ### Added
+
 - **Master Specification (`README.md`)**: The authoritative definition of Trajectory IR (Spec v0.2-draft).
 - **Infrastructure Blueprint (`infrastructure.md`)**: Detailed DevOps rules targeting `local`, `server-s3`, and `k8s-fluid` profiles. Outlines the sharded CAS layout and fallback mechanisms.
 - **Community Governance**: Added CNCF `CODE_OF_CONDUCT.md`.
 - **Contribution Guidelines**: Added `CONTRIBUTING.md`, enforcing DCO sign-offs (`Signed-off-by`), Everything Claude Code (ECC) subagent suite integration, and governance accountability rules.
 - **Security Policy**: Added `SECURITY.md`, detailing threat models specific to tool execution (Safety Boundary Bypasses, Seal Tampering, Cache Poisoning) and establishing GitHub Private Advisories for confidential reporting.
-- **Quickstart Guide**: Added `QUICKSTART.md` for rapid prototyping using the embedded DBOS backend and SQLite/FileSystem CAS behind an abstract `@Trajectory.workflow()` wrapper.
+- **Quickstart Guide**: Added `QUICKSTART.md` for local prototyping (updated later to match real APIs).
 
 ### Changed
+
 - **Session Storage Consolidation (formerly CLOOP)**: Folded CLOOP's session storage design (mutable short-term state, append-only event log, and sharded CAS artifact store) directly into Trajectory IR's unified database and storage schemas rather than maintaining a separate runtime project.
 - **Declarative Memory Provisioning (formerly CAMI)**: Deferred Kubernetes declarative memory-provisioning claims and storage classes to an optional future phase without blocking core package portability or Phase 1A development.
 - **Durable Execution Rebuild Strategy**: Delegated crash-safe step execution, lease/heartbeat coordination, and deterministic replay to hardened, pluggable third-party backends (**DBOS** and Restate) rather than rebuilding custom execution orchestration engines.
