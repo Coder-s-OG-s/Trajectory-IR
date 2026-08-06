@@ -9,34 +9,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+### Changed
+
+### Fixed
+
+## [0.1.0] - 2026-08-06
+
+First library-tagged release of the Phase 1A surface: dual-language IR, portable `.tir`, storage drivers, host example, Restate hooks, and CI Phase A gates (R01–R08).
+
+### Added
+
 - CI Phase A quality gates (issue #81): unit coverage floor (Python 80%), Go
   trajir coverage floor (50%), Package smoke (wheel build + import), dedicated
   Security (pip-audit) job; branch protection docs list required checks and
-  “up to date with main”.
+  "up to date with main".
 - Agent host loop example (`examples/host_loop`) using only the public client
   SDK with a stub model and optional sandbox mode (issue #65).
-- `put_artifact` helper and optional `cas=` on thin `export_tir` / `import_tir` for fail closed rehydrate (issue #73).
+- Restate durable backend adapter package (`drivers.durable_backend.restate`)
+  with process local step memo; injectable durable hooks on `make_run_step`
+  (issue #66).
+- Go filesystem CAS under `go/trajir/cas` (issue #74).
+- File based projector policy loader (YAML subset/JSON) and `policy=` on
+  `project_context` (issue #75).
+- Maintainer PyPI publish steps expanded in `docs/RELEASE.md` (issue #76).
+- `put_artifact` helper and optional `cas=` on thin `export_tir` / `import_tir`
+  for fail closed rehydrate (issue #73).
 - Local filesystem content addressed store (`trajectory_ir.storage.FileSystemCAS`)
   with sharded `cas/<2-hex>/<hash>` layout, hash verify on get, and
   `rehydrate_artifacts` for thin `.tir` packages (issue #62).
 - S3 compatible CAS driver (`drivers.s3.S3CAS`) with the same sharded key layout
   and injectable client for tests; optional `boto3` extra (issue #63).
-
-### Changed
-
-- Python `pip-audit` CI gate moved from Quality unit suite to the
-  **Security (pip-audit)** job; unit helper remains for local `RUN_PIP_AUDIT=1`.
-
-### Fixed
-
-## [0.1.0] - 2026-08-05
-
-First library-tagged release of the Phase 1A surface: dual-language IR, portable `.tir`, and runnable R01–R08.
-
-### Added
-
-- `put_artifact` helper and optional `cas=` on thin `export_tir` / `import_tir` for fail closed rehydrate (issue #73).
-
+- PostgreSQL NodeLog driver (`drivers.postgres.PostgresNodeLog`) (issue #64).
 - Phase 1A buildable core (nodes, NodeLog, effects, DBOS adapter, seal/resume gate, client SDK, kill-mid-deploy, R01/R02).
 - Issue templates, PR template, DCO CI job, Ruff/Mypy in CI alongside unit/e2e/conformance.
 - Maintainer note for branch protection on `main`.
@@ -56,8 +59,6 @@ First library-tagged release of the Phase 1A surface: dual-language IR, portable
 - Security hardening: `.tir` zip size/path limits, atomic TOOL_CALL claim (Python + Go),
   identity delimiter validation, tenant-scoped list/export, redacted export mode,
   Temporal TLS/API key config, safer import verification API.
-- CI: `pip-audit` gate in Python unit tests under CI (parity with Go `govulncheck`);
-  `pip-audit` added to the `dev` extra.
 - Go `.tir` thin/fat export and import (`trajir/tir`) with Python layout parity,
   hash verification, zip limits/path safety, and cross-language golden fixture.
 - R05 conformance tests for `.tir` thin/fat round-trip and golden fixture load.
@@ -72,8 +73,12 @@ First library-tagged release of the Phase 1A surface: dual-language IR, portable
 
 ### Changed
 
+- Python `pip-audit` CI gate moved to the **Security (pip-audit)** job; unit helper
+  remains for local `RUN_PIP_AUDIT=1`.
 - CONTRIBUTING and infrastructure docs describe the CI gates that actually run.
 - Lint cleanups for Ruff/Mypy on the core package and test harness.
+
+### Fixed
 
 ## [v0.1.0-draft] - 2026-07-27
 
