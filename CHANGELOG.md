@@ -9,9 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Restate durable backend adapter package (`drivers.durable_backend.restate`)
-  with process local step memo for tests/dev, injectable into `make_run_step`
-  via `durable_infer_fn` / `durable_tool_fn` / `durable_workflow_fn` (issue #66).
+- Go filesystem CAS under `go/trajir/cas` with sharded layout and Rehydrate helper (issue #74).
 - `put_artifact` helper and optional `cas=` on thin `export_tir` / `import_tir` for fail closed rehydrate (issue #73).
 
 - Local filesystem content addressed store (`trajectory_ir.storage.FileSystemCAS`)

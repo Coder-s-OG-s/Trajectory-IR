@@ -13,6 +13,7 @@ Second language implementation of Trajectory IR primitives. Python remains the P
 | `trajir/durable/temporal` | Temporal Backend + worker registration |
 | `trajir/resume` | Block and gate, and RunStep seal path for one agent step |
 | `trajir/client` | Thin SDK: open, project, seal, exec, commit, resume, RunStep |
+| `trajir/cas` | Filesystem CAS (sharded layout; thin rehydrate) |
 | `trajir/tir` | Portable `.tir` package export / import (thin and fat) |
 | `trajir/projector` | Default context projector (R04; size metric = RFC 8785 / JCS bytes) |
 
@@ -127,3 +128,4 @@ Crash resume conformance (R01/R02 style) lives under `conformance/`.
 cd go
 go test ./conformance -count=1 -v
 ```
+
