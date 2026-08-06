@@ -112,9 +112,27 @@ def exec_tool(trajectory: Trajectory, step_n: int, call: dict, tool: Tool, seq: 
             tool_name=tool.name,
             tool_fn=tool.fn,
         )
+        result = fn(**call["args"])
     else:
-        fn = tool.fn
-    result = fn(**call["args"])
+        # Not claim-gated, but still needs IR history audit; gate path
+        # already logs its own TOOL_CALL/TOOL_RESULT nodes.
+        result = tool.fn(**call["args"])
+        log.append(
+            "TOOL_CALL",
+            step_n,
+            {"tool": tool.name, "args": call["args"]},
+            trajectory.trajectory_id,
+            trajectory.tenant_id,
+            seq=seq,
+        )
+        log.append(
+            "TOOL_RESULT",
+            step_n,
+            {"result": result},
+            trajectory.trajectory_id,
+            trajectory.tenant_id,
+            seq=seq + 1,
+        )
     return ToolResult(step_n=step_n, result=result)
 
 
