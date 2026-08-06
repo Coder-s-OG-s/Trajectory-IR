@@ -34,11 +34,13 @@ func ClassifyFromMCP(annotations map[string]any) EffectClass {
 	readOnly, hasReadOnly := asBool(annotations["readOnlyHint"])
 	destructive, hasDestructive := asBool(annotations["destructiveHint"])
 	idempotent, hasIdempotent := asBool(annotations["idempotentHint"])
+	openWorld, hasOpenWorld := asBool(annotations["openWorldHint"])
 
 	if hasReadOnly && readOnly && !(hasDestructive && destructive) {
 		return READ_ONLY
 	}
-	if hasReadOnly && !readOnly && hasIdempotent && idempotent && hasDestructive && !destructive {
+	// openWorldHint=true without a clear safe profile stays fail-closed below.
+	if hasReadOnly && !readOnly && hasIdempotent && idempotent && hasDestructive && !destructive && !(hasOpenWorld && openWorld) {
 		return IDEMPOTENT_WRITE
 	}
 	return NON_IDEMPOTENT_WRITE
