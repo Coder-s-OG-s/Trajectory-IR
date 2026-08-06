@@ -9,9 +9,11 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// LocalSQLite is the Phase 1B coding default Backend. Step memos survive
-// process restart when the same database path is reopened (needed for crash
-// style tests later).
+// LocalSQLite is the Phase 1B coding default Backend. It is a test fake, a
+// hand rolled first writer wins memoization store, not an integration with a
+// real durable execution engine; see issue #92. Step memos survive process
+// restart when the same database path is reopened (needed for crash style
+// tests later).
 type LocalSQLite struct {
 	db *sql.DB
 	mu sync.Mutex

@@ -2,10 +2,14 @@
 //
 // Decision (issue #16)
 //
-//	Coding default: LocalSQLite (and Memory for pure unit tests).
-//	It memoizes step results by workflow id and step key so re-entry skips
-//	re-running model inference and tools. No separate Temporal or Restate
-//	server is required for Phase 1B Go development.
+//	Coding default: LocalSQLite (and Memory for pure unit tests). Both are
+//	test fakes: a hand rolled first writer wins memoization store, not an
+//	integration with a real durable execution engine. They memoize step
+//	results by workflow id and step key so re-entry skips re-running model
+//	inference and tools, which is enough for Phase 1B Go development and
+//	the current conformance suite, but neither should be treated as a
+//	production backend. See issue #92 for the open question on wiring
+//	trajir/durable into a real DBOS or Restate client, tracked alongside #67.
 //
 //	Production target: Temporal as the first full Go adapter
 //	(go/trajir/durable/temporal, issue #24). Restate remains a welcome
