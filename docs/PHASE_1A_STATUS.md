@@ -20,7 +20,7 @@ Honest inventory of what is **on `main`** versus what remains **out of scope** o
 | Redaction (R08 + export) | `runtime/redact.py`, Go `trajir/redact` |
 | Go IR stack | `go/trajir/*` — nodes, log, effects, durable, Temporal, resume, client, cas |
 | Demos / host example | `examples/kill-mid-deploy/`, `examples/host_loop/`, Go kill-mid-deploy |
-| CI | DCO, Quality (3.11/3.12: ruff, mypy, unit coverage floor, e2e, conformance), Package smoke, Security (pip-audit), Go (trajir coverage floor + tests + govulncheck) |
+| CI | Phase A: DCO, Quality, Package smoke, Security (pip-audit), Go; Phase B: Integration (Postgres), Integration (MinIO) |
 
 ### Conformance (README §10)
 
