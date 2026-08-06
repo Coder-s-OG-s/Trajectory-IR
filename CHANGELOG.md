@@ -9,9 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Go filesystem CAS under `go/trajir/cas` with sharded layout and Rehydrate helper (issue #74).
-- `put_artifact` helper and optional `cas=` on thin `export_tir` / `import_tir` for fail closed rehydrate (issue #73).
-
+- File based projector policy loader (YAML subset/JSON) and `policy=` on `project_context` (issue #75).
+- PostgreSQL NodeLog driver (`drivers.postgres.PostgresNodeLog`) matching SQLite
+  append, claim, list, and tenant isolation semantics; optional `psycopg` extra
+  (issue #64).
 - Local filesystem content addressed store (`trajectory_ir.storage.FileSystemCAS`)
   with sharded `cas/<2-hex>/<hash>` layout, hash verify on get, and
   `rehydrate_artifacts` for thin `.tir` packages (issue #62).

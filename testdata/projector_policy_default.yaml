@@ -1,0 +1,5 @@
+# Minimal projector policy (issue #75). Unknown keys are rejected.
+default_budget: 50000
+always_include_kinds:
+  - CONSTRAINT
+size_metric: rfc8785_bytes
