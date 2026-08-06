@@ -24,7 +24,7 @@ pip install -U pip
 pip install -e ".[dev]"
 ```
 
-PyPI publish of `trajectory-ir` may follow the `v0.1.0` tag; until then, **editable install from git** is the supported path.
+PyPI publish of ``trajectory-ir`` is a maintainer step after the git tag (see ``docs/RELEASE.md``). Until the wheel is on PyPI, **editable install from git** is the supported path.
 
 ---
 
@@ -178,3 +178,4 @@ rehydrated = rehydrate_artifacts(store, pkg.artifacts_manifest)
 | [docs/PHASE_1A_STATUS.md](docs/PHASE_1A_STATUS.md) | What shipped vs deferred |
 | [README.md](README.md) | Master specification |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | DCO, CI, local dev |
+
