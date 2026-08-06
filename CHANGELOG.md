@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `make_run_step` accepts optional durable hook functions; default remains DBOS.
 ### Fixed
 
 ## [0.1.0] - 2026-08-05
