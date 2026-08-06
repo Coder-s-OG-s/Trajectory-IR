@@ -215,3 +215,89 @@ jobs:
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
           govulncheck ./...
+
+  # Phase B: real service integrations (separate from Quality so Phase A stays fast).
+  integration-postgres:
+    name: Integration (Postgres)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16.6
+        env:
+          POSTGRES_USER: trajir
+          POSTGRES_PASSWORD: trajir
+          POSTGRES_DB: trajir
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U trajir -d trajir"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TRAJIR_DATABASE_URL: postgresql://trajir:trajir@localhost:5432/trajir
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install package with Postgres extra
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,postgres]"
+
+      - name: Live Postgres NodeLog tests
+        run: pytest test/integration/test_postgres_live.py -q
+
+  integration-minio:
+    name: Integration (MinIO)
+    runs-on: ubuntu-latest
+    env:
+      TRAJIR_S3_ENDPOINT_URL: http://127.0.0.1:9000
+      TRAJIR_S3_BUCKET: trajir
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
+      AWS_DEFAULT_REGION: us-east-1
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Start MinIO
+        run: |
+          docker run -d --name minio \
+            -p 9000:9000 \
+            -e MINIO_ROOT_USER=minioadmin \
+            -e MINIO_ROOT_PASSWORD=minioadmin \
+            quay.io/minio/minio:RELEASE.2024-12-18T13-15-44Z \
+            server /data --console-address ":9001"
+          for i in $(seq 1 40); do
+            if curl -sf http://127.0.0.1:9000/minio/health/live; then
+              echo "MinIO is up"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "MinIO failed to become healthy" >&2
+          docker logs minio || true
+          exit 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install package with S3 extra
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,s3]"
+
+      - name: Live MinIO S3 CAS tests
+        run: pytest test/integration/test_s3_minio_live.py -q

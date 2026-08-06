@@ -36,6 +36,11 @@ Match the names shown in the Actions UI (Phase A, issue #81):
 5. `Security (pip-audit)` — first-class dependency audit (not only a unit test)
 6. `Go` — trajir coverage floor, full `go test ./...`, `govulncheck`
 
+Optional after Phase B is proven stable (issue #85):
+
+7. `Integration (Postgres)`
+8. `Integration (MinIO)`
+
 If GitHub shows a slightly different label, use the exact string from the check run.
 
 Also enable org/repo **secret scanning** and **push protection** when available
