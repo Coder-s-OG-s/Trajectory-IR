@@ -15,7 +15,13 @@ from __future__ import annotations
 from typing import Any
 
 from trajectory_ir.package.tir import ArtifactRef
-from trajectory_ir.storage.cas import CAS, CASNotFoundError, content_hash, normalize_content_hash
+from trajectory_ir.storage.cas import (
+    CAS,
+    CASError,
+    CASNotFoundError,
+    content_hash,
+    normalize_content_hash,
+)
 
 
 def put_artifact(
@@ -74,7 +80,7 @@ def ensure_artifacts_in_cas(
     for entry in artifacts_manifest:
         raw = entry.get("content_hash")
         if raw is None:
-            continue
+            raise CASError("artifact manifest entry missing content_hash")
         h = normalize_content_hash(str(raw))
         if not store.has(h):
             missing.append(h)
