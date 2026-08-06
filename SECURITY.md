@@ -58,7 +58,7 @@ Based on the [Infrastructure Blueprint](infrastructure.md) and [Master Spec](REA
 
 ### F. Continuous dependency scanning
 - **Go**: `govulncheck ./...` runs in the CI `Go` job.
-- **Python**: `pip-audit --skip-editable` runs under CI via `test/unit/test_pip_audit.py` (part of the Quality unit suite when `CI=true`). Locally: `RUN_PIP_AUDIT=1 pytest test/unit/test_pip_audit.py -q` in a clean venv after `pip install -e ".[dev]"`.
+- **Python**: `pip-audit --skip-editable` runs in the CI job **Security (pip-audit)**. Locally: `RUN_PIP_AUDIT=1 pytest test/unit/test_pip_audit.py -q` in a clean venv after `pip install -e ".[dev]"`.
 
 ## 4. Security Accountability for Contributors
 

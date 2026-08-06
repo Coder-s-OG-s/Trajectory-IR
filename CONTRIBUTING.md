@@ -41,10 +41,14 @@ Defined in `.github/workflows/ci.yml`:
 | Check | What it does |
 |-------|----------------|
 | **DCO** | Every commit on the PR has `Signed-off-by` |
-| **Quality** | install, Ruff, Mypy, hash goldens, unit (includes `pip-audit` gate), e2e, full `conformance/` R01–R08 (Python 3.11 and 3.12) |
-| **Go** | hash goldens, `go test ./...`, `govulncheck` |
+| **Quality** | install, Ruff, Mypy, hash goldens, unit tests with **coverage floor** (`PYTHON_COV_FAIL_UNDER`, default 80%), e2e, full `conformance/` R01–R08 (Python 3.11 and 3.12) |
+| **Package smoke** | `python -m build`, install the wheel into a clean venv, import smoke |
+| **Security (pip-audit)** | `pip-audit --skip-editable` on the installed dependency tree |
+| **Go** | hash goldens, `go/trajir/...` **coverage floor** (`GO_COV_FAIL_UNDER`, default 50%), `go test ./...`, `govulncheck` |
 
-Python dependency audit (`pip-audit`) is part of the unit suite under CI (`test/unit/test_pip_audit.py`), so it fails the existing **Quality** checks without a separate job.
+Local dependency audit (optional): `RUN_PIP_AUDIT=1 pytest test/unit/test_pip_audit.py -q` after `pip install -e ".[dev]"`. Under GitHub Actions the dedicated **Security (pip-audit)** job is authoritative.
+
+Coverage floors and required check names: [docs/maintainer-branch-protection.md](docs/maintainer-branch-protection.md).
 
 Phase 1A inventory (shipped vs deferred): [docs/PHASE_1A_STATUS.md](docs/PHASE_1A_STATUS.md).
 

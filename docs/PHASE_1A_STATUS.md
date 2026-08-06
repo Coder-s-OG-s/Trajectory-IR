@@ -17,7 +17,7 @@ Honest inventory of what is **on `main`** versus what remains **out of scope** o
 | Local FS CAS | `trajectory_ir.storage.FileSystemCAS`, thin rehydrate helper |
 | Go IR stack | `go/trajir/*` — nodes, log, effects, durable, Temporal, resume, client |
 | Demos | `examples/kill-mid-deploy/`, `go/examples/kill-mid-deploy/` |
-| CI | DCO, Quality (3.11/3.12: ruff, mypy, unit/e2e/conformance, pip-audit test), Go (tests + govulncheck) |
+| CI | DCO, Quality (3.11/3.12: ruff, mypy, unit coverage floor, e2e, conformance), Package smoke, Security (pip-audit), Go (trajir coverage floor + tests + govulncheck) |
 
 ### Conformance (README §10)
 
