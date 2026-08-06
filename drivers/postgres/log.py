@@ -206,6 +206,9 @@ class PostgresNodeLog:
         seq: int,
     ) -> bool:
         """Atomically claim a TOOL_CALL slot (single winner under concurrency)."""
+        # Import here so the module loads without psycopg installed.
+        from psycopg.errors import UniqueViolation
+
         node = Node(
             kind="TOOL_CALL",
             trajectory_id=trajectory_id,
@@ -249,10 +252,13 @@ class PostgresNodeLog:
                     )
                 self._conn.commit()
                 return True
+            except UniqueViolation:
+                self._conn.rollback()
+                # Another writer won the slot between our SELECT and INSERT.
+                return False
             except Exception:
                 self._conn.rollback()
-                # Unique violation: another writer won the slot.
-                return False
+                raise
 
     def has(self, trajectory_id: str, step_n: int, kind: str, seq: int | None = None) -> bool:
         sql = "SELECT 1 FROM nodes WHERE trajectory_id = %s AND step_n = %s AND kind = %s"
