@@ -1,11 +1,64 @@
-from drivers.durable_backend.dbos.adapter import (
-    durable_infer,
-    durable_tool,
-    durable_workflow,
-)
+from collections.abc import Callable
+from typing import Any
+
 from trajectory_ir.effects import requires_block_and_gate
 from trajectory_ir.resume.gate import make_gated_tool_call
 from trajectory_ir.runtime.sandbox import RunMode, assert_tool_allowed_in_mode, normalize_run_mode
+
+
+def _resolve_durable_hooks(
+    durable_infer_fn: Callable[[Callable[..., Any]], Callable[..., Any]] | None,
+    durable_tool_fn: Callable[[Callable[..., Any]], Callable[..., Any]] | None,
+    durable_workflow_fn: Callable[[Callable[..., Any]], Callable[..., Any]] | None,
+) -> tuple[
+    Callable[[Callable[..., Any]], Callable[..., Any]],
+    Callable[[Callable[..., Any]], Callable[..., Any]],
+    Callable[[Callable[..., Any]], Callable[..., Any]],
+]:
+    """Resolve durable wrappers; refuse silent DBOS/Restate (or other) mixes.
+
+    Rules:
+    1. All three None → default DBOS adapter hooks.
+    2. All three set → use the injected set as a single backend.
+    3. Any other combination → ValueError (fail loud).
+    """
+    provided = (
+        durable_infer_fn is not None,
+        durable_tool_fn is not None,
+        durable_workflow_fn is not None,
+    )
+    if any(provided) and not all(provided):
+        missing = [
+            name
+            for name, set_ in (
+                ("durable_infer_fn", durable_infer_fn is not None),
+                ("durable_tool_fn", durable_tool_fn is not None),
+                ("durable_workflow_fn", durable_workflow_fn is not None),
+            )
+            if not set_
+        ]
+        raise ValueError(
+            "make_run_step durable hooks must be injected together "
+            f"(all three or none); missing: {', '.join(missing)}. "
+            "Partial injection would silently mix durable backends."
+        )
+    if all(provided):
+        assert durable_infer_fn is not None
+        assert durable_tool_fn is not None
+        assert durable_workflow_fn is not None
+        return durable_infer_fn, durable_tool_fn, durable_workflow_fn
+
+    from drivers.durable_backend.dbos.adapter import (
+        durable_infer as dbos_infer,
+    )
+    from drivers.durable_backend.dbos.adapter import (
+        durable_tool as dbos_tool,
+    )
+    from drivers.durable_backend.dbos.adapter import (
+        durable_workflow as dbos_workflow,
+    )
+
+    return dbos_infer, dbos_tool, dbos_workflow
 
 
 def make_run_step(
@@ -16,6 +69,9 @@ def make_run_step(
     on_decision_sealed=None,
     *,
     mode: RunMode | str = RunMode.LIVE,
+    durable_infer_fn: Callable[[Callable[..., Any]], Callable[..., Any]] | None = None,
+    durable_tool_fn: Callable[[Callable[..., Any]], Callable[..., Any]] | None = None,
+    durable_workflow_fn: Callable[[Callable[..., Any]], Callable[..., Any]] | None = None,
 ):
     """Build a durable run_step workflow for one agent step.
 
@@ -26,7 +82,17 @@ def make_run_step(
       must not raise ``BlockedNeedsGate`` for these classes.
 
     Sandbox mode (R06): rejects NON_IDEMPOTENT_WRITE before the tool body runs.
+
+    Durable backend hooks default to the DBOS adapter. Pass Restate (or local
+    memo) wrappers via ``durable_infer_fn`` / ``durable_tool_fn`` /
+    ``durable_workflow_fn`` together for a second backend. Partial injection
+    raises ``ValueError`` so backends are never mixed silently.
     """
+    durable_infer, durable_tool, durable_workflow = _resolve_durable_hooks(
+        durable_infer_fn,
+        durable_tool_fn,
+        durable_workflow_fn,
+    )
     run_mode = normalize_run_mode(mode)
 
     @durable_workflow
@@ -35,7 +101,7 @@ def make_run_step(
 
         # Model inference wrapped as a durable step -- fix from spec §1. Without
         # durable_infer here, a crash after this line but before the DECISION
-        # is sealed would cause DBOS to re-invoke model_call on resume even
+        # is sealed would cause the backend to re-invoke model_call on resume even
         # though its output would be discarded once replay reaches DECISION.
         infer = durable_infer(model_call)
         plan = infer(context)
