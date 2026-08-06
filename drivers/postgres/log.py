@@ -92,6 +92,28 @@ class PostgresNodeLog:
                 )
             self._conn.commit()
 
+    def _slot_owner_id(
+        self,
+        cur: Any,
+        *,
+        tenant_id: str,
+        trajectory_id: str,
+        step_n: int | None,
+        seq: int,
+        kind: str,
+    ) -> str | None:
+        cur.execute(
+            """
+            SELECT id FROM nodes
+            WHERE tenant_id = %s AND trajectory_id = %s
+              AND COALESCE(step_n, -1) = COALESCE(%s, -1)
+              AND seq = %s AND kind = %s
+            """,
+            (tenant_id, trajectory_id, step_n, seq, kind),
+        )
+        row = cur.fetchone()
+        return row[0] if row is not None else None
+
     def append(
         self,
         kind: str,
@@ -101,6 +123,16 @@ class PostgresNodeLog:
         tenant_id: str,
         seq: int,
     ) -> Node:
+        """Append a node; match SQLite NodeLog slot conflict semantics.
+
+        Postgres only ignores primary key conflicts with ``ON CONFLICT (id)``.
+        A different payload at the same logical slot hits ``idx_nodes_slot`` and
+        must become :class:`SlotConflictError` (SQLite ``INSERT OR IGNORE`` +
+        post-check does the same).
+        """
+        # Import here so the module loads without psycopg installed.
+        from psycopg.errors import UniqueViolation
+
         node = Node(
             kind=kind,
             trajectory_id=trajectory_id,
@@ -110,42 +142,59 @@ class PostgresNodeLog:
             payload=payload,
         )
         with self._lock:
-            with self._conn.cursor() as cur:
-                cur.execute(
-                    """
-                    INSERT INTO nodes
-                    (id, trajectory_id, tenant_id, step_n, seq, kind, payload_json, ts)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                    ON CONFLICT (id) DO NOTHING
-                    """,
-                    (
-                        node.id,
-                        node.trajectory_id,
-                        node.tenant_id,
-                        node.step_n,
-                        node.seq,
-                        node.kind,
-                        json.dumps(node.payload),
-                        node.ts,
-                    ),
-                )
-                cur.execute(
-                    """
-                    SELECT id FROM nodes
-                    WHERE tenant_id = %s AND trajectory_id = %s
-                      AND COALESCE(step_n, -1) = COALESCE(%s, -1)
-                      AND seq = %s AND kind = %s
-                    """,
-                    (tenant_id, trajectory_id, step_n, seq, kind),
-                )
-                row = cur.fetchone()
-                if row is not None and row[0] != node.id:
-                    self._conn.rollback()
+            try:
+                with self._conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        INSERT INTO nodes
+                        (id, trajectory_id, tenant_id, step_n, seq, kind, payload_json, ts)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                        ON CONFLICT (id) DO NOTHING
+                        """,
+                        (
+                            node.id,
+                            node.trajectory_id,
+                            node.tenant_id,
+                            node.step_n,
+                            node.seq,
+                            node.kind,
+                            json.dumps(node.payload),
+                            node.ts,
+                        ),
+                    )
+                    owner = self._slot_owner_id(
+                        cur,
+                        tenant_id=tenant_id,
+                        trajectory_id=trajectory_id,
+                        step_n=step_n,
+                        seq=seq,
+                        kind=kind,
+                    )
+                    if owner is not None and owner != node.id:
+                        self._conn.rollback()
+                        raise SlotConflictError(
+                            f"slot conflict trajectory={trajectory_id!r} step={step_n} "
+                            f"seq={seq} kind={kind!r}: different payload already stored"
+                        )
+                self._conn.commit()
+            except UniqueViolation:
+                # Slot unique index fired (different content id, same slot).
+                self._conn.rollback()
+                with self._conn.cursor() as cur:
+                    owner = self._slot_owner_id(
+                        cur,
+                        tenant_id=tenant_id,
+                        trajectory_id=trajectory_id,
+                        step_n=step_n,
+                        seq=seq,
+                        kind=kind,
+                    )
+                if owner is not None and owner != node.id:
                     raise SlotConflictError(
                         f"slot conflict trajectory={trajectory_id!r} step={step_n} "
                         f"seq={seq} kind={kind!r}: different payload already stored"
-                    )
-            self._conn.commit()
+                    ) from None
+                # Same id concurrent insert or unexpected unique path: treat as ok.
         return node
 
     def claim_tool_call(
