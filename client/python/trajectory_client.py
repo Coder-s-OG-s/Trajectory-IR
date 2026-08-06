@@ -143,7 +143,27 @@ def resume(
     *,
     mode: RunMode | str = RunMode.LIVE,
 ) -> Trajectory:
+    """Reattach to a trajectory that already has node log history.
+
+    This SDK does not wrap steps in a durable workflow decorator the way
+    ``trajectory_ir.resume.step.make_run_step`` does; crash safety here comes
+    entirely from ``NodeLog`` being idempotent by content and from
+    ``exec_tool``'s block-and-gate claim on NON_IDEMPOTENT_WRITE tools
+    (README S8, R02). Re-driving the same step_n/seq calls against the same
+    db_path is what "resume" means at this layer, so there is no separate
+    replay step to run here beyond reconnecting to the log.
+
+    Unlike ``open_trajectory``, this raises if ``trajectory_id`` has no prior
+    nodes: resuming a trajectory with nothing to resume is almost always a
+    caller bug (wrong db_path or trajectory_id), and should fail loudly
+    rather than silently behave like ``open_trajectory``.
+    """
     init_backend(app_name=trajectory_id)
+    if not NodeLog(db_path).list_nodes_all_tenants(trajectory_id):
+        raise ValueError(
+            f"cannot resume trajectory_id={trajectory_id!r}: no existing nodes "
+            f"found in {db_path!r}; use open_trajectory() to start a new one"
+        )
     return Trajectory(
         trajectory_id=trajectory_id,
         tenant_id=tenant_id,
