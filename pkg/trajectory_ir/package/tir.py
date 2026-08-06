@@ -20,6 +20,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import tempfile
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -318,20 +320,33 @@ def export_tir(
     if dest_path.suffix != ".tir":
         dest_path = dest_path.with_suffix(".tir")
 
-    with zipfile.ZipFile(dest_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr("manifest.json", json.dumps(manifest, indent=2, sort_keys=True) + "\n")
-        zf.writestr("COMPAT.json", json.dumps(COMPAT, indent=2, sort_keys=True) + "\n")
-        zf.writestr("seals.json", json.dumps(seals, indent=2, sort_keys=True) + "\n")
-        zf.writestr(
-            "artifacts-manifest.json",
-            json.dumps(artifacts_manifest, indent=2, sort_keys=True) + "\n",
-        )
-        ndjson = "".join(json.dumps(n, sort_keys=True) + "\n" for n in nodes)
-        zf.writestr("nodes.ndjson", ndjson)
-        if mode == "fat":
-            for h, data in artifact_bytes.items():
-                shard = h[:2]
-                zf.writestr(f"artifacts/cas/{shard}/{h}", data)
+    dest_path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(prefix=f".{dest_path.name}.", dir=str(dest_path.parent))
+    try:
+        with os.fdopen(fd, "wb") as raw:
+            with zipfile.ZipFile(raw, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+                zf.writestr("manifest.json", json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+                zf.writestr("COMPAT.json", json.dumps(COMPAT, indent=2, sort_keys=True) + "\n")
+                zf.writestr("seals.json", json.dumps(seals, indent=2, sort_keys=True) + "\n")
+                zf.writestr(
+                    "artifacts-manifest.json",
+                    json.dumps(artifacts_manifest, indent=2, sort_keys=True) + "\n",
+                )
+                ndjson = "".join(json.dumps(n, sort_keys=True) + "\n" for n in nodes)
+                zf.writestr("nodes.ndjson", ndjson)
+                if mode == "fat":
+                    for h, data in artifact_bytes.items():
+                        shard = h[:2]
+                        zf.writestr(f"artifacts/cas/{shard}/{h}", data)
+            raw.flush()
+            os.fsync(raw.fileno())
+        os.replace(tmp_name, dest_path)
+    except Exception:
+        try:
+            os.unlink(tmp_name)
+        except OSError:
+            pass
+        raise
 
     return dest_path
 
