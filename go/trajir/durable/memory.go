@@ -5,7 +5,8 @@ import (
 	"sync"
 )
 
-// Memory is an in process Backend. Fine for unit tests. Does not survive process exit.
+// Memory is a test fake Backend, not a durable execution engine integration.
+// Fine for unit tests. Does not survive process exit. See issue #92.
 type Memory struct {
 	mu   sync.Mutex
 	data map[string][]byte
