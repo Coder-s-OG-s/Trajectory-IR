@@ -253,3 +253,16 @@ class NodeLog:
     def close(self):
         with self._lock:
             self._conn.close()
+
+    def __del__(self):
+        # Client SDK call sites construct a fresh NodeLog per function call
+        # and never close it explicitly. Without this, connections only get
+        # released whenever the garbage collector happens to get to them,
+        # which over a long running agent session means an unbounded number
+        # of open SQLite connections. This is a best-effort backstop, not a
+        # substitute for callers using close()/a context manager when they
+        # can.
+        try:
+            self._conn.close()
+        except Exception:
+            pass
