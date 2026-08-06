@@ -165,12 +165,15 @@ def build_s3_client_from_env() -> Any:
     * ``AWS_REGION`` or ``AWS_DEFAULT_REGION`` (default ``us-east-1``)
     * ``TRAJIR_S3_ENDPOINT_URL`` optional custom endpoint (MinIO, LocalStack)
 
+    When ``TRAJIR_S3_ENDPOINT_URL`` is set, path-style addressing is used so
+    MinIO and LocalStack work without virtual-hosted DNS.
+
     Raises:
         ImportError: if boto3 is not installed
-        ValueError: if required configuration is missing in a strict way
     """
     try:
         import boto3
+        from botocore.client import Config
     except ImportError as exc:
         raise ImportError(
             "boto3 is required for S3CAS production use; pip install boto3 "
@@ -179,4 +182,9 @@ def build_s3_client_from_env() -> Any:
 
     region = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION") or "us-east-1"
     endpoint = os.environ.get("TRAJIR_S3_ENDPOINT_URL") or None
-    return boto3.client("s3", region_name=region, endpoint_url=endpoint)
+    kwargs: dict[str, Any] = {"region_name": region}
+    if endpoint:
+        kwargs["endpoint_url"] = endpoint
+        # Path style is required for many local S3 implementations.
+        kwargs["config"] = Config(signature_version="s3v4", s3={"addressing_style": "path"})
+    return boto3.client("s3", **kwargs)

@@ -45,8 +45,41 @@ Defined in `.github/workflows/ci.yml`:
 | **Package smoke** | `python -m build`, install the wheel into a clean venv, import smoke |
 | **Security (pip-audit)** | `pip-audit --skip-editable` on the installed dependency tree |
 | **Go** | hash goldens, `go/trajir/...` **coverage floor** (`GO_COV_FAIL_UNDER`, default 50%), `go test ./...`, `govulncheck` |
+| **Integration (Postgres)** | Live `PostgresNodeLog` against a Postgres 16 service (`test/integration/test_postgres_live.py`) |
+| **Integration (MinIO)** | Live `S3CAS` against MinIO (`test/integration/test_s3_minio_live.py`) |
 
 Local dependency audit (optional): `RUN_PIP_AUDIT=1 pytest test/unit/test_pip_audit.py -q` after `pip install -e ".[dev]"`. Under GitHub Actions the dedicated **Security (pip-audit)** job is authoritative.
+
+#### Optional local integration services
+
+Postgres:
+
+```bash
+docker run -d --name trajir-pg \
+  -e POSTGRES_USER=trajir -e POSTGRES_PASSWORD=trajir -e POSTGRES_DB=trajir \
+  -p 5432:5432 postgres:16.6
+export TRAJIR_DATABASE_URL=postgresql://trajir:trajir@localhost:5432/trajir
+pip install -e ".[dev,postgres]"
+pytest test/integration/test_postgres_live.py -q
+```
+
+MinIO:
+
+```bash
+docker run -d --name trajir-minio -p 9000:9000 \
+  -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
+  quay.io/minio/minio:RELEASE.2024-12-18T13-15-44Z server /data
+export TRAJIR_S3_ENDPOINT_URL=http://127.0.0.1:9000
+export TRAJIR_S3_BUCKET=trajir
+export AWS_ACCESS_KEY_ID=minioadmin
+export AWS_SECRET_ACCESS_KEY=minioadmin
+pip install -e ".[dev,s3]"
+# create bucket once (Python one-liner or mc)
+python -c "from drivers.s3.cas import build_s3_client_from_env; c=build_s3_client_from_env(); c.create_bucket(Bucket='trajir')"
+pytest test/integration/test_s3_minio_live.py -q
+```
+
+Without these env vars, integration tests are skipped; unit fakes still cover offline CI Quality.
 
 Coverage floors and required check names: [docs/maintainer-branch-protection.md](docs/maintainer-branch-protection.md).
 

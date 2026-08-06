@@ -9,7 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- CI Phase B: Integration (Postgres) and Integration (MinIO) jobs with live
+  driver tests under `test/integration/` (issue #85).
+
 ### Changed
+
+- `build_s3_client_from_env` uses path-style addressing when
+  `TRAJIR_S3_ENDPOINT_URL` is set (MinIO/LocalStack).
 
 ### Fixed
 
