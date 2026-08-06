@@ -1,7 +1,29 @@
 [project]
 name = "trajectory-ir"
 version = "0.1.0"
+description = "Portable, hash-verifiable intermediate representation for agent runs (seals, effects, .tir packages)"
+readme = "README.md"
 requires-python = ">=3.11"
+license = "Apache-2.0"
+authors = [
+    { name = "Coder-s-OG-s contributors" },
+]
+keywords = [
+    "agent",
+    "trajectory",
+    "intermediate-representation",
+    "durable-execution",
+    "tir",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries",
+]
 dependencies = [
     "dbos",
     "rfc8785",
@@ -11,6 +33,13 @@ dependencies = [
 dev = ["pytest", "pytest-cov", "ruff", "mypy", "pip-audit"]
 postgres = ["psycopg[binary]>=3.1"]
 s3 = ["boto3"]
+
+[project.urls]
+Homepage = "https://github.com/Coder-s-OG-s/Trajectory-IR"
+Repository = "https://github.com/Coder-s-OG-s/Trajectory-IR"
+Issues = "https://github.com/Coder-s-OG-s/Trajectory-IR/issues"
+Changelog = "https://github.com/Coder-s-OG-s/Trajectory-IR/blob/main/CHANGELOG.md"
+Release = "https://github.com/Coder-s-OG-s/Trajectory-IR/releases/tag/v0.1.0"
 
 [build-system]
 requires = ["hatchling"]

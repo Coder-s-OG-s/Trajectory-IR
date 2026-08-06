@@ -2,9 +2,22 @@
 
 Do this after CI has produced green check names on `main` or on a PR.
 
+## GitHub plan note (important)
+
+This repository is currently **private**. On GitHub’s free plan for private
+repos, **classic branch protection** and **repository rulesets** return HTTP
+403 (“Upgrade to GitHub Pro or make this repository public”).
+
+To enable step 1 of post-v0.1.0 stabilization, pick one:
+
+1. **Make the repo public** (free branch protection + free secret scanning for public repos), or  
+2. **Upgrade the org/user to a plan that includes branch protection on private repos** (GitHub Pro / Team / Enterprise as applicable).
+
+Until then, enforce process by policy: only merge green PRs, prefer squash, and use **Update branch** (repo setting `allow_update_branch` is enabled).
+
 ## Recommended settings
 
-GitHub → Settings → Branches → Branch protection rule for `main`:
+GitHub → Settings → Branches → Branch protection rule for `main` (after plan allows it):
 
 1. Require a pull request before merging
 2. Require approvals (at least 1 when more than one maintainer is active; 0 is OK for a solo maintainer if status checks are strict)
@@ -25,7 +38,11 @@ Match the names shown in the Actions UI (Phase A, issue #81):
 
 If GitHub shows a slightly different label, use the exact string from the check run.
 
-Also enable org/repo **secret scanning** and **push protection** when available (Settings → Code security).
+Also enable org/repo **secret scanning** and **push protection** when available
+(Settings → Code security). On **private** free-tier repos, secret scanning is
+often unavailable without GitHub Advanced Security; **Dependabot alerts** and
+**Dependabot security updates** can still be enabled (and were enabled for this
+repo where the API allows).
 
 ## Coverage floors (workflow env)
 
