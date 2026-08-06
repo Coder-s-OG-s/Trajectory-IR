@@ -57,6 +57,30 @@ func TestExplicitIdempotentWrite(t *testing.T) {
 	}
 }
 
+func TestOpenWorldFailsClosedEvenIfIdempotent(t *testing.T) {
+	got := effects.ClassifyFromMCP(map[string]any{
+		"readOnlyHint":    false,
+		"idempotentHint":  true,
+		"destructiveHint": false,
+		"openWorldHint":   true,
+	})
+	if got != effects.NON_IDEMPOTENT_WRITE {
+		t.Fatalf("got %s, want NON_IDEMPOTENT_WRITE", got)
+	}
+}
+
+func TestOpenWorldFalseStillAllowsIdempotentWrite(t *testing.T) {
+	got := effects.ClassifyFromMCP(map[string]any{
+		"readOnlyHint":    false,
+		"idempotentHint":  true,
+		"destructiveHint": false,
+		"openWorldHint":   false,
+	})
+	if got != effects.IDEMPOTENT_WRITE {
+		t.Fatalf("got %s, want IDEMPOTENT_WRITE", got)
+	}
+}
+
 func TestDestructiveFailsClosedEvenIfIdempotent(t *testing.T) {
 	got := effects.ClassifyFromMCP(map[string]any{
 		"readOnlyHint":    false,
