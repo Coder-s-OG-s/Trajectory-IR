@@ -51,6 +51,12 @@ class ProjectorPolicy:
             raise PolicyError("default_budget must be non-negative")
         if not self.always_include_kinds:
             raise PolicyError("always_include_kinds must be non-empty")
+        if "CONSTRAINT" not in self.always_include_kinds:
+            # CONSTRAINT must always survive projection (README §4); a
+            # policy that omits it is a footgun, not a real customization.
+            object.__setattr__(
+                self, "always_include_kinds", self.always_include_kinds | {"CONSTRAINT"}
+            )
 
 
 def default_projector_policy() -> ProjectorPolicy:
