@@ -92,9 +92,32 @@ This section exists so that no contributor, human or AI, spends effort reimpleme
 
 ---
 
-## 5. Scope for the current phase (v0.1 / Phase 1A)
+## 5. Scope for the current phase
 
-**In scope:**
+### 5.0 Phase 1A (shipped library baseline)
+
+Phase 1A delivered the dual language IR surface through `v0.1.0`: Python SDK with DBOS, Go port with Temporal as production durable backend, R01–R08, thin/fat `.tir`, CAS, and CI Phase A/B. That baseline stays supported.
+
+### 5.1 Phase 1B (current development focus: Go primary)
+
+Tracked under epic #113.
+
+**In scope for Phase 1B:**
+
+- Treat **Go as the primary SDK** for new features, storage drivers, and adoption demos (`go/trajir`, `go/examples`).
+- Keep **Python as the reference and parity port** (DBOS local profile, existing client and conformance stay green).
+- Go production durable backend remains **Temporal** (`go/trajir/durable/temporal`); LocalSQLite and Memory stay test fakes for coding.
+- Go Postgres NodeLog and S3 compatible CAS drivers (parity with Python `drivers.postgres` / `drivers.s3`).
+- Go first QUICKSTART and adoption host demo so a newcomer can succeed without installing Python.
+- CONTRIBUTING process: implement new Phase 1B work in Go first, or dual language in one PR.
+
+**Still out of scope (same as Phase 1A product non goals):** package signatures, Fluid/k8s-fluid productization, multi tenant SaaS control plane, custom crash engines, plan DAGs.
+
+### 5.2 Phase 1A historical in scope list
+
+The following records what Phase 1A required. It is not a license to prefer Python for new Phase 1B work.
+
+**In scope (Phase 1A record):**
 
 - A working adapter to **one** durable execution backend for the Python SDK, **DBOS** as the Phase 1A default (Python native, embeds as a library, SQLite/Postgres backed, no separate server to operate, the lowest ceremony fit for an early stage project), so that `DECISION`/`TOOL_CALL` steps get crash safe, at most once execution for free instead of via a hand rolled resume engine. This is a Python/DBOS conformance gate (R01/R02), not a restriction on a language appropriate backend in other ports: the Go port's `go/trajir/durable/temporal` (issues #16, #24) is a recognized production backend for Go under this same gate, not a second Phase 1A adapter (see §3.1, §12.0). A Restate adapter is a welcome additional implementation, for either language, once the interface is stable, but is not required for Phase 1A completion.
 - Linear step execution (no parallel plan graph / DAG of tool calls with data dependencies).
@@ -165,7 +188,7 @@ Node identity must be computable identically regardless of which language or imp
 2. `payload_hash = sha256(canonicalized_payload)`
 3. `node_id = sha256(tenant_id | trajectory_id | step_n_or_none | seq | kind | payload_hash)`
 
-Every language implementation (Python now, Go later if a server side control plane is built) **must** use a conformant JCS library, not a hand rolled equivalent. If no conformant library exists for a target language, that is a blocking issue to raise before writing hashing code in that language.
+Every language implementation (Go and Python; both are first class for hashing) **must** use a conformant JCS library, not a hand rolled equivalent. If no conformant library exists for a target language, that is a blocking issue to raise before writing hashing code in that language.
 
 ### 6.4 Artifacts and content addressing
 
@@ -369,12 +392,12 @@ This section is binding for implementation choices. Do not introduce alternative
 
 ### 12.1 Languages
 
-- **Python**, primary SDK and runtime language for Phase 1A. The embedded local runtime, the client SDK (`open_trajectory`, `project`, `seal_decision`, `exec_tool`, `commit_step`, `resume`), and the demo/conformance harness are implemented in Python first.
-- **Go**, reserved for a future server side control plane or any Kubernetes native component (if a CAMI style provisioning layer is revisited later, or if a server profile needs a compiled service). Not required for Phase 1A.
+- **Go**, **primary SDK and runtime language for Phase 1B** (epic #113). New features, drivers, and adoption demos should land in `go/trajir` first, or dual language in the same PR. The Go client (`OpenTrajectory`, `Project`, `SealDecision`, `ExecTool`, `CommitStep`, `Resume`, `RunStep`), IR stack, filesystem CAS, `.tir`, and Temporal production durable backend are the default product surface for newcomers and server style deployments.
+- **Python**, **reference and parity port**. Phase 1A shipped Python first (DBOS local profile, client SDK, R01–R08 harness). Python remains fully supported and must stay green in CI, but it is no longer the default onboarding or feature lead language. Prefer Python only for Python specific fixes, DBOS adapter work, or explicit parity follow ups.
 
 ### 12.2 Containers (Docker)
 
-- The runtime and demo tooling are packaged as Docker images for the `server-s3` and `k8s-fluid` profiles. The `local` profile does not require a container and should run directly via the Python package for the fastest possible contributor onboarding.
+- The runtime and demo tooling are packaged as Docker images for the `server-s3` and `k8s-fluid` profiles. The `local` profile does not require a container: prefer the Go module under `go/` for the fastest Phase 1B onboarding; the Python package remains available for the reference port.
 - One `Dockerfile` per profile that needs containerization, kept minimal (no unnecessary system packages), with a pinned base image.
 
 ### 12.3 Kubernetes and Fluid
@@ -555,6 +578,7 @@ Trajectory IR deliberately does not attempt to:
 | 1.0 | 2026-07-21 | Initial master specification. Consolidates the CAMI/CLOOP/Trajectory IR architecture decision, the reviewed and corrected spec v0.1 (JCS hashing, READ_ONLY divergence rule, deferred signature field, default projector policy), the corrected Fluid integration contract (read path only, sharded CAS keys, shared Dataset multi tenancy, cache miss not staleness framing, metadata sync fallback), the full technology/tooling stack, repository layout, and the working agreement for AI coding agents. |
 | 1.1 (`spec-v0.2-draft`) | 2026-07-23 | Repositions Trajectory IR from a standalone execution runtime to a semantics and portability layer over a pluggable durable execution backend (DBOS default, Restate optional), see new §3.1. Removes custom crash detection/retry/lease heartbeat from scope; reframes §8's resume protocol as semantics enforced jointly with the backend; adds explicit prior art boundaries against Temporal, Restate, DBOS, LangGraph family checkpointing, and MCP tool annotations, so the project's non redundant contribution, a portable, hash verifiable, runtime independent trajectory export, is stated once, explicitly, and can be evaluated on its own terms (including for CNCF Sandbox review, where "why not just use X" is always the first question asked). |
 | 1.2 | 2026-08-07 | Reconciles §3, §3.1, §5, and §12.0 with the Go port's already shipped Temporal adapter (`go/trajir/durable/temporal`, issues #16, #24). Formally recognizes Temporal as the production durable execution backend for Go, alongside DBOS (Python Phase 1A default) and Restate (optional additional adapter for either language), and adds rationale in §3.1 for why Go diverges from the DBOS-first posture. Clarifies that §5's "one backend adapter" Phase 1A gate and its "no second adapter" out-of-scope item apply to the Python/DBOS conformance track only, and do not restrict the Go port's own language appropriate backend. Updates §17 glossary and §18 references accordingly. Resolves #67. |
+| 1.3 | 2026-08-07 | Declares **Phase 1B**: Go is the primary SDK and default onboarding language; Python is the reference/parity port. Updates §5 (phase structure), §12.1 languages, and §12.2 local onboarding guidance. Tracks work under epic #113. Resolves #114. |
 
 ---
 
