@@ -6,12 +6,26 @@ master specification.
 
 ## 1. Spec before code
 
-1. Read the root `README.md`.
+1. Read the root `README.md` (Phase 1B language priority is in §5 and §12.1).
 2. Do not implement behavior that is not defined there.
 3. Do not reimplement durable execution (retry, lease, custom crash engines).
-   That belongs under `drivers/durable_backend/` (DBOS in Phase 1A) or
-   `go/trajir/durable` (Go backends).
+   That belongs under `go/trajir/durable` (Temporal production for Go) or
+   `drivers/durable_backend/` (DBOS for the Python reference port).
 4. If something is ambiguous, open a **Spec question** issue and wait.
+
+## 1.1 Phase 1B language rule (Go first)
+
+Epic: [#113](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/113).
+
+1. **New features, drivers, and demos** should land in **Go** first
+   (`go/trajir`, `go/examples`), or dual language in the same PR.
+2. **Python** is the **reference and parity port**. Keep CI green. Prefer
+   Python only for Python specific fixes, DBOS work, or explicit parity
+   follow ups named in the issue.
+3. Do not open a Python only adoption demo or storage driver for Phase 1B
+   work without an issue that says the Python port is intentional.
+4. AI coding agents: default to Go for new Phase 1B work. Do not invent
+   Python APIs when `go/trajir` already has the surface.
 
 ## 2. Developer Certificate of Origin (DCO)
 
@@ -99,7 +113,29 @@ packages under `go/trajir/effects` and `go/trajir/resume`).
 If you use AI tools for a meaningful share of a change, say so in the PR. You
 are still responsible for correctness against the spec.
 
-## 4. Local setup (Python)
+## 4. Local setup (Go, primary for Phase 1B)
+
+Go lives under `go/`. This is the default contributor path for new Phase 1B work.
+
+```bash
+git clone https://github.com/Coder-s-OG-s/Trajectory-IR.git
+cd Trajectory-IR/go
+go test ./...
+go test ./trajir/nodes -run TestHashVectors -count=1
+go test ./conformance -count=1 -v
+```
+
+Optional Temporal (needs a local server and worker; not required for default tests):
+
+```bash
+# TEMPORAL_HOSTPORT=localhost:7233
+go test -tags=temporal_integration ./trajir/durable/temporal -count=1 -v
+```
+
+See `go/README.md` for package map, client usage, and backend choices
+(LocalSQLite coding default, Temporal production target).
+
+## 5. Local setup (Python, reference port)
 
 ```bash
 git clone https://github.com/Coder-s-OG-s/Trajectory-IR.git
@@ -122,27 +158,6 @@ pytest test/unit -q
 pytest test/e2e -q
 pytest conformance/ -q
 ```
-
-## 5. Local setup (Go)
-
-Go lives under `go/`. Python remains the Phase 1A reference runtime.
-
-```bash
-cd go
-go test ./...
-go test ./trajir/nodes -run TestHashVectors -count=1
-go test ./conformance -count=1 -v
-```
-
-Optional Temporal (needs a local server and worker; not required for default tests):
-
-```bash
-# TEMPORAL_HOSTPORT=localhost:7233
-go test -tags=temporal_integration ./trajir/durable/temporal -count=1 -v
-```
-
-See `go/README.md` for package map, client usage, and backend choices
-(LocalSQLite default, Temporal production target).
 
 ## 6. Issues
 
