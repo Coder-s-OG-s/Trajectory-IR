@@ -14,35 +14,47 @@ from unreviewed automation. Package owner credentials never belong in the repo.
 
 | Surface | Where | Notes |
 |---------|--------|--------|
-| Python package | `pyproject.toml` → `project.version` | Currently `0.1.0` |
-| Git tag | `v0.1.0` | Prefer `v` prefix |
+| Python package | `pyproject.toml` → `project.version` | `0.1.0` on main until 0.1.1 bump at tag time |
+| Git tag | `v0.1.0` (shipped); next `v0.1.1` | Prefer `v` prefix |
 | Go module | `go/go.mod` | No separate semver tag yet; consumers use commit or a later policy |
 
 ### Choosing 0.1.0 vs 0.1.1
 
-Open storage and host PRs may land after the first release prep. Pick one:
+`v0.1.0` is already tagged. Prefer **`v0.1.1`** for everything that landed after
+that tag (Phase B CI, reliability fixes, optional adoption demo / E2E docs).
 
-1. **Tag `v0.1.0` from current `main`** (R01–R08 library surface, docs release prep only), then ship **`0.1.1`** after CAS / Postgres / host PRs merge with CHANGELOG updated.
-2. **Wait** until the storage PRs you want in the first public wheel are on `main`, bump `pyproject.toml` if needed, and tag once.
+1. Keep `v0.1.0` as the first library surface snapshot.
+2. Ship **`0.1.1`** when CHANGELOG `[Unreleased]` is accurate, optional fold-in
+   PRs are merged or deferred, `pyproject.toml` version is bumped, and CI is green.
+3. Draft notes: [RELEASE_NOTES_0.1.1.md](RELEASE_NOTES_0.1.1.md).
 
 Do not move an already pushed tag. Prefer a new patch version.
 
-## Steps for a GitHub release (example v0.1.0)
+## Steps for a GitHub release (example v0.1.1)
 
 ```bash
 git checkout main
 git pull origin main
 
-git tag -a v0.1.0 -m "Trajectory IR v0.1.0 — Phase 1A library surface (R01–R08, dual .tir)"
+# After version bump in pyproject.toml and CHANGELOG [0.1.1] section:
+git tag -a v0.1.1 -m "Trajectory IR v0.1.1 — post-0.1.0 reliability and Phase B CI"
 
-git push origin v0.1.0
+git push origin v0.1.1
 ```
 
 Create a **GitHub Release** for the tag:
 
-1. Title: `v0.1.0`
-2. Body: paste or adapt [RELEASE_NOTES_0.1.0.md](RELEASE_NOTES_0.1.0.md) (or a 0.1.1 notes file if that is the tag)
+1. Title: `v0.1.1`
+2. Body: paste or adapt [RELEASE_NOTES_0.1.1.md](RELEASE_NOTES_0.1.1.md)
+   (for the first tag, [RELEASE_NOTES_0.1.0.md](RELEASE_NOTES_0.1.0.md) remains historical)
 3. Attach nothing required (source zip is automatic)
+
+### Historical: v0.1.0
+
+```bash
+git tag -a v0.1.0 -m "Trajectory IR v0.1.0 — Phase 1A library surface (R01–R08, dual .tir)"
+git push origin v0.1.0
+```
 
 ## Publish to PyPI (optional but tracked)
 

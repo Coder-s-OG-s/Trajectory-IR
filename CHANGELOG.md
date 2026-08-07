@@ -7,17 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Post-`v0.1.0` work intended for **0.1.1**. Do not tag until this section is
+moved under `## [0.1.1]` and `pyproject.toml` `project.version` is bumped.
+Open PRs that may still fold in before the tag: adoption host demo (#87 / PR
+#108), QUICKSTART E2E Postgres+CAS+thin walkthrough (#88 / PR #109). Spec
+backend wording for Go Temporal remains tracked in #67 (not a 0.1.1 blocker).
+
 ### Added
 
 - CI Phase B: Integration (Postgres) and Integration (MinIO) jobs with live
-  driver tests under `test/integration/` (issue #85).
+  driver tests under `test/integration/` (issue #85, PR #86).
+- Maintainer branch protection and free-plan notes expanded in
+  `docs/maintainer-branch-protection.md`; richer PyPI package metadata in
+  `pyproject.toml` (PR #84).
 
 ### Changed
 
 - `build_s3_client_from_env` uses path-style addressing when
-  `TRAJIR_S3_ENDPOINT_URL` is set (MinIO/LocalStack).
+  `TRAJIR_S3_ENDPOINT_URL` is set (MinIO/LocalStack) (PR #86).
+- Go `trajir/durable` docs label `Memory` and `LocalSQLite` as durable backend
+  **test fakes**, not production engines (issue #92 context, PR #102).
+- Client SDK `resume()` is a documented reattach: requires existing node log
+  history and fails loudly on empty trajectories instead of silently matching
+  `open_trajectory` (issue #97, PR #107).
+- Projector policy construction always keeps `CONSTRAINT` in
+  `always_include_kinds` so policies cannot drop constraints by omission
+  (PR #101).
 
 ### Fixed
+
+- Go effect classifier fails closed on `openWorldHint=true` (parity with Python
+  `classify.py`) so open-world tools do not classify as `IDEMPOTENT_WRITE`
+  (issue #98, PR #99).
+- Client `exec_tool` appends `TOOL_CALL` / `TOOL_RESULT` for non-gated tools
+  (PURE / READ_ONLY / IDEMPOTENT_WRITE), not only the block-and-gate path
+  (issue #89, PR #100).
+- `ensure_artifacts_in_cas` fails closed when a manifest entry is missing
+  `content_hash` instead of skipping the row (PR #103).
+- `NodeLog` closes its SQLite connection in `__del__` as a best-effort backstop
+  for long-running client SDK sessions that never call `close()` (PR #104).
+- `export_tir` writes packages atomically (temp file + fsync + `os.replace`) so
+  a crash mid-export cannot leave a truncated `.tir` at the destination
+  (PR #105).
+- Postgres `claim_tool_call` propagates non-conflict errors; only
+  `UniqueViolation` returns `False` for a lost race (issue #96, PR #106).
 
 ## [0.1.0] - 2026-08-06
 
