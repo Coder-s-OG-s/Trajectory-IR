@@ -23,7 +23,7 @@ Second language implementation of Trajectory IR primitives. Python remains the P
 |--|--|
 | **Coding default** | `LocalSQLite` (file) and `Memory` (tests) in `trajir/durable` |
 | **Production target** | Temporal (`trajir/durable/temporal`). Restate welcome later. |
-| **Why** | Matches master README's durable-backend principle (§3.1): never hand roll crash/retry/lease logic, consume an external engine instead. Temporal is the master spec's recognized production backend for Go (§3.1, §5, §12.0); DBOS remains the Python default. Local memo stays the default for contributors; Temporal persists step memos when a cluster and worker are available. |
+| **Why** | Matches master README: do not hand roll crash engines. Local memo stays the default for contributors; Temporal persists step memos when a cluster and worker are available. |
 
 Model inference and tools must go through `durable.Step` / `Infer` / `Tool`. Block and gate still relies on the NodeLog for NON_IDEMPOTENT_WRITE.
 
