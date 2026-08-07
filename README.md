@@ -53,7 +53,7 @@ Three earlier proposals were explored in parallel before this consolidation: **C
 
 | Layer | Project | Status | Role |
 |---|---|---|---|
-| **Crash safe replay, retry, lease/heartbeat coordination** | A pluggable durable execution backend, **DBOS** (reference/default) or **Restate** | **External dependency, not reimplemented** | Owns crash detection, at most once side effect execution, deterministic replay, and lease/heartbeat timeout. Trajectory IR wraps its `DECISION`/`TOOL_CALL` steps as calls into this backend's own durable step primitive and trusts its replay guarantee. See §3.1. |
+| **Crash safe replay, retry, lease/heartbeat coordination** | A pluggable durable execution backend: **DBOS** (Python reference/default), **Temporal** (Go production backend), or **Restate** (optional additional adapter) | **External dependency, not reimplemented** | Owns crash detection, at most once side effect execution, deterministic replay, and lease/heartbeat timeout. Trajectory IR wraps its `DECISION`/`TOOL_CALL` steps as calls into this backend's own durable step primitive and trusts its replay guarantee. See §3.1. |
 | **Semantics of the closed loop** | **Trajectory IR** | **Active, this is the project** | Defines nodes, seals, effect classes, the resume matrix (as *semantics*, backed by the chosen durable execution engine's mechanics), and the portable `.tir` package. Owns the event/data schema, node identity hashing, and export/import/graft. |
 | **Session storage runtime** | CLOOP | **Folded into Trajectory IR** | CLOOP's mutable state, event, and artifact planes are implemented as Trajectory IR's storage backend. CLOOP does not exist as a separate schema or a separate public project. There is one schema, owned by Trajectory IR. |
 | **Kubernetes provisioning (claims/classes for memory backends)** | CAMI | **Deferred, optional, non blocking** | A future, separate concern: how a Trajectory IR backend gets provisioned declaratively on Kubernetes. Not required for Trajectory IR to function correctly, and not part of the current implementation phase. May be revisited after Trajectory IR ships and proves adoption. |
@@ -76,6 +76,8 @@ This section exists so that no contributor, human or AI, spends effort reimpleme
 
 **The one sentence version, for anyone asking "why not just use Temporal/Restate/DBOS directly":** because none of them define a runtime independent, hash verifiable format for handing a finished or in flight agent trajectory to a different agent, a different tool, or an external auditor, they solve *durability inside one runtime*, not *portability across runtimes*. That is the whole project. Everything else in this document is scaffolding in service of that one property.
 
+**Why Go uses Temporal instead of DBOS:** DBOS remains the Phase 1A reference/default for the Python SDK, an embedded library with the lowest operational ceremony, which matters for an early stage project. The Go port targets a different ecosystem, server and Kubernetes style deployments where a standalone durable execution cluster is the ecosystem norm, so `go/trajir/durable/temporal` (issues #16, #24) uses Temporal as its production backend behind the same adapter interface. Both choices honor the one rule that actually matters (§4 principle 6, §16): crash detection, retries, and lease/heartbeat coordination are never reimplemented, only consumed. Restate remains a welcome additional adapter for either language once its interface is stable, but is not required.
+
 ---
 
 ## 4. Design principles (non negotiable)
@@ -94,7 +96,7 @@ This section exists so that no contributor, human or AI, spends effort reimpleme
 
 **In scope:**
 
-- A working adapter to **one** durable execution backend, **DBOS** as the Phase 1A default (Python native, embeds as a library, SQLite/Postgres backed, no separate server to operate, the lowest ceremony fit for an early stage project), so that `DECISION`/`TOOL_CALL` steps get crash safe, at most once execution for free instead of via a hand rolled resume engine. A Restate adapter is a welcome second implementation once the interface is stable, but is not required for Phase 1A completion.
+- A working adapter to **one** durable execution backend for the Python SDK, **DBOS** as the Phase 1A default (Python native, embeds as a library, SQLite/Postgres backed, no separate server to operate, the lowest ceremony fit for an early stage project), so that `DECISION`/`TOOL_CALL` steps get crash safe, at most once execution for free instead of via a hand rolled resume engine. This is a Python/DBOS conformance gate (R01/R02), not a restriction on a language appropriate backend in other ports: the Go port's `go/trajir/durable/temporal` (issues #16, #24) is a recognized production backend for Go under this same gate, not a second Phase 1A adapter (see §3.1, §12.0). A Restate adapter is a welcome additional implementation, for either language, once the interface is stable, but is not required for Phase 1A completion.
 - Linear step execution (no parallel plan graph / DAG of tool calls with data dependencies).
 - The full node kind set (§6.2) and node identity scheme (§6.3).
 - All six effect classes and the MCP mapping (§7).
@@ -110,7 +112,7 @@ This section exists so that no contributor, human or AI, spends effort reimpleme
 - Multi agent branch/merge UX beyond the basic graft by hash pattern.
 - Any Kubernetes provisioning layer (CAMI style claims/classes).
 - Fluid integration of any kind.
-- A second durable execution backend adapter (Restate or otherwise) before the DBOS adapter is conformant.
+- A second durable execution backend adapter for the Python SDK (Restate or otherwise) before the DBOS adapter is conformant. This does not apply to the Go port's already shipped, language appropriate Temporal backend (§3.1, §12.0).
 - Package signatures (`SIGNATURE` field in the `.tir` manifest is reserved but unimplemented).
 - Multi region or multi writer high availability guarantees.
 - Live full duplex media/streaming as a first class node type.
@@ -360,8 +362,9 @@ This section is binding for implementation choices. Do not introduce alternative
 
 ### 12.0 Durable execution backend
 
-- **DBOS**, the Phase 1A default. Embeds as a Python library backed by SQLite (local) or PostgreSQL (server profiles); no separate server process to operate, which matters for an early stage project with limited operational capacity. `DECISION` and `TOOL_CALL` steps are wrapped as DBOS workflow/step functions so that crash safe, at most once execution and lease/heartbeat handling come from DBOS rather than a bespoke implementation.
-- **Restate**, a second, optional adapter behind the same internal interface, appropriate for deployments that want a standalone durable execution server rather than an embedded library. Not required for Phase 1A; must not be started until the DBOS adapter is conformant (R01/R02 passing).
+- **DBOS**, the Phase 1A default for the **Python** SDK. Embeds as a Python library backed by SQLite (local) or PostgreSQL (server profiles); no separate server process to operate, which matters for an early stage project with limited operational capacity. `DECISION` and `TOOL_CALL` steps are wrapped as DBOS workflow/step functions so that crash safe, at most once execution and lease/heartbeat handling come from DBOS rather than a bespoke implementation.
+- **Temporal**, the recognized production backend for the **Go** port (`go/trajir/durable/temporal`, issues #16, #24), behind the same internal adapter interface. Chosen for Go/Kubernetes style server deployments where a standalone durable execution cluster is the ecosystem norm; not a Phase 1A Python requirement and not a substitute for DBOS as the Python default (§3.1).
+- **Restate**, an optional additional adapter behind the same internal interface, appropriate for deployments that want a standalone durable execution server rather than an embedded library. Not required for Phase 1A; must not be started for the Python SDK until the DBOS adapter is conformant (R01/R02 passing).
 - The backend is selected by deployment profile (§11.4), never hardcoded into `pkg/runtime`, see the adapter interface in `drivers/durable-backend/` (§13).
 
 ### 12.1 Languages
@@ -518,9 +521,10 @@ Trajectory IR deliberately does not attempt to:
 | Block and gate | The default policy for a crash mid non idempotent tool: halt and require explicit resolution rather than auto retry |
 | `.tir` | The portable package format for exporting/importing a trajectory |
 | JCS | JSON Canonicalization Scheme, RFC 8785, used to make hashing deterministic across languages |
-| Durable execution backend | The external engine (DBOS default, Restate optional) that provides crash safe replay, retries, and lease/heartbeat coordination underneath Trajectory IR (see §3.1) |
-| DBOS | An open source, Postgres/SQLite backed durable execution library; the Phase 1A default backend |
-| Restate | An open source durable execution engine with a journaled step model; an optional second backend adapter |
+| Durable execution backend | The external engine (DBOS default for Python, Temporal for Go, Restate optional for either) that provides crash safe replay, retries, and lease/heartbeat coordination underneath Trajectory IR (see §3.1) |
+| DBOS | An open source, Postgres/SQLite backed durable execution library; the Phase 1A default backend for the Python SDK |
+| Temporal | An open source durable execution engine with an event history / deterministic replay model; the recognized production backend for the Go port (§3.1, §12.0) |
+| Restate | An open source durable execution engine with a journaled step model; an optional additional backend adapter for either language |
 | CAMI | The deferred, optional Kubernetes provisioning layer for memory backends (not part of the current phase) |
 | CLOOP | The earlier session storage proposal, now folded into Trajectory IR's storage layer rather than existing separately |
 | Fluid | A CNCF incubating Kubernetes native dataset orchestrator, used only as an optional read path cache accelerator (§11.3) |
@@ -538,7 +542,7 @@ Trajectory IR deliberately does not attempt to:
 | Fluid (CNCF incubating project) documentation | Reference for Dataset/Runtime concepts used in §11.3 |
 | DBOS documentation | Reference for the Phase 1A default durable execution backend (§3.1, §12.0) |
 | Restate documentation | Reference for the optional second durable execution backend adapter (§3.1, §12.0) |
-| Temporal documentation | Prior art for the event history / deterministic replay model this project deliberately does not reimplement (§3.1) |
+| Temporal documentation | Reference for the Go port's production durable execution backend (§3.1, §12.0); also prior art for the event history / deterministic replay model this project deliberately does not reimplement itself |
 | Model Context Protocol tool annotation specification | Prior art and base vocabulary for effect classification (§3.1, §7) |
 | `docs/history/` in this repository | Prior CAMI, CLOOP, and Fluid orientation documents, historical context only, not normative |
 
@@ -550,6 +554,7 @@ Trajectory IR deliberately does not attempt to:
 |---|---|---|
 | 1.0 | 2026-07-21 | Initial master specification. Consolidates the CAMI/CLOOP/Trajectory IR architecture decision, the reviewed and corrected spec v0.1 (JCS hashing, READ_ONLY divergence rule, deferred signature field, default projector policy), the corrected Fluid integration contract (read path only, sharded CAS keys, shared Dataset multi tenancy, cache miss not staleness framing, metadata sync fallback), the full technology/tooling stack, repository layout, and the working agreement for AI coding agents. |
 | 1.1 (`spec-v0.2-draft`) | 2026-07-23 | Repositions Trajectory IR from a standalone execution runtime to a semantics and portability layer over a pluggable durable execution backend (DBOS default, Restate optional), see new §3.1. Removes custom crash detection/retry/lease heartbeat from scope; reframes §8's resume protocol as semantics enforced jointly with the backend; adds explicit prior art boundaries against Temporal, Restate, DBOS, LangGraph family checkpointing, and MCP tool annotations, so the project's non redundant contribution, a portable, hash verifiable, runtime independent trajectory export, is stated once, explicitly, and can be evaluated on its own terms (including for CNCF Sandbox review, where "why not just use X" is always the first question asked). |
+| 1.2 | 2026-08-07 | Reconciles §3, §3.1, §5, and §12.0 with the Go port's already shipped Temporal adapter (`go/trajir/durable/temporal`, issues #16, #24). Formally recognizes Temporal as the production durable execution backend for Go, alongside DBOS (Python Phase 1A default) and Restate (optional additional adapter for either language), and adds rationale in §3.1 for why Go diverges from the DBOS-first posture. Clarifies that §5's "one backend adapter" Phase 1A gate and its "no second adapter" out-of-scope item apply to the Python/DBOS conformance track only, and do not restrict the Go port's own language appropriate backend. Updates §17 glossary and §18 references accordingly. Resolves #67. |
 
 ---
 
