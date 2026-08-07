@@ -1,18 +1,36 @@
 # Quickstart: Trajectory IR
 
-Get a **local** Trajectory IR checkout running. This matches APIs that exist on `main` today (Phase 1A library surface).
+Get a **local** Trajectory IR checkout running. APIs match `main` today.
 
-Trajectory IR is a **semantic layer** for agent runs: content-addressed nodes, effect classes, block-and-gate for non-idempotent tools, portable `.tir` packages, and optional sandbox mode. Crash detection and step memoization are delegated to a durable backend (DBOS for Python Phase 1A).
+Trajectory IR is a **semantic layer** for agent runs: content addressed nodes, effect classes, block and gate for non idempotent tools, portable `.tir` packages, and optional sandbox mode. Crash detection and step memoization are delegated to a durable backend (**Temporal for Go production**, **DBOS for the Python reference port**).
+
+**Phase 1B default path is Go.** Prefer [go/QUICKSTART.md](go/QUICKSTART.md) for first success. Python below is the **reference port** from Phase 1A.
 
 ## Prerequisites
 
-- Python **3.11+**
+- **Go 1.25.x** (primary for Phase 1B)
 - Git
-- Optional: Go **1.25.x** (only if you exercise `go/trajir`)
+- Optional: Python **3.11+** (reference port, parity, DBOS local profile)
 
 ---
 
-## 1. Install from a clone
+## 0. Go first (recommended)
+
+```bash
+git clone https://github.com/Coder-s-OG-s/Trajectory-IR.git
+cd Trajectory-IR/go
+go test ./...
+```
+
+Full Go walkthrough (minimal client snippet, demos, Temporal notes):
+
+**[go/QUICKSTART.md](go/QUICKSTART.md)**
+
+Epic for Go primary work: [#113](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/113).
+
+---
+
+## 1. Install Python reference port (optional)
 
 ```bash
 git clone https://github.com/Coder-s-OG-s/Trajectory-IR.git
@@ -24,11 +42,11 @@ pip install -U pip
 pip install -e ".[dev]"
 ```
 
-PyPI publish of ``trajectory-ir`` is a maintainer step after the git tag (see ``docs/RELEASE.md``). Until the wheel is on PyPI, **editable install from git** is the supported path.
+PyPI publish of ``trajectory-ir`` is a maintainer step after the git tag (see ``docs/RELEASE.md``). Until the wheel is on PyPI, **editable install from git** is the supported Python path.
 
 ---
 
-## 2. Minimal Python flow (client + NodeLog)
+## 2. Minimal Python flow (client + NodeLog, reference port)
 
 ```python
 from client.python.trajectory_client import (
@@ -258,8 +276,10 @@ Integration recipes and CI parity commands live in
 
 | Doc | Purpose |
 |-----|---------|
+| [go/QUICKSTART.md](go/QUICKSTART.md) | Phase 1B primary Go onboarding |
 | [docs/E2E_POSTGRES_CAS_THIN.md](docs/E2E_POSTGRES_CAS_THIN.md) | Full Postgres + CAS + thin package walkthrough |
-| [docs/PHASE_1A_STATUS.md](docs/PHASE_1A_STATUS.md) | What shipped vs deferred |
+| [docs/PHASE_1A_STATUS.md](docs/PHASE_1A_STATUS.md) | What shipped in Phase 1A |
+| [docs/PHASE_1B_STATUS.md](docs/PHASE_1B_STATUS.md) | Go primary program (when present on branch) |
 | [README.md](README.md) | Master specification |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | DCO, CI, local dev, integration services |
 
