@@ -14,8 +14,8 @@ from unreviewed automation. Package owner credentials never belong in the repo.
 
 | Surface | Where | Notes |
 |---------|--------|--------|
-| Python package | `pyproject.toml` → `project.version` | `0.1.0` on main until 0.1.1 bump at tag time |
-| Git tag | `v0.1.0` (shipped); next `v0.1.1` | Prefer `v` prefix |
+| Python package | `pyproject.toml` → `project.version` | Bump with the release PR (0.1.1 for this cut) |
+| Git tag | `v0.1.0` (shipped); `v0.1.1` after the release PR merges | Prefer `v` prefix |
 | Go module | `go/go.mod` | No separate semver tag yet; consumers use commit or a later policy |
 
 ### Choosing 0.1.0 vs 0.1.1
