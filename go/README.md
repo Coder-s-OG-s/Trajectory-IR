@@ -1,6 +1,7 @@
 # Go IR core
 
-Second language implementation of Trajectory IR primitives. Python remains the Phase 1A reference runtime.
+**Primary SDK for Phase 1B** (epic #113). Full Trajectory IR stack under `trajir/`.
+Python remains the supported **reference and parity port** from Phase 1A.
 
 ## Packages
 
