@@ -171,11 +171,95 @@ pkg = load_tir("run.tir")
 rehydrated = rehydrate_artifacts(store, pkg.artifacts_manifest)
 ```
 
+---
+
+## 9. End to end: Postgres + CAS + thin package
+
+Section 8 is the short form. For a full ordered walkthrough (copy pasteable
+commands, what is optional vs required, env table, Postgres NodeLog, and
+optional MinIO/S3), use:
+
+**[docs/E2E_POSTGRES_CAS_THIN.md](docs/E2E_POSTGRES_CAS_THIN.md)**
+
+### Laptop path (no Docker)
+
+Required: editable install + SQLite NodeLog + `FileSystemCAS`.
+
+1. Append a minimal seal path (client or `NodeLog.append`).
+2. `put_artifact` into a local CAS root.
+3. `export_tir(..., mode="thin", artifacts=[...], cas=store)`.
+4. `load_tir` + `rehydrate_artifacts` and assert bytes match.
+
+The one shot script in the doc file is the fastest check.
+
+### Optional: Postgres NodeLog
+
+```bash
+# From CONTRIBUTING.md — Docker Postgres 16
+export TRAJIR_DATABASE_URL=postgresql://trajir:trajir@localhost:5432/trajir
+pip install -e ".[dev,postgres]"
+```
+
+```python
+from drivers.postgres.log import open_postgres_node_log
+
+log = open_postgres_node_log()  # TRAJIR_DATABASE_URL
+log.append("DECISION", 1, {"plan": {}}, "e2e-pg", "demo", seq=1)
+log.close()
+```
+
+`export_tir` works against `PostgresNodeLog` the same way as SQLite when you
+pass the log instance and `tenant_id`.
+
+### Optional: S3 compatible CAS
+
+```bash
+export TRAJIR_S3_ENDPOINT_URL=http://127.0.0.1:9000
+export TRAJIR_S3_BUCKET=trajir
+export AWS_ACCESS_KEY_ID=minioadmin
+export AWS_SECRET_ACCESS_KEY=minioadmin
+pip install -e ".[dev,s3]"
+```
+
+```python
+from drivers.s3.cas import S3CAS, build_s3_client_from_env
+from trajectory_ir.storage import put_artifact, rehydrate_artifacts
+
+store = S3CAS(build_s3_client_from_env(), bucket="trajir")
+ref = put_artifact(store, b"payload", logical_path="out.bin")
+rehydrate_artifacts(store, [{"content_hash": ref.content_hash}])
+```
+
+### Env table (quick reference)
+
+| Variable | Purpose |
+|----------|---------|
+| `TRAJIR_DATABASE_URL` | Postgres DSN for `open_postgres_node_log` |
+| `DATABASE_URL` | Fallback DSN if `TRAJIR_DATABASE_URL` is unset |
+| `TRAJIR_S3_ENDPOINT_URL` | MinIO / custom S3 endpoint |
+| `TRAJIR_S3_BUCKET` | Bucket name for `S3CAS` |
+| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | S3 credentials |
+
+Integration recipes and CI parity commands live in
+[CONTRIBUTING.md](CONTRIBUTING.md). Status of what is shipped vs deferred:
+[docs/PHASE_1A_STATUS.md](docs/PHASE_1A_STATUS.md).
+
+### Host demos
+
+| Example | Role |
+|---------|------|
+| `examples/host_loop/` | Minimal public client step |
+| `examples/adoption_host/` | Host loop + optional CAS / thin package (when present on your branch) |
+| `examples/kill-mid-deploy/` | Crash safety / durable resume |
+
+---
+
 ## What's next
 
 | Doc | Purpose |
 |-----|---------|
+| [docs/E2E_POSTGRES_CAS_THIN.md](docs/E2E_POSTGRES_CAS_THIN.md) | Full Postgres + CAS + thin package walkthrough |
 | [docs/PHASE_1A_STATUS.md](docs/PHASE_1A_STATUS.md) | What shipped vs deferred |
 | [README.md](README.md) | Master specification |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | DCO, CI, local dev |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | DCO, CI, local dev, integration services |
 
