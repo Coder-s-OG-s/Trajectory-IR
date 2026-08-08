@@ -20,6 +20,7 @@ env:
   GO_COV_FAIL_UNDER: "50"
 
 jobs:
+  # ---- Fast gate: required, aim to stay under ~10 minutes, no live services ----
   dco:
     name: DCO
     runs-on: ubuntu-latest
@@ -102,12 +103,6 @@ jobs:
           name: coverage-python-${{ matrix.python-version }}
           path: coverage-python.xml
           if-no-files-found: ignore
-
-      - name: E2E crash/resume tests
-        run: pytest test/e2e -q
-
-      - name: Conformance R01–R08
-        run: pytest conformance/ -q
 
   package-smoke:
     name: Package smoke
@@ -215,6 +210,37 @@ jobs:
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
           govulncheck ./...
+
+  # ---- Deep gate: required, allowed to run slower ----
+  conformance:
+    name: Conformance & E2E (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install package and dev tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: E2E crash/resume tests
+        run: pytest test/e2e -q
+
+      - name: Conformance R01–R08
+        run: pytest conformance/ -q
 
   # Phase B: real service integrations (separate from Quality so Phase A stays fast).
   integration-postgres:
