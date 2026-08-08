@@ -47,6 +47,10 @@ still require a matching `Signed-off-by`.
 2. Keep the change focused.
 3. Fill in the PR template.
 4. Wait for CI to go green.
+5. Set the **Milestone** on both the issue and the PR (see
+   [docs/MILESTONES.md](docs/MILESTONES.md)). Right now: finish **v0.1.1** first,
+   then **Phase 1B Go primary SDK**. Park deferred product ideas under
+   **Future deferred product**.
 
 ### Automated CI (what runs today)
 
