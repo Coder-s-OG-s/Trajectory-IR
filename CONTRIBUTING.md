@@ -69,6 +69,8 @@ Fast gate:
 | **Package smoke** | `python -m build`, install the wheel into a clean venv, import smoke |
 | **Security (pip-audit)** | `pip-audit --skip-editable` on the installed dependency tree |
 | **Go** | hash goldens, `go/trajir/...` **coverage floor** (`GO_COV_FAIL_UNDER`, default 50%), `go test ./...`, `govulncheck` |
+| **Integration (Postgres)** | Live `PostgresNodeLog` against a Postgres 16 service, Python (`test/integration/test_postgres_live.py`) and Go (`go test ./trajir/postgres/...`) |
+| **Integration (MinIO)** | Live `S3CAS` against MinIO, Python only for now (`test/integration/test_s3_minio_live.py`); Go's `trajir/cas.ObjectAPI` still only has `MemoryObjectAPI` fakes, so a live Go MinIO step needs a real S3 client adapter first (issue #129) |
 
 Deep gate:
 
