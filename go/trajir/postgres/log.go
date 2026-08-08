@@ -116,6 +116,10 @@ func (l *NodeLog) Append(
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	if _, err := tx.Exec("SAVEPOINT insert_node"); err != nil {
+		return nil, err
+	}
+
 	_, err = tx.Exec(
 		`INSERT INTO nodes
 		 (id, trajectory_id, tenant_id, step_n, seq, kind, payload_json, ts)
@@ -124,7 +128,12 @@ func (l *NodeLog) Append(
 		n.ID, n.TrajectoryID, n.TenantID, step, n.Seq, n.Kind, string(payloadJSON), n.TS,
 	)
 	if err != nil {
-		// Unique slot index: different id same slot.
+		// Unique slot index: different id same slot. Postgres aborts the
+		// transaction on any statement error, so roll back to the savepoint
+		// first or the slot lookup below would fail too.
+		if _, rerr := tx.Exec("ROLLBACK TO SAVEPOINT insert_node"); rerr != nil {
+			return nil, rerr
+		}
 		owner, oerr := slotOwner(tx, tenantID, trajectoryID, stepN, seq, kind)
 		if oerr != nil {
 			return nil, err
