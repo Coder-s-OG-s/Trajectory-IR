@@ -195,6 +195,13 @@ jobs:
         uses: actions/setup-python@v7
         with:
           python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install package for fixture generation
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
 
       - name: Generate cross language .tir fixture (Python export_tir)
         run: python scripts/gen_tir_fixture.py
