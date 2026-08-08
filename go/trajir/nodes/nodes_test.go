@@ -2,9 +2,11 @@ package nodes_test
 
 import (
 	"encoding/json"
+	"math"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -107,6 +109,76 @@ func TestUnknownKindRejected(t *testing.T) {
 	_, err := nodes.NewNode("NOT_A_KIND", "t1", "demo", &step, 1, map[string]any{})
 	if err == nil {
 		t.Fatal("expected unknown kind error")
+	}
+}
+
+func TestValidateIDComponentRejectsInvalidValues(t *testing.T) {
+	cases := []struct {
+		name  string
+		value string
+	}{
+		{"empty", ""},
+		{"invalid utf8", string([]byte{0xff, 0xfe})},
+		{"pipe delimiter", "a|b"},
+		{"control char", "a\x00b"},
+		{"too long", strings.Repeat("x", 513)},
+	}
+	for _, c := range cases {
+		c := c
+		t.Run(c.name, func(t *testing.T) {
+			if err := nodes.ValidateIDComponent("field", c.value); err == nil {
+				t.Fatalf("expected error for %q", c.value)
+			}
+		})
+	}
+}
+
+func TestValidateIDComponentAccepts(t *testing.T) {
+	if err := nodes.ValidateIDComponent("field", "ok-value"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestPayloadHashRejectsUnmarshalableValue(t *testing.T) {
+	_, err := nodes.PayloadHash(map[string]any{"bad": math.NaN()})
+	if err == nil {
+		t.Fatal("expected json marshal error for NaN")
+	}
+}
+
+func TestNodeIDRejectsInvalidComponents(t *testing.T) {
+	if _, err := nodes.NodeID("", "t1", nil, 0, "INPUT", "h"); err == nil {
+		t.Fatal("expected error for empty tenant_id")
+	}
+	if _, err := nodes.NodeID("demo", "", nil, 0, "INPUT", "h"); err == nil {
+		t.Fatal("expected error for empty trajectory_id")
+	}
+}
+
+func TestNewNodeRejectsInvalidComponents(t *testing.T) {
+	if _, err := nodes.NewNode("INPUT", "t1", "", nil, 0, nil); err == nil {
+		t.Fatal("expected error for empty tenant_id")
+	}
+	if _, err := nodes.NewNode("INPUT", "", "demo", nil, 0, nil); err == nil {
+		t.Fatal("expected error for empty trajectory_id")
+	}
+}
+
+func TestNewNodePropagatesPayloadHashError(t *testing.T) {
+	_, err := nodes.NewNode("INPUT", "t1", "demo", nil, 0, map[string]any{"ts": 1.0})
+	if err == nil {
+		t.Fatal("expected error for ts key in payload")
+	}
+}
+
+func TestNewNodeDefaultsNilPayload(t *testing.T) {
+	step := 1
+	n, err := nodes.NewNode("INPUT", "t1", "demo", &step, 0, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n.Payload == nil {
+		t.Fatal("expected non-nil default payload")
 	}
 }
 

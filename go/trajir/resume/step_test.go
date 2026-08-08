@@ -11,6 +11,7 @@ import (
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/effects"
 	nodelog "github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/log"
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/resume"
+	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/sandbox"
 )
 
 func testEnv(t *testing.T) (*nodelog.NodeLog, *durable.Memory) {
@@ -206,5 +207,135 @@ func TestRunStepGateWhenToolCallAlreadyLogged(t *testing.T) {
 	}
 	if deploys.Load() != 0 {
 		t.Fatalf("deploy ran %d times, want 0", deploys.Load())
+	}
+}
+
+func TestRunStepRequiresLogAndBackend(t *testing.T) {
+	ctx := context.Background()
+	nl, backend := testEnv(t)
+	model := func(context.Context, map[string]any) (map[string]any, error) {
+		return map[string]any{"tool_calls": []any{}}, nil
+	}
+
+	if _, err := resume.RunStep(ctx, resume.RunStepConfig{Backend: backend, TrajectoryID: "t1"}, 1, model, nil); err == nil {
+		t.Fatal("expected error for nil Log")
+	}
+	if _, err := resume.RunStep(ctx, resume.RunStepConfig{Log: nl, TrajectoryID: "t1"}, 1, model, nil); err == nil {
+		t.Fatal("expected error for nil Backend")
+	}
+}
+
+func TestRunStepPropagatesModelError(t *testing.T) {
+	ctx := context.Background()
+	nl, backend := testEnv(t)
+	boom := errors.New("model boom")
+	model := func(context.Context, map[string]any) (map[string]any, error) {
+		return nil, boom
+	}
+	cfg := resume.RunStepConfig{Log: nl, Backend: backend, TrajectoryID: "t1", TenantID: "demo"}
+	if _, err := resume.RunStep(ctx, cfg, 1, model, nil); !errors.Is(err, boom) {
+		t.Fatalf("err=%v want %v", err, boom)
+	}
+}
+
+func TestRunStepMissingToolCallsInPlan(t *testing.T) {
+	ctx := context.Background()
+	nl, backend := testEnv(t)
+	model := func(context.Context, map[string]any) (map[string]any, error) {
+		return map[string]any{}, nil
+	}
+	cfg := resume.RunStepConfig{Log: nl, Backend: backend, TrajectoryID: "t1", TenantID: "demo"}
+	if _, err := resume.RunStep(ctx, cfg, 1, model, nil); err == nil {
+		t.Fatal("expected error for plan missing tool_calls")
+	}
+}
+
+func TestRunStepUnknownTool(t *testing.T) {
+	ctx := context.Background()
+	nl, backend := testEnv(t)
+	model := func(context.Context, map[string]any) (map[string]any, error) {
+		return map[string]any{
+			"tool_calls": []any{map[string]any{"name": "ghost"}},
+		}, nil
+	}
+	cfg := resume.RunStepConfig{Log: nl, Backend: backend, TrajectoryID: "t1", TenantID: "demo", Tools: map[string]resume.Tool{}}
+	if _, err := resume.RunStep(ctx, cfg, 1, model, nil); err == nil {
+		t.Fatal("expected error for unknown tool")
+	}
+}
+
+func TestRunStepToolCallMissingName(t *testing.T) {
+	ctx := context.Background()
+	nl, backend := testEnv(t)
+	model := func(context.Context, map[string]any) (map[string]any, error) {
+		return map[string]any{
+			"tool_calls": []any{map[string]any{"args": map[string]any{}}},
+		}, nil
+	}
+	cfg := resume.RunStepConfig{Log: nl, Backend: backend, TrajectoryID: "t1", TenantID: "demo"}
+	if _, err := resume.RunStep(ctx, cfg, 1, model, nil); err == nil {
+		t.Fatal("expected error for tool_call missing name")
+	}
+}
+
+func TestRunStepSandboxModeBlocksNonIdempotentWrite(t *testing.T) {
+	ctx := context.Background()
+	nl, backend := testEnv(t)
+	var deploys atomic.Int32
+	cfg := resume.RunStepConfig{
+		Log: nl, Backend: backend, TrajectoryID: "t1", TenantID: "demo",
+		Mode: sandbox.ModeSandbox,
+		Tools: map[string]resume.Tool{
+			"deploy_server": {
+				Name:   "deploy_server",
+				Effect: effects.NON_IDEMPOTENT_WRITE,
+				Fn: func(map[string]any) (any, error) {
+					deploys.Add(1)
+					return "deployed", nil
+				},
+			},
+		},
+	}
+	model := func(context.Context, map[string]any) (map[string]any, error) {
+		return map[string]any{
+			"tool_calls": []any{map[string]any{"name": "deploy_server"}},
+		}, nil
+	}
+	if _, err := resume.RunStep(ctx, cfg, 1, model, nil); err == nil {
+		t.Fatal("expected sandbox rejection")
+	}
+	if deploys.Load() != 0 {
+		t.Fatalf("deploys=%d, want 0", deploys.Load())
+	}
+}
+
+func TestRunStepNonGatedToolErrorNotLogged(t *testing.T) {
+	ctx := context.Background()
+	nl, backend := testEnv(t)
+	boom := errors.New("tool boom")
+	cfg := resume.RunStepConfig{
+		Log: nl, Backend: backend, TrajectoryID: "t1", TenantID: "demo",
+		Tools: map[string]resume.Tool{
+			"echo": {
+				Name:   "echo",
+				Effect: effects.PURE,
+				Fn:     func(map[string]any) (any, error) { return nil, boom },
+			},
+		},
+	}
+	model := func(context.Context, map[string]any) (map[string]any, error) {
+		return map[string]any{
+			"tool_calls": []any{map[string]any{"name": "echo"}},
+		}, nil
+	}
+	if _, err := resume.RunStep(ctx, cfg, 1, model, nil); !errors.Is(err, boom) {
+		t.Fatalf("err=%v want %v", err, boom)
+	}
+	ok, err := nl.Has("t1", 1, "TOOL_CALL", intPtr(2))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok {
+		t.Fatal("TOOL_CALL should not be logged when non-gated tool errors")
 	}
 }
