@@ -2,6 +2,22 @@
 
 Do this after CI has produced green check names on `main` or on a PR.
 
+## Status (issue #128, part 1)
+
+Re-verified 2026-08-08 against the live repo:
+
+```bash
+gh api repos/Coder-s-OG-s/Trajectory-IR/branches/main/protection
+# {"message":"Upgrade to GitHub Pro or make this repository public to enable
+#  this feature.","status":"403"}
+```
+
+Branch protection is still blocked on the plan/visibility decision below.
+Nothing else in this doc can take effect (main stays ungated, a red PR can
+still be merged by anyone with write access) until a maintainer picks one of
+the two options and someone with admin rights on the repo runs the CLI step
+near the bottom of this doc.
+
 ## GitHub plan note (important)
 
 This repository is currently **private**. On GitHub’s free plan for private
