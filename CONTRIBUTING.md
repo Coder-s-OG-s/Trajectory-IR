@@ -54,15 +54,29 @@ still require a matching `Signed-off-by`.
 
 ### Automated CI (what runs today)
 
-Defined in `.github/workflows/ci.yml`:
+Defined in `.github/workflows/ci.yml`, grouped into a **fast gate** (no live
+services, aims to stay under ~10 minutes) and a **deep gate** (allowed to run
+slower). Both groups run on every PR; both are meant to be required once
+branch protection is on (see
+[docs/maintainer-branch-protection.md](docs/maintainer-branch-protection.md)).
+
+Fast gate:
 
 | Check | What it does |
 |-------|----------------|
 | **DCO** | Every commit on the PR has `Signed-off-by` |
-| **Quality** | install, Ruff, Mypy, hash goldens, unit tests with **coverage floor** (`PYTHON_COV_FAIL_UNDER`, default 80%), e2e, full `conformance/` R01–R08 (Python 3.11 and 3.12) |
+| **Quality** | install, Ruff, Mypy, hash goldens, unit tests with **coverage floor** (`PYTHON_COV_FAIL_UNDER`, default 80%) (Python 3.11 and 3.12) |
 | **Package smoke** | `python -m build`, install the wheel into a clean venv, import smoke |
 | **Security (pip-audit)** | `pip-audit --skip-editable` on the installed dependency tree |
-| **Go** | hash goldens, cross language `.tir` round trip (Python `export_tir` fixture, Go `tir.Import`), `go/trajir/...` **coverage floor** (`GO_COV_FAIL_UNDER`, default 50%), `go test ./...`, `govulncheck` |
+| **Go** | hash goldens, `go/trajir/...` **coverage floor** (`GO_COV_FAIL_UNDER`, default 50%), `go test ./...`, `govulncheck` |
+| **Integration (Postgres)** | Live `PostgresNodeLog` against a Postgres 16 service, Python (`test/integration/test_postgres_live.py`) and Go (`go test ./trajir/postgres/...`) |
+| **Integration (MinIO)** | Live `S3CAS` against MinIO, Python only for now (`test/integration/test_s3_minio_live.py`); Go's `trajir/cas.ObjectAPI` still only has `MemoryObjectAPI` fakes, so a live Go MinIO step needs a real S3 client adapter first (issue #129) |
+
+Deep gate:
+
+| Check | What it does |
+|-------|----------------|
+| **Conformance & E2E** | e2e crash/resume plus full `conformance/` R01-R08 (Python 3.11 and 3.12) |
 | **Integration (Postgres)** | Live `PostgresNodeLog` against a Postgres 16 service (`test/integration/test_postgres_live.py`) |
 | **Integration (MinIO)** | Live `S3CAS` against MinIO (`test/integration/test_s3_minio_live.py`) |
 
