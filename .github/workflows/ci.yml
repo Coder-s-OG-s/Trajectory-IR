@@ -17,10 +17,14 @@ permissions:
 env:
   # Coverage floors (Phase A). Raise only after measured green baselines improve.
   PYTHON_COV_FAIL_UNDER: "80"
-  # Measured baseline on 2026-08-08: 65.0% statements on go/trajir/...; floor
-  # raised from 50 with headroom, next step targets 70 once more Go drivers
-  # land coverage, per issue #128 part 3.
-  GO_COV_FAIL_UNDER: "60"
+  # Measured baseline on 2026-08-08: 70.2% statements on go/trajir/...; floor
+  # raised from 50 to 70 per issue #131 by adding unit tests on graft, nodes,
+  # redact, resume, sandbox, and tir. postgres and durable/temporal stay low
+  # under this floor since their real logic only runs against a live service
+  # in the separate Integration jobs, not here; next step toward 80 needs
+  # either mocked coverage for those two packages or a floor computed with
+  # them excluded.
+  GO_COV_FAIL_UNDER: "70"
 
 jobs:
   # ---- Fast gate: required, aim to stay under ~10 minutes, no live services ----

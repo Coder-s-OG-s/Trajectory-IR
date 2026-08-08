@@ -81,12 +81,22 @@ Set in `.github/workflows/ci.yml` as `env:`:
 | Variable | Default | Applies to |
 |----------|---------|------------|
 | `PYTHON_COV_FAIL_UNDER` | `80` | unit suite on `trajectory_ir` + `drivers` + `client` |
-| `GO_COV_FAIL_UNDER` | `60` | `go/trajir/...` via `scripts/check_go_coverage.sh` |
+| `GO_COV_FAIL_UNDER` | `70` | `go/trajir/...` via `scripts/check_go_coverage.sh` |
 
 Raise only after a measured green baseline; do not drop floors without a PR.
 `GO_COV_FAIL_UNDER` moved from 50 to 60 on a measured 65.0% baseline
 (2026-08-08, issue #128 part 3); next step targets 70, then 80, as more Go
 drivers land coverage.
+
+Measured baseline on 2026-08-08 was 70.2% statements on `go/trajir/...`
+(issue #131), up from a 65.0% baseline by adding unit tests on `graft`,
+`nodes`, `redact`, `resume`, `sandbox`, and `tir`. `postgres` (4.9%) and
+`durable/temporal` (28.7%) hold the total well below 100% under this
+unit-only floor: their real code paths only run against a live Postgres or
+Temporal service in the separate Integration jobs, not in the `Go` job that
+enforces this floor. The written path to 80 is either mocked unit coverage
+for those two packages, or computing the floor over `go/trajir/...` with
+them excluded and holding them to their own live-service gates instead.
 
 ## Post-feature landing checklist
 

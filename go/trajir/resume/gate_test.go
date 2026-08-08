@@ -99,6 +99,27 @@ func TestGateKeysOnSeqNotSiblingTool(t *testing.T) {
 	}
 }
 
+func TestGatedToolPropagatesToolError(t *testing.T) {
+	nl := openLog(t)
+	boom := errors.New("boom")
+	tool := func(map[string]any) (any, error) {
+		return nil, boom
+	}
+	gated := resume.MakeGatedToolCall(nl, "t1", "demo", 1, 2, "failing_tool", tool)
+
+	_, err := gated(nil)
+	if !errors.Is(err, boom) {
+		t.Fatalf("err=%v want %v", err, boom)
+	}
+	ok, err := nl.Has("t1", 1, "TOOL_RESULT", intPtr(3))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok {
+		t.Fatal("TOOL_RESULT should not be appended when tool errors")
+	}
+}
+
 func TestErrorTextIncludesStepAndTool(t *testing.T) {
 	e := &resume.BlockedNeedsGate{StepN: 3, ToolName: "deploy_server"}
 	msg := e.Error()
