@@ -62,7 +62,7 @@ Defined in `.github/workflows/ci.yml`:
 | **Quality** | install, Ruff, Mypy, hash goldens, unit tests with **coverage floor** (`PYTHON_COV_FAIL_UNDER`, default 80%), e2e, full `conformance/` R01–R08 (Python 3.11 and 3.12) |
 | **Package smoke** | `python -m build`, install the wheel into a clean venv, import smoke |
 | **Security (pip-audit)** | `pip-audit --skip-editable` on the installed dependency tree |
-| **Go** | hash goldens, `go/trajir/...` **coverage floor** (`GO_COV_FAIL_UNDER`, default 50%), `go test ./...`, `govulncheck` |
+| **Go** | `go vet`, hash goldens, `go/trajir/...` **coverage floor** (`GO_COV_FAIL_UNDER`, default 60%), `go test ./...`, `govulncheck` |
 | **Integration (Postgres)** | Live `PostgresNodeLog` against a Postgres 16 service (`test/integration/test_postgres_live.py`) |
 | **Integration (MinIO)** | Live `S3CAS` against MinIO (`test/integration/test_s3_minio_live.py`) |
 

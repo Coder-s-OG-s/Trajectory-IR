@@ -17,7 +17,10 @@ permissions:
 env:
   # Coverage floors (Phase A). Raise only after measured green baselines improve.
   PYTHON_COV_FAIL_UNDER: "80"
-  GO_COV_FAIL_UNDER: "50"
+  # Measured baseline on 2026-08-08: 65.0% statements on go/trajir/...; floor
+  # raised from 50 with headroom, next step targets 70 once more Go drivers
+  # land coverage, per issue #128 part 3.
+  GO_COV_FAIL_UNDER: "60"
 
 jobs:
   dco:
@@ -186,6 +189,10 @@ jobs:
         with:
           go-version: "1.25.x"
           cache-dependency-path: go/go.sum
+
+      - name: go vet
+        working-directory: go
+        run: go vet ./...
 
       - name: Cross language hash goldens (Go)
         working-directory: go
