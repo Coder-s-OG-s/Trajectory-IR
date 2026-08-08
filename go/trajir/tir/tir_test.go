@@ -258,7 +258,7 @@ func TestImportPythonGoldenFixture(t *testing.T) {
 	root := filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", ".."))
 	golden := filepath.Join(root, "testdata", "sample_thin.tir")
 	if _, err := os.Stat(golden); err != nil {
-		t.Skipf("golden fixture missing (generate with scripts/gen_tir_fixture.py): %v", err)
+		t.Fatalf("golden fixture missing (generate with scripts/gen_tir_fixture.py): %v", err)
 	}
 	dest := openLog(t, "from-py.sqlite")
 	pkg, err := tir.Import(golden, dest)
