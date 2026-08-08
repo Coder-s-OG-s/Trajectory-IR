@@ -2,6 +2,22 @@
 
 Do this after CI has produced green check names on `main` or on a PR.
 
+## Status (issue #128, part 1)
+
+Re-verified 2026-08-08 against the live repo:
+
+```bash
+gh api repos/Coder-s-OG-s/Trajectory-IR/branches/main/protection
+# {"message":"Upgrade to GitHub Pro or make this repository public to enable
+#  this feature.","status":"403"}
+```
+
+Branch protection is still blocked on the plan/visibility decision below.
+Nothing else in this doc can take effect (main stays ungated, a red PR can
+still be merged by anyone with write access) until a maintainer picks one of
+the two options and someone with admin rights on the repo runs the CLI step
+near the bottom of this doc.
+
 ## GitHub plan note (important)
 
 This repository is currently **private**. On GitHub’s free plan for private
@@ -27,19 +43,28 @@ GitHub → Settings → Branches → Branch protection rule for `main` (after pl
 
 ## Status checks to require
 
-Match the names shown in the Actions UI (Phase A, issue #81):
+Match the names shown in the Actions UI (Phase A, issue #81). Fast gate and
+deep gate are both required once protection is on (issue #128 part 2 split
+`Quality` so its e2e/conformance steps run as their own deep gate job):
+
+Fast gate:
 
 1. `DCO` (pull requests only; may appear after the first PR with the DCO job)
-2. `Quality (Python 3.11)` — ruff, mypy, unit coverage floor, e2e, conformance
-3. `Quality (Python 3.12)` — same as 3.11
-4. `Package smoke` — `python -m build` + install wheel + import smoke
-5. `Security (pip-audit)` — first-class dependency audit (not only a unit test)
-6. `Go` — trajir coverage floor, full `go test ./...`, `govulncheck`
+2. `Quality (Python 3.11)`: ruff, mypy, unit coverage floor
+3. `Quality (Python 3.12)`: same as 3.11
+4. `Package smoke`: `python -m build` + install wheel + import smoke
+5. `Security (pip-audit)`: first-class dependency audit (not only a unit test)
+6. `Go`: trajir coverage floor, full `go test ./...`, `govulncheck`
+
+Deep gate:
+
+7. `Conformance & E2E (Python 3.11)`: e2e crash/resume, full `conformance/` R01-R08
+8. `Conformance & E2E (Python 3.12)`: same as 3.11
 
 Optional after Phase B is proven stable (issue #85):
 
-7. `Integration (Postgres)`
-8. `Integration (MinIO)`
+9. `Integration (Postgres)`
+10. `Integration (MinIO)`
 
 If GitHub shows a slightly different label, use the exact string from the check run.
 
@@ -59,6 +84,9 @@ Set in `.github/workflows/ci.yml` as `env:`:
 | `GO_COV_FAIL_UNDER` | `70` | `go/trajir/...` via `scripts/check_go_coverage.sh` |
 
 Raise only after a measured green baseline; do not drop floors without a PR.
+`GO_COV_FAIL_UNDER` moved from 50 to 60 on a measured 65.0% baseline
+(2026-08-08, issue #128 part 3); next step targets 70, then 80, as more Go
+drivers land coverage.
 
 Measured baseline on 2026-08-08 was 70.2% statements on `go/trajir/...`
 (issue #131), up from a 65.0% baseline by adding unit tests on `graft`,
@@ -104,7 +132,9 @@ gh api -X PUT repos/Coder-s-OG-s/Trajectory-IR/branches/main/protection \
       "Quality (Python 3.12)",
       "Package smoke",
       "Security (pip-audit)",
-      "Go"
+      "Go",
+      "Conformance & E2E (Python 3.11)",
+      "Conformance & E2E (Python 3.12)"
     ]
   },
   "enforce_admins": false,
