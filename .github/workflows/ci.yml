@@ -191,6 +191,18 @@ jobs:
         working-directory: go
         run: go test ./trajir/nodes -count=1 -run 'TestHashVectors|TestKeyOrder'
 
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Generate cross language .tir fixture (Python export_tir)
+        run: python scripts/gen_tir_fixture.py
+
+      - name: Cross language .tir round trip (Go imports Python export)
+        working-directory: go
+        run: go test ./trajir/tir -count=1 -run TestImportPythonGoldenFixture -v
+
       - name: Test Go IR core with coverage floor
         env:
           GO_COV_FAIL_UNDER: ${{ env.GO_COV_FAIL_UNDER }}
