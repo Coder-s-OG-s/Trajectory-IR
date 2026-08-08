@@ -81,9 +81,12 @@ Set in `.github/workflows/ci.yml` as `env:`:
 | Variable | Default | Applies to |
 |----------|---------|------------|
 | `PYTHON_COV_FAIL_UNDER` | `80` | unit suite on `trajectory_ir` + `drivers` + `client` |
-| `GO_COV_FAIL_UNDER` | `50` | `go/trajir/...` via `scripts/check_go_coverage.sh` |
+| `GO_COV_FAIL_UNDER` | `60` | `go/trajir/...` via `scripts/check_go_coverage.sh` |
 
 Raise only after a measured green baseline; do not drop floors without a PR.
+`GO_COV_FAIL_UNDER` moved from 50 to 60 on a measured 65.0% baseline
+(2026-08-08, issue #128 part 3); next step targets 70, then 80, as more Go
+drivers land coverage.
 
 ## Post-feature landing checklist
 
