@@ -38,8 +38,8 @@ Match the names shown in the Actions UI (Phase A, issue #81):
 
 Optional after Phase B is proven stable (issue #85):
 
-7. `Integration (Postgres)`
-8. `Integration (MinIO)`
+7. `Integration (Postgres)`: Python and Go (`go test ./trajir/postgres/...`), both live against the same Postgres 16 service
+8. `Integration (MinIO)`: Python only; Go's `trajir/cas.ObjectAPI` has no real client adapter yet, so this job has no Go step (issue #129)
 
 If GitHub shows a slightly different label, use the exact string from the check run.
 
