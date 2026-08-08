@@ -1,31 +1,29 @@
-# Trajectory IR v0.1.1 (draft)
+# Trajectory IR v0.1.1
 
 Patch release after **v0.1.0**: reliability and honesty fixes for the Phase 1A
-library surface, plus CI Phase B live driver jobs. No new Phase 2 scope.
-
-**Status:** changelog and notes prepared on `main` (or the prep PR). Tag only
-after `pyproject.toml` version is `0.1.1`, CHANGELOG section is renamed from
-`[Unreleased]` to `[0.1.1] - YYYY-MM-DD`, and `main` is green.
+library surface, CI Phase B live driver jobs, adoption demo and E2E docs, and
+Go Temporal durable backend wording. No new Phase 2 scope.
 
 ## Highlights
 
 - **CI Phase B**: live Postgres NodeLog and MinIO S3 CAS integration jobs
-- **Fail closed storage**: missing artifact `content_hash` raises; thin export
-  can verify CAS presence (already on 0.1.0 path, tightened here)
-- **Atomic `.tir` export**: no half-written package at the destination path
-- **Postgres claim honesty**: real DB errors are not misread as “lost the race”
-- **Client IR history**: plain (non-gated) tools leave `TOOL_CALL` / `TOOL_RESULT`
+- **Adoption**: `examples/adoption_host` (public client + optional CAS thin package)
+- **Docs**: E2E Postgres + CAS + thin `.tir` walkthrough
+- **Fail closed storage**: missing artifact `content_hash` raises
+- **Atomic `.tir` export**: no half written package at the destination path
+- **Postgres claim honesty**: real DB errors are not misread as lost race
+- **Client IR history**: plain (non gated) tools leave `TOOL_CALL` / `TOOL_RESULT`
 - **Client `resume()`**: real reattach with history check, not a silent alias
 - **Go / Python effect parity**: `openWorldHint` fails closed in Go
 - **Projector safety**: `CONSTRAINT` always survives policy construction
-- **Docs**: Go durable Memory / LocalSQLite called out as test fakes
+- **Spec**: Temporal recognized as Go production durable backend (#67)
 
 ## Install (from source)
 
 ```bash
 git clone https://github.com/Coder-s-OG-s/Trajectory-IR.git
 cd Trajectory-IR
-git checkout v0.1.1   # after the tag exists
+git checkout v0.1.1
 pip install -e ".[dev]"
 # optional: pip install -e ".[s3]" or ".[postgres]"
 ```
@@ -36,7 +34,13 @@ When PyPI is published:
 pip install trajectory-ir==0.1.1
 ```
 
-## What landed since v0.1.0 (on main)
+Go:
+
+```bash
+cd go && go test ./...
+```
+
+## What landed since v0.1.0
 
 | Area | PRs (approx.) |
 |------|----------------|
@@ -45,54 +49,45 @@ pip install trajectory-ir==0.1.1
 | Go `openWorldHint` fail closed | #99 |
 | Plain tool logging in client | #100 |
 | CONSTRAINT always in projector policy | #101 |
-| Durable test-fake docs (Go) | #102 |
+| Durable test fake docs (Go) | #102 |
 | Missing `content_hash` fail closed | #103 |
 | NodeLog connection GC close | #104 |
 | Atomic `.tir` write | #105 |
 | Postgres `claim_tool_call` error propagation | #106 |
 | Client `resume()` reattach | #107 |
-
-## Optional fold-ins before the tag
-
-Merge these if you want them in the same patch (recommended for adopters):
-
-| PR | Issue | Topic |
-|----|-------|--------|
-| #108 | #87 | Adoption host demo (public client + optional CAS thin package) |
-| #109 | #88 | QUICKSTART / docs E2E: Postgres NodeLog, CAS, thin `.tir` |
-
-After merge: add CHANGELOG lines under Added, re-run CI on `main`, then tag.
+| Adoption host demo | #108 |
+| QUICKSTART E2E Postgres + CAS + thin | #109 |
+| Release notes prep | #110 |
+| Go Temporal backend wording in README | #112 |
 
 ## Not in 0.1.1
 
-Same non-goals as 0.1.0:
+Same non goals as 0.1.0:
 
 - Package digital signatures (`SIGNATURE` reserved)
 - Live Restate cluster product packaging
 - Fluid / k8s-fluid profile
-- Multi-tenant SaaS control plane
+- Multi tenant SaaS control plane
 - Automated PyPI Trusted Publishing (manual upload still optional)
+- Phase 1B Go primary program (tracked under epic #113; not part of this patch)
 
-## Spec note
+## Maintainer: after this release commit merges
 
-Master README still names DBOS as the Phase 1A Python default; Go production
-Temporal is implemented. Residual wording tracked in **issue #67** (owned
-separately; not required to close for 0.1.1).
+1. Confirm CI green on the merge commit on `main`.
+2. Annotated tag:
 
-## How to cut the tag (maintainers)
+```bash
+git checkout main
+git pull origin main
+git tag -a v0.1.1 -m "Trajectory IR v0.1.1 — post-0.1.0 reliability and Phase B CI"
+git push origin v0.1.1
+```
 
-See [RELEASE.md](RELEASE.md). Short form:
+3. Publish a GitHub Release for `v0.1.1` using this file as the body.
+4. Optional: build + `twine upload` for PyPI (`trajectory-ir==0.1.1`).
 
-1. Merge any remaining fold-ins (#108 / #109 if desired).
-2. Bump `pyproject.toml` → `version = "0.1.1"`.
-3. Move CHANGELOG `[Unreleased]` body under `## [0.1.1] - <date>` and leave a
-   fresh empty `[Unreleased]`.
-4. Ensure CI is green on the release commit.
-5. `git tag -a v0.1.1 -m "Trajectory IR v0.1.1 — post-0.1.0 reliability and Phase B CI"`
-6. `git push origin v0.1.1` and publish a GitHub Release with this file as body.
-7. Optional: build + `twine upload` for PyPI.
+See [RELEASE.md](RELEASE.md).
 
 ## Full changelog
 
-See [CHANGELOG.md](../CHANGELOG.md) section `[Unreleased]` until the tag, then
-`[0.1.1]`.
+See [CHANGELOG.md](../CHANGELOG.md) section `[0.1.1]`.

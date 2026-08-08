@@ -7,11 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Post-`v0.1.0` work intended for **0.1.1**. Do not tag until this section is
-moved under `## [0.1.1]` and `pyproject.toml` `project.version` is bumped.
-Open PRs that may still fold in before the tag: adoption host demo (#87 / PR
-#108), QUICKSTART E2E Postgres+CAS+thin walkthrough (#88 / PR #109). Spec
-backend wording for Go Temporal remains tracked in #67 (not a 0.1.1 blocker).
+### Added
+
+### Changed
+
+### Fixed
+
+## [0.1.1] - 2026-08-07
+
+Patch release after `v0.1.0`: Phase B CI, reliability fixes, adoption docs and
+demo, and Go Temporal durable backend wording. No Phase 2 scope expansion.
 
 ### Added
 
@@ -20,6 +25,11 @@ backend wording for Go Temporal remains tracked in #67 (not a 0.1.1 blocker).
 - Maintainer branch protection and free-plan notes expanded in
   `docs/maintainer-branch-protection.md`; richer PyPI package metadata in
   `pyproject.toml` (PR #84).
+- Adoption host demo (`examples/adoption_host`) using the public Python client
+  with optional filesystem CAS and thin `.tir` export (issue #87, PR #108).
+- QUICKSTART / docs end to end walkthrough for Postgres NodeLog, CAS, and thin
+  `.tir` (`docs/E2E_POSTGRES_CAS_THIN.md`) (issue #88, PR #109).
+- Draft release notes and CHANGELOG prep path for this cut (PR #110).
 
 ### Changed
 
@@ -33,6 +43,9 @@ backend wording for Go Temporal remains tracked in #67 (not a 0.1.1 blocker).
 - Projector policy construction always keeps `CONSTRAINT` in
   `always_include_kinds` so policies cannot drop constraints by omission
   (PR #101).
+- Master README and Go docs recognize Temporal as the production durable
+  execution backend for the Go port alongside DBOS (Python) and Restate
+  (optional) (issue #67, PR #112).
 
 ### Fixed
 
