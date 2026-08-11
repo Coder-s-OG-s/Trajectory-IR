@@ -60,6 +60,21 @@ func OpenFromEnv() (*NodeLog, error) {
 	return OpenDSN(dsn)
 }
 
+// OpenDB wraps an existing *sql.DB (for tests or advanced wiring).
+// The caller owns the connection lifecycle unless Close is used after OpenDB
+// when the NodeLog is no longer needed; OpenDB does not close the DB on error
+// after schema setup fails on a caller owned handle.
+func OpenDB(db *sql.DB) (*NodeLog, error) {
+	if db == nil {
+		return nil, errors.New("postgres: db is required")
+	}
+	nl := &NodeLog{db: db}
+	if err := nl.ensureSchema(context.Background()); err != nil {
+		return nil, err
+	}
+	return nl, nil
+}
+
 func (l *NodeLog) ensureSchema(ctx context.Context) error {
 	stmts := []string{
 		`CREATE TABLE IF NOT EXISTS nodes (

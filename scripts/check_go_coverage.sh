@@ -8,8 +8,17 @@ cd "$ROOT/go"
 MIN="${GO_COV_FAIL_UNDER:-50}"
 PROFILE="${GO_COVERPROFILE:-coverage.out}"
 
-echo "Running go test ./trajir/... with coverage (floor ${MIN}%)"
-go test ./trajir/... -count=1 -coverprofile="$PROFILE"
+# Default unit floor excludes durable/temporal: that package needs a live
+# Temporal cluster for meaningful coverage (see temporal_integration tests).
+# Other trajir packages (including postgres offline mocks and S3) stay in scope.
+mapfile -t COVER_PKGS < <(go list ./trajir/... | grep -v '/durable/temporal$')
+if [[ ${#COVER_PKGS[@]} -eq 0 ]]; then
+  echo "error: no packages to cover under trajir/" >&2
+  exit 1
+fi
+
+echo "Running go test (excluding durable/temporal) with coverage (floor ${MIN}%)"
+go test "${COVER_PKGS[@]}" -count=1 -coverprofile="$PROFILE"
 
 if [[ ! -f "$PROFILE" ]]; then
   echo "error: coverprofile $PROFILE was not produced" >&2
