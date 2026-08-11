@@ -2,12 +2,14 @@ package client_test
 
 import (
 	"context"
+	"strings"
 	"sync/atomic"
 	"testing"
 
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/client"
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/effects"
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/resume"
+	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/sandbox"
 )
 
 func TestOpenProjectSealCommit(t *testing.T) {
@@ -88,6 +90,67 @@ func TestRunStepAndResumeNoSecondModelCall(t *testing.T) {
 	}
 }
 
+func TestResumeRequiresHistory(t *testing.T) {
+	dir := t.TempDir()
+	opts := client.Options{WorkDir: dir}
+	_, err := client.Resume("demo", "brand-new", opts)
+	if err == nil {
+		t.Fatal("expected error resuming empty trajectory")
+	}
+	if !strings.Contains(err.Error(), "no existing nodes") {
+		t.Fatalf("err=%v", err)
+	}
+
+	tr, err := client.OpenTrajectory("demo", "t-resume", opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tr.Project(1, map[string]any{"goal": "x"}); err != nil {
+		t.Fatal(err)
+	}
+	_ = tr.Close()
+
+	tr2, err := client.Resume("demo", "t-resume", opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tr2.Close()
+	if tr2.TrajectoryID != "t-resume" || tr2.TenantID != "demo" {
+		t.Fatalf("ids=%s/%s", tr2.TrajectoryID, tr2.TenantID)
+	}
+}
+
+func TestExecToolLogsPlainTools(t *testing.T) {
+	dir := t.TempDir()
+	tr, err := client.OpenTrajectory("demo", "t-plain", client.Options{WorkDir: dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tr.Close()
+	tool := resume.Tool{
+		Name:   "echo",
+		Effect: effects.PURE,
+		Fn:     func(args map[string]any) (any, error) { return args["msg"], nil },
+	}
+	res, err := tr.ExecTool(1, 2, tool, map[string]any{"msg": "hi"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Result != "hi" {
+		t.Fatalf("result=%v", res.Result)
+	}
+	ok, err := tr.Log().Has("t-plain", 1, "TOOL_CALL", intPtr(2))
+	if err != nil || !ok {
+		t.Fatalf("TOOL_CALL has=%v err=%v", ok, err)
+	}
+	ok, err = tr.Log().Has("t-plain", 1, "TOOL_RESULT", intPtr(3))
+	if err != nil || !ok {
+		t.Fatalf("TOOL_RESULT has=%v err=%v", ok, err)
+	}
+}
+
+func intPtr(v int) *int { return &v }
+
 func TestExecToolGated(t *testing.T) {
 	dir := t.TempDir()
 	tr, err := client.OpenTrajectory("demo", "t1", client.Options{WorkDir: dir})
@@ -114,5 +177,25 @@ func TestExecToolGated(t *testing.T) {
 	}
 	if n.Load() != 1 {
 		t.Fatalf("side effects=%d", n.Load())
+	}
+}
+
+func TestSandboxRejectsNonIdempotent(t *testing.T) {
+	dir := t.TempDir()
+	tr, err := client.OpenTrajectory("demo", "t-sb", client.Options{
+		WorkDir: dir,
+		Mode:    sandbox.ModeSandbox,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tr.Close()
+	tool := resume.Tool{
+		Name:   "deploy",
+		Effect: effects.NON_IDEMPOTENT_WRITE,
+		Fn:     func(map[string]any) (any, error) { return "nope", nil },
+	}
+	if _, err := tr.ExecTool(1, 2, tool, nil); err == nil {
+		t.Fatal("expected sandbox reject")
 	}
 }
