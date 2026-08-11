@@ -14,8 +14,8 @@ from unreviewed automation. Package owner credentials never belong in the repo.
 
 | Surface | Where | Notes |
 |---------|--------|--------|
-| Python package | `pyproject.toml` → `project.version` | Bump with the release PR (0.1.1 for this cut) |
-| Git tag | `v0.1.0` (shipped); `v0.1.1` after the release PR merges | Prefer `v` prefix |
+| Python package | `pyproject.toml` → `project.version` | Current line: `0.2.0` (Phase 1B) |
+| Git tag | `v0.1.0` shipped; **`v0.2.0`** for Phase 1B | Prefer `v` prefix |
 | Go module | `go/go.mod` | No separate semver tag yet; consumers use commit or a later policy |
 
 ### Choosing 0.1.0 vs 0.1.1
@@ -30,23 +30,23 @@ that tag (Phase B CI, reliability fixes, optional adoption demo / E2E docs).
 
 Do not move an already pushed tag. Prefer a new patch version.
 
-## Steps for a GitHub release (example v0.1.1)
+## Steps for a GitHub release (example v0.2.0)
 
 ```bash
 git checkout main
 git pull origin main
 
-# After version bump in pyproject.toml and CHANGELOG [0.1.1] section:
-git tag -a v0.1.1 -m "Trajectory IR v0.1.1 — post-0.1.0 reliability and Phase B CI"
+# After version bump in pyproject.toml and CHANGELOG [0.2.0] section:
+git tag -a v0.2.0 -m "Trajectory IR v0.2.0 Phase 1B Go primary SDK"
 
-git push origin v0.1.1
+git push origin v0.2.0
 ```
 
 Create a **GitHub Release** for the tag:
 
-1. Title: `v0.1.1`
-2. Body: paste or adapt [RELEASE_NOTES_0.1.1.md](RELEASE_NOTES_0.1.1.md)
-   (for the first tag, [RELEASE_NOTES_0.1.0.md](RELEASE_NOTES_0.1.0.md) remains historical)
+1. Title: `v0.2.0`
+2. Body: paste or adapt [RELEASE_NOTES_0.2.0.md](RELEASE_NOTES_0.2.0.md)
+   (older notes: [RELEASE_NOTES_0.1.1.md](RELEASE_NOTES_0.1.1.md), [RELEASE_NOTES_0.1.0.md](RELEASE_NOTES_0.1.0.md))
 3. Attach nothing required (source zip is automatic)
 
 ### Historical: v0.1.0

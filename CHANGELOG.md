@@ -13,6 +13,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+## [0.2.0] - 2026-08-11
+
+Phase 1B: Go is the primary SDK and onboarding path. Python remains the
+reference and parity port. Includes Go drivers, adoption demo, CI depth, and
+client honesty fixes on top of the 0.1.x line.
+
+### Added
+
+- Spec and process: Go primary for Phase 1B (README, CONTRIBUTING, go/QUICKSTART,
+  PHASE_1B_STATUS) (issues #114, #116, #119, #133).
+- Go adoption host demo with optional CAS thin package (issue #115).
+- Go Postgres NodeLog (`trajir/postgres`) with offline sqlmock unit tests
+  (issue #117).
+- Go S3 compatible CAS (`ObjectAPI`) and AWS SDK v2 `NewS3StoreFromEnv`
+  (issues #118, #134).
+- CI: fast vs deep gates, Python↔Go `.tir` golden, Go coverage floor 80%,
+  live Go Postgres in Integration (Postgres) (issues #128–#131, #129–#130).
+- Milestone process docs (`docs/MILESTONES.md` when present).
+
+### Changed
+
+- Go client `Resume` requires existing NodeLog history (issue #132).
+- Go client logs TOOL_CALL / TOOL_RESULT for non gated tools (parity with Python).
+
+### Fixed
+
+- govulncheck clean for pgx and aws-sdk-go-v2 S3 on the Phase 1B path.
+
 ## [0.1.1] - 2026-08-07
 
 Patch release after `v0.1.0`: Phase B CI, reliability fixes, adoption docs and
