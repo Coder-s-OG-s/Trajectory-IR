@@ -1,6 +1,6 @@
 [project]
 name = "trajectory-ir"
-version = "0.1.1"
+version = "0.2.0"
 description = "Portable, hash-verifiable intermediate representation for agent runs (seals, effects, .tir packages)"
 readme = "README.md"
 requires-python = ">=3.11"

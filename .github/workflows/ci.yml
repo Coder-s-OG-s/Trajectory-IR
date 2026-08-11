@@ -365,5 +365,24 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev,s3]"
 
-      - name: Live MinIO S3 CAS tests
+      - name: Create MinIO bucket
+        run: |
+          python -c "from drivers.s3.cas import build_s3_client_from_env; c=build_s3_client_from_env();
+          try:
+            c.create_bucket(Bucket='trajir')
+          except Exception as e:
+            # Bucket may already exist on a reused runner volume.
+            print('create_bucket:', e)"
+
+      - name: Live MinIO S3 CAS tests (Python)
         run: pytest test/integration/test_s3_minio_live.py -q
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: "1.25.x"
+          cache-dependency-path: go/go.sum
+
+      - name: Live MinIO S3 CAS tests (Go)
+        working-directory: go
+        run: go test ./trajir/cas -count=1 -run TestLiveS3StoreFromEnvRoundTrip -v
