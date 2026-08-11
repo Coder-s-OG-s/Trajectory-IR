@@ -118,9 +118,30 @@ func OpenTrajectory(tenantID, trajectoryID string, opts Options) (*Trajectory, e
 	}, nil
 }
 
-// Resume reopens the same stores as OpenTrajectory (same options and ids).
+// Resume reattaches to a trajectory that already has NodeLog history.
+// Unlike OpenTrajectory, empty history is an error (wrong workdir or id).
+// Crash safety still comes from NodeLog idempotency and gated tool claims;
+// callers re-drive the same step_n/seq work against the reopened log.
 func Resume(tenantID, trajectoryID string, opts Options) (*Trajectory, error) {
-	return OpenTrajectory(tenantID, trajectoryID, opts)
+	nodesPath, _ := resolvePaths(opts)
+	tr, err := OpenTrajectory(tenantID, trajectoryID, opts)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := tr.log.ListNodesAllTenants(trajectoryID)
+	if err != nil {
+		_ = tr.Close()
+		return nil, err
+	}
+	if len(rows) == 0 {
+		_ = tr.Close()
+		return nil, fmt.Errorf(
+			"client: cannot resume trajectory_id=%q: no existing nodes found in %q; use OpenTrajectory to start a new one",
+			trajectoryID,
+			nodesPath,
+		)
+	}
+	return tr, nil
 }
 
 // Close releases owned resources.
@@ -180,6 +201,8 @@ func (t *Trajectory) SealDecision(stepN int, plan map[string]any) (*Decision, er
 }
 
 // ExecTool runs one tool at the given seq (caller supplies unique seq; 2+2*i is typical).
+// NON_IDEMPOTENT_WRITE tools use claim gate logging. Other effect classes still
+// append TOOL_CALL / TOOL_RESULT so the IR history matches the Python client.
 func (t *Trajectory) ExecTool(stepN, seq int, tool resume.Tool, args map[string]any) (*ToolResult, error) {
 	if args == nil {
 		args = map[string]any{}
@@ -187,9 +210,9 @@ func (t *Trajectory) ExecTool(stepN, seq int, tool resume.Tool, args map[string]
 	if err := sandbox.AssertToolAllowed(t.Mode, tool.Name, tool.Effect); err != nil {
 		return nil, err
 	}
-	fn := tool.Fn
+	step := stepN
 	if effects.RequiresBlockAndGate(tool.Effect) {
-		fn = resume.MakeGatedToolCall(
+		fn := resume.MakeGatedToolCall(
 			t.log,
 			t.TrajectoryID,
 			t.TenantID,
@@ -198,9 +221,34 @@ func (t *Trajectory) ExecTool(stepN, seq int, tool resume.Tool, args map[string]
 			tool.Name,
 			tool.Fn,
 		)
+		result, err := fn(args)
+		if err != nil {
+			return nil, err
+		}
+		return &ToolResult{StepN: stepN, Result: result}, nil
 	}
-	result, err := fn(args)
+	result, err := tool.Fn(args)
 	if err != nil {
+		return nil, err
+	}
+	if _, err := t.log.Append(
+		"TOOL_CALL",
+		&step,
+		map[string]any{"tool": tool.Name, "args": args},
+		t.TrajectoryID,
+		t.TenantID,
+		seq,
+	); err != nil {
+		return nil, err
+	}
+	if _, err := t.log.Append(
+		"TOOL_RESULT",
+		&step,
+		map[string]any{"result": result},
+		t.TrajectoryID,
+		t.TenantID,
+		seq+1,
+	); err != nil {
 		return nil, err
 	}
 	return &ToolResult{StepN: stepN, Result: result}, nil
