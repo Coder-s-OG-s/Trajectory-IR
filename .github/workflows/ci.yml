@@ -24,7 +24,7 @@ env:
   # in the separate Integration jobs, not here; next step toward 80 needs
   # either mocked coverage for those two packages or a floor computed with
   # them excluded.
-  GO_COV_FAIL_UNDER: "70"
+  GO_COV_FAIL_UNDER: "80"
 
 jobs:
   # ---- Fast gate: required, aim to stay under ~10 minutes, no live services ----
