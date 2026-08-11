@@ -15,7 +15,7 @@ Python remains the supported **reference and parity port** from Phase 1A.
 | `trajir/durable/temporal` | Temporal Backend + worker registration |
 | `trajir/resume` | Block and gate, and RunStep seal path for one agent step |
 | `trajir/client` | Thin SDK: open, project, seal, exec, commit, resume, RunStep |
-| `trajir/cas` | Filesystem CAS and S3 compatible CAS (sharded layout; thin rehydrate) |
+| `trajir/cas` | Filesystem CAS and S3 compatible CAS (sharded layout; thin rehydrate; AWS SDK v2 via `NewS3StoreFromEnv`) |
 | `trajir/tir` | Portable `.tir` package export / import (thin and fat) |
 | `trajir/projector` | Default context projector (R04; size metric = RFC 8785 / JCS bytes) |
 
