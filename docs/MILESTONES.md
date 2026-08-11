@@ -10,19 +10,20 @@ Board: [Milestones](https://github.com/Coder-s-OG-s/Trajectory-IR/milestones)
 
 | Milestone | State | Purpose |
 |-----------|--------|---------|
-| **Phase 1A library baseline (v0.1.0)** | Closed | What shipped as the first library tag. Historical only. |
-| **v0.1.1 post 0.1.0 patch** | Open | Patch release cut: reliability, Phase B CI, fold-ins, tag. Issue #111. |
-| **Phase 1B Go primary SDK** | Open | Go is primary product surface; Python is reference/parity. Epic #113. |
-| **Future deferred product** | Open | Signatures, Fluid, SaaS, PyPI Trusted Publishing, etc. Park only. |
+| **Phase 1A library baseline (v0.1.0)** | Closed | First library tag. Historical only. |
+| **v0.1.1 post 0.1.0 patch** | Closed | Absorbed into history; public cut advanced to v0.2.0. |
+| **Phase 1B Go primary SDK** | Closed | Complete; released as **v0.2.0**. |
+| **Phase 1C harden and adopt** | Open | Gates when plan allows, release automation, polish. |
+| **Future deferred product** | Open | Signatures, Fluid, SaaS, etc. Park only. |
 
 ## Rules (follow these)
 
 1. **One milestone per issue and PR.** Set it when you open the issue, not at merge time.
-2. **Do not mix scopes.** Phase 1B work must not sit under v0.1.1. Deferred ideas go to Future, not Phase 1B.
+2. **Do not mix scopes.** Phase 1C harden work stays on Phase 1C. Deferred product ideas go to Future, not Phase 1C.
 3. **Exit criteria live in the milestone description.** Close the milestone only when those criteria are met (and the matching release or epic is done).
 4. **Suggested work order right now**
-   1. Finish **v0.1.1** (merge release metadata PR, tag, GitHub Release).
-   2. Then **Phase 1B** in order: spec, CONTRIBUTING, QUICKSTART, adoption demo, Postgres / S3 drivers.
+   1. **Phase 1C**: branch protection when plan allows (#146), tag release workflow (#147), status docs (#148).
+   2. Keep product non goals under **Future deferred product**.
 5. **Future milestone is a parking lot.** Implementing from Future needs a README scope bump (§14) and a new active milestone or epic first.
 6. **Labels still matter** (`go`, `phase-1b`, `SPEC-QUESTION`, …). Milestone answers *when/why*; labels answer *kind of work*.
 
@@ -30,10 +31,10 @@ Board: [Milestones](https://github.com/Coder-s-OG-s/Trajectory-IR/milestones)
 
 ```bash
 # Issue
-gh issue edit NNN --milestone "Phase 1B Go primary SDK"
+gh issue edit NNN --milestone "Phase 1C harden and adopt"
 
 # Pull request
-gh pr edit NNN --milestone "v0.1.1 post 0.1.0 patch"
+gh pr edit NNN --milestone "Phase 1C harden and adopt"
 ```
 
 In the GitHub UI: issue/PR sidebar → Milestone.
