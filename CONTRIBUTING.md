@@ -86,6 +86,13 @@ Local dependency audit (optional): `RUN_PIP_AUDIT=1 pytest test/unit/test_pip_au
 **Preferred (full stack):** [docs/LIVE_INTEGRATION_DOCKER.md](docs/LIVE_INTEGRATION_DOCKER.md)
 and root [`docker-compose.live.yml`](docker-compose.live.yml) (Postgres + MinIO + Temporal).
 
+One-command smoke (when Docker Server is up):
+
+```bash
+./scripts/run_live_matrix.sh
+# Windows: .\scripts\run_live_matrix.ps1
+```
+
 One-off containers (same env vars as the compose guide):
 
 Postgres:
