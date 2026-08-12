@@ -1,0 +1,75 @@
+# Vacant live-integration sandbox for Trajectory IR maintainers.
+# Hosts Postgres (NodeLog), MinIO (S3 CAS), and Temporal (Go durable).
+#
+# Usage: see docs/LIVE_INTEGRATION_DOCKER.md
+# Not required for offline unit/conformance CI.
+
+services:
+  postgres:
+    image: postgres:16.6
+    container_name: trajir-live-postgres
+    environment:
+      POSTGRES_USER: trajir
+      POSTGRES_PASSWORD: trajir
+      POSTGRES_DB: trajir
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U trajir -d trajir"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+
+  # Separate database for Temporal auto-setup (do not share trajir app DB).
+  temporal-postgres:
+    image: postgres:16.6
+    container_name: trajir-live-temporal-pg
+    environment:
+      POSTGRES_USER: temporal
+      POSTGRES_PASSWORD: temporal
+      POSTGRES_DB: temporal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U temporal -d temporal"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+
+  minio:
+    image: quay.io/minio/minio:RELEASE.2024-12-18T13-15-44Z
+    container_name: trajir-live-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+
+  # One-shot: ensure the S3 bucket exists for live CAS tests.
+  minio-init:
+    image: minio/mc:RELEASE.2024-11-17T19-35-56Z
+    container_name: trajir-live-minio-init
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      sleep 3;
+      mc alias set local http://minio:9000 minioadmin minioadmin;
+      mc mb --ignore-existing local/trajir;
+      exit 0;
+      "
+
+  temporal:
+    image: temporalio/auto-setup:1.25.2
+    container_name: trajir-live-temporal
+    depends_on:
+      temporal-postgres:
+        condition: service_healthy
+    environment:
+      DB: postgres12
+      DB_PORT: 5432
+      POSTGRES_USER: temporal
+      POSTGRES_PWD: temporal
+      POSTGRES_SEEDS: temporal-postgres
+    ports:
+      - "7233:7233"

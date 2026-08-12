@@ -83,6 +83,11 @@ Local dependency audit (optional): `RUN_PIP_AUDIT=1 pytest test/unit/test_pip_au
 
 #### Optional local integration services
 
+**Preferred (full stack):** [docs/LIVE_INTEGRATION_DOCKER.md](docs/LIVE_INTEGRATION_DOCKER.md)
+and root [`docker-compose.live.yml`](docker-compose.live.yml) (Postgres + MinIO + Temporal).
+
+One-off containers (same env vars as the compose guide):
+
 Postgres:
 
 ```bash
@@ -153,12 +158,14 @@ go test ./conformance -count=1 -v
 Optional Temporal (needs a local server and worker; not required for default tests):
 
 ```bash
+# Full stack: docker compose -f docker-compose.live.yml up -d
 # TEMPORAL_HOSTPORT=localhost:7233
 go test -tags=temporal_integration ./trajir/durable/temporal -count=1 -v
 ```
 
 See `go/README.md` for package map, client usage, and backend choices
-(LocalSQLite coding default, Temporal production target).
+(LocalSQLite coding default, Temporal production target). Live stack:
+[docs/LIVE_INTEGRATION_DOCKER.md](docs/LIVE_INTEGRATION_DOCKER.md).
 
 ## 5. Local setup (Python, reference port)
 

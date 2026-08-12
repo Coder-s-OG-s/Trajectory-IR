@@ -2,9 +2,9 @@
 
 Do this after CI has produced green check names on `main` or on a PR.
 
-## Status (issue #128, part 1)
+## Status (issue #146, Phase 1C)
 
-Re-verified 2026-08-08 against the live repo:
+Re-verified against the live repo (still private free tier):
 
 ```bash
 gh api repos/Coder-s-OG-s/Trajectory-IR/branches/main/protection
@@ -13,10 +13,28 @@ gh api repos/Coder-s-OG-s/Trajectory-IR/branches/main/protection
 ```
 
 Branch protection is still blocked on the plan/visibility decision below.
-Nothing else in this doc can take effect (main stays ungated, a red PR can
-still be merged by anyone with write access) until a maintainer picks one of
-the two options and someone with admin rights on the repo runs the CLI step
-near the bottom of this doc.
+Until a maintainer unlocks #146, **main is not machine-gated**: a red PR can
+still be merged by anyone with write access. Use the merge policy section next.
+
+## Merge policy while protection is blocked (#152)
+
+**Temporary.** Replace with required checks after #146 lands. Maintainers MUST:
+
+1. **Do not merge** unless the latest PR commit shows green:
+   - Fast: `DCO`, `Quality (Python 3.11)`, `Quality (Python 3.12)`,
+     `Package smoke`, `Security (pip-audit)`, `Go`
+   - Deep: `Conformance & E2E (Python 3.11)`, `Conformance & E2E (Python 3.12)`
+   - Integration (when jobs ran on the PR): `Integration (Postgres)`,
+     `Integration (MinIO)`
+2. Prefer **squash** merge; keep the PR branch **up to date** with `main`
+   (repo `allow_update_branch` is enabled).
+3. Require **Signed-off-by** / DCO on every commit in the PR.
+4. **No force push** to `main`; no direct commits to `main` for product work.
+5. Assign milestone **Phase 1C harden and adopt** (or Future) before merge.
+6. After merge: confirm `main` CI is green; close shipped issues with the PR link.
+
+Solo maintainers still follow this list. When #146 is enabled, keep the same
+check names as required contexts and treat this section as historical.
 
 ## GitHub plan note (important)
 
@@ -24,12 +42,12 @@ This repository is currently **private**. On GitHub’s free plan for private
 repos, **classic branch protection** and **repository rulesets** return HTTP
 403 (“Upgrade to GitHub Pro or make this repository public”).
 
-To enable step 1 of post-v0.1.0 stabilization, pick one:
+To enable automated gates (#146), pick one:
 
 1. **Make the repo public** (free branch protection + free secret scanning for public repos), or  
 2. **Upgrade the org/user to a plan that includes branch protection on private repos** (GitHub Pro / Team / Enterprise as applicable).
 
-Until then, enforce process by policy: only merge green PRs, prefer squash, and use **Update branch** (repo setting `allow_update_branch` is enabled).
+Until then, enforce process by the **Merge policy** section above.
 
 ## Recommended settings
 
@@ -61,7 +79,7 @@ Deep gate:
 7. `Conformance & E2E (Python 3.11)`: e2e crash/resume, full `conformance/` R01-R08
 8. `Conformance & E2E (Python 3.12)`: same as 3.11
 
-Optional after Phase B is proven stable (issue #85):
+Integration (require once stable on every PR, Phase 1C preference):
 
 9. `Integration (Postgres)`
 10. `Integration (MinIO)`
@@ -100,7 +118,7 @@ After large merges (packages, conformance, security):
 1. Latest `main` CI is green (all six check families above).
 2. Required checks still match the names above (rename jobs only with a protection update).
 3. Close GitHub issues that already shipped (link the merge PR).
-4. Skim [QUICKSTART.md](../QUICKSTART.md) and [PHASE_1A_STATUS.md](PHASE_1A_STATUS.md) for fictional APIs.
+4. Skim [QUICKSTART.md](../QUICKSTART.md), [go/QUICKSTART.md](../go/QUICKSTART.md), and [PHASE_1C_STATUS.md](PHASE_1C_STATUS.md) for fictional APIs.
 5. Prefer Dependabot PRs reviewed weekly; do not bulk-merge without CI.
 
 ## Order
@@ -129,7 +147,9 @@ gh api -X PUT repos/Coder-s-OG-s/Trajectory-IR/branches/main/protection \
       "Security (pip-audit)",
       "Go",
       "Conformance & E2E (Python 3.11)",
-      "Conformance & E2E (Python 3.12)"
+      "Conformance & E2E (Python 3.12)",
+      "Integration (Postgres)",
+      "Integration (MinIO)"
     ]
   },
   "enforce_admins": false,
