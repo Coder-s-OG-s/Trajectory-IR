@@ -2,95 +2,69 @@
 
 Do this after CI has produced green check names on `main` or on a PR.
 
-## Status (issue #146, Phase 1C)
+## Status (issues #146 / #158, Phase 1C) — ENABLED
 
-Re-verified against the live repo (still private free tier):
+Applied 2026-08-13 on public repo `Coder-s-OG-s/Trajectory-IR` via classic branch
+protection API. Re-check:
 
 ```bash
-gh api repos/Coder-s-OG-s/Trajectory-IR/branches/main/protection
-# {"message":"Upgrade to GitHub Pro or make this repository public to enable
-#  this feature.","status":"403"}
+gh api repos/Coder-s-OG-s/Trajectory-IR/branches/main/protection \
+  --jq '{strict: .required_status_checks.strict, contexts: .required_status_checks.contexts, force: .allow_force_pushes.enabled}'
 ```
 
-Branch protection is still blocked on the plan/visibility decision below.
-Until a maintainer unlocks #146, **main is not machine-gated**: a red PR can
-still be merged by anyone with write access. Use the merge policy section next.
+Expected live settings:
 
-## Merge policy while protection is blocked (#152)
+| Setting | Value |
+|---------|--------|
+| Required PR reviews | yes (0 approving reviews for solo maintainer) |
+| Dismiss stale reviews | yes |
+| Required status checks | yes, **strict** (branch must be up to date with `main`) |
+| Allow force pushes | **no** |
+| Allow deletions | **no** |
+| Enforce admins | false (admins may bypass in emergency; prefer not to) |
 
-**Temporary.** Replace with required checks after #146 lands. Maintainers MUST:
+## Required status checks (live)
 
-1. **Do not merge** unless the latest PR commit shows green:
-   - Fast: `DCO`, `Quality (Python 3.11)`, `Quality (Python 3.12)`,
-     `Package smoke`, `Security (pip-audit)`, `Go`
-   - Deep: `Conformance & E2E (Python 3.11)`, `Conformance & E2E (Python 3.12)`
-   - Integration (when jobs ran on the PR): `Integration (Postgres)`,
-     `Integration (MinIO)`
-2. Prefer **squash** merge; keep the PR branch **up to date** with `main`
-   (repo `allow_update_branch` is enabled).
-3. Require **Signed-off-by** / DCO on every commit in the PR.
-4. **No force push** to `main`; no direct commits to `main` for product work.
-5. Assign milestone **Phase 1C harden and adopt** (or Future) before merge.
-6. After merge: confirm `main` CI is green; close shipped issues with the PR link.
+Match Actions job names exactly:
 
-Solo maintainers still follow this list. When #146 is enabled, keep the same
-check names as required contexts and treat this section as historical.
-
-## GitHub plan note (important)
-
-This repository is currently **private**. On GitHub’s free plan for private
-repos, **classic branch protection** and **repository rulesets** return HTTP
-403 (“Upgrade to GitHub Pro or make this repository public”).
-
-To enable automated gates (#146), pick one:
-
-1. **Make the repo public** (free branch protection + free secret scanning for public repos), or  
-2. **Upgrade the org/user to a plan that includes branch protection on private repos** (GitHub Pro / Team / Enterprise as applicable).
-
-Until then, enforce process by the **Merge policy** section above.
-
-## Recommended settings
-
-GitHub → Settings → Branches → Branch protection rule for `main` (after plan allows it):
-
-1. Require a pull request before merging
-2. Require approvals (at least 1 when more than one maintainer is active; 0 is OK for a solo maintainer if status checks are strict)
-3. Require status checks to pass before merging
-4. **Require branches to be up to date before merging** (strongly recommended; avoids the multi-PR conflict pile after `main` moves)
-5. Do not allow force pushes or deleting `main`
-
-## Status checks to require
-
-Match the names shown in the Actions UI (Phase A, issue #81). Fast gate and
-deep gate are both required once protection is on (issue #128 part 2 split
-`Quality` so its e2e/conformance steps run as their own deep gate job):
-
-Fast gate:
-
-1. `DCO` (pull requests only; may appear after the first PR with the DCO job)
-2. `Quality (Python 3.11)`: ruff, mypy, unit coverage floor
-3. `Quality (Python 3.12)`: same as 3.11
-4. `Package smoke`: `python -m build` + install wheel + import smoke
-5. `Security (pip-audit)`: first-class dependency audit (not only a unit test)
-6. `Go`: trajir coverage floor, full `go test ./...`, `govulncheck`
-
-Deep gate:
-
-7. `Conformance & E2E (Python 3.11)`: e2e crash/resume, full `conformance/` R01-R08
-8. `Conformance & E2E (Python 3.12)`: same as 3.11
-
-Integration (require once stable on every PR, Phase 1C preference):
-
+1. `DCO`
+2. `Quality (Python 3.11)`
+3. `Quality (Python 3.12)`
+4. `Package smoke`
+5. `Security (pip-audit)`
+6. `Go`
+7. `Conformance & E2E (Python 3.11)`
+8. `Conformance & E2E (Python 3.12)`
 9. `Integration (Postgres)`
 10. `Integration (MinIO)`
 
-If GitHub shows a slightly different label, use the exact string from the check run.
+If a job is renamed in `.github/workflows/ci.yml`, update protection in the same PR.
+
+## Merge policy (historical while protection was blocked)
+
+Section for #152 when `main` was ungated. **Machine gates are now on**; still
+prefer squash merge, DCO on every commit, milestone on PRs, and no direct
+product commits to `main`.
+
+1. Do not merge unless required checks are green on the latest PR head.
+2. Prefer **squash** merge; keep the branch **up to date** with `main`.
+3. Require **Signed-off-by** / DCO on every commit.
+4. **No force push** to `main` (blocked by protection).
+5. Assign milestone **Phase 1C harden and adopt** (or Future) before merge.
+6. After merge: confirm `main` is healthy; close shipped issues with the PR link.
+
+## Recommended settings (checklist)
+
+GitHub → Settings → Branches → Branch protection rule for `main`:
+
+1. Require a pull request before merging
+2. Require approvals (0 solo / 1+ when the team grows)
+3. Require status checks to pass before merging (list above)
+4. **Require branches to be up to date before merging** (`strict: true`)
+5. Do not allow force pushes or deleting `main`
 
 Also enable org/repo **secret scanning** and **push protection** when available
-(Settings → Code security). On **private** free-tier repos, secret scanning is
-often unavailable without GitHub Advanced Security; **Dependabot alerts** and
-**Dependabot security updates** can still be enabled (and were enabled for this
-repo where the API allows).
+(Settings → Code security). **Dependabot alerts** / security updates should stay on.
 
 ## Coverage floors (workflow env)
 
@@ -115,20 +89,20 @@ package set omits Temporal.
 
 After large merges (packages, conformance, security):
 
-1. Latest `main` CI is green (all six check families above).
+1. Latest `main` CI is green (required checks above).
 2. Required checks still match the names above (rename jobs only with a protection update).
 3. Close GitHub issues that already shipped (link the merge PR).
 4. Skim [QUICKSTART.md](../QUICKSTART.md), [go/QUICKSTART.md](../go/QUICKSTART.md), and [PHASE_1C_STATUS.md](PHASE_1C_STATUS.md) for fictional APIs.
 5. Prefer Dependabot PRs reviewed weekly; do not bulk-merge without CI.
 
-## Order
+## Order (first enable)
 
 1. Merge a PR that defines or updates `.github/workflows/ci.yml`
-2. Confirm a green run so check names exist (including `Package smoke` and `Security (pip-audit)`)
-3. Enable the protection rule, select those checks, enable **up to date with main**
-4. Confirm a test PR cannot merge with a failing DCO, Quality, Package smoke, Security, or Go job
+2. Confirm a green run so check names exist
+3. Enable the protection rule (done for #146 / #158)
+4. Confirm a test PR cannot merge with a failing required check
 
-## CLI (optional)
+## CLI (re-apply or update)
 
 With admin rights on the repo:
 
@@ -154,6 +128,8 @@ gh api -X PUT repos/Coder-s-OG-s/Trajectory-IR/branches/main/protection \
   },
   "enforce_admins": false,
   "required_pull_request_reviews": {
+    "dismiss_stale_reviews": true,
+    "require_code_owner_reviews": false,
     "required_approving_review_count": 0
   },
   "restrictions": null,
@@ -163,4 +139,5 @@ gh api -X PUT repos/Coder-s-OG-s/Trajectory-IR/branches/main/protection \
 EOF
 ```
 
-`strict: true` is “require branches to be up to date before merging.” Adjust review count when the team grows.
+`strict: true` is “require branches to be up to date before merging.” Raise
+`required_approving_review_count` when the team grows.
