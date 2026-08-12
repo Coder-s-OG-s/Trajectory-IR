@@ -25,7 +25,9 @@ docker compose -f docker-compose.live.yml up -d
 docker compose -f docker-compose.live.yml ps
 ```
 
-Wait until `trajir-live-postgres` is healthy and MinIO answers:
+Wait until services are healthy (`docker compose ... ps` shows healthy for
+postgres and minio). Compose already healthchecks MinIO and runs `minio-init`
+only after MinIO is healthy; bucket create fails closed if `mc` errors.
 
 ```bash
 # Postgres
@@ -33,6 +35,9 @@ docker exec trajir-live-postgres pg_isready -U trajir -d trajir
 
 # MinIO (from the host)
 curl -sf http://127.0.0.1:9000/minio/health/live
+
+# Bucket init one-shot should have exited 0
+docker compose -f docker-compose.live.yml ps -a minio-init
 ```
 
 Temporal may take longer on first pull. Frontend: `localhost:7233`.

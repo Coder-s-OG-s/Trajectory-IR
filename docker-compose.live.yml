@@ -44,19 +44,24 @@ services:
     ports:
       - "9000:9000"
       - "9001:9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+      start_period: 5s
 
   # One-shot: ensure the S3 bucket exists for live CAS tests.
   minio-init:
     image: minio/mc:RELEASE.2024-11-17T19-35-56Z
     container_name: trajir-live-minio-init
     depends_on:
-      - minio
+      minio:
+        condition: service_healthy
     entrypoint: >
       /bin/sh -c "
-      sleep 3;
-      mc alias set local http://minio:9000 minioadmin minioadmin;
-      mc mb --ignore-existing local/trajir;
-      exit 0;
+      mc alias set local http://minio:9000 minioadmin minioadmin &&
+      mc mb --ignore-existing local/trajir
       "
 
   temporal:
