@@ -20,9 +20,9 @@ Epic: **[#151](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/151)**
 | [#156](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/156) | First-success Go path audit | **Closed** (#157) |
 | [#147](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/147) | Release workflow on `v*` tags | **Closed** |
 | [#148](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/148) | Initial Phase 1C status scaffold | **Closed** |
-| [#159](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/159) | Prove Release attaches wheel/sdist on next tag | Open |
-| [#160](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/160) | Smoke live Docker stack on maintainer machine | Open |
-| [#161](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/161) | Refresh PHASE_1C_STATUS after #157 | This file |
+| [#159](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/159) | Prove Release attaches wheel/sdist on next tag | **In progress** (`v0.2.1` cut) |
+| [#160](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/160) | Smoke live Docker stack + matrix scripts | **Closed** (#164) |
+| [#161](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/161) | Refresh PHASE_1C_STATUS after #157 | **Closed** (#163) |
 | [#162](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/162) | Close Phase 1C when exit criteria met | Open |
 
 ## Done already on main
