@@ -14,7 +14,7 @@ On every push of a tag matching `v*`:
 3. Upload Actions artifacts (`python-dist`)
 4. Attach `dist/*` to the GitHub Release for that tag (`softprops/action-gh-release`)
 
-### Verify after a tag push (#153)
+### Verify after a tag push (#153 / #159)
 
 ```bash
 # Workflow must be green
@@ -24,10 +24,9 @@ gh run list --workflow=release.yml --limit 5
 gh release view vX.Y.Z --json assets,url
 ```
 
-**Baseline note:** `v0.2.0` was cut as a Phase 1B library tag; its Release
-currently has **no attached wheel/sdist** (manual notes only). The **next**
-version tag on `main` (with release.yml present) is the acceptance run for
-#153: green `Release` workflow + non-empty assets.
+**History:** `v0.2.0` was cut as a Phase 1B library tag without release.yml
+assets (empty asset list). **`v0.2.1`** is the Phase 1C proof cut for #159:
+green `Release` workflow + non-empty wheel/sdist.
 
 If the workflow is green but assets are missing, check that a GitHub Release
 object exists for the tag (the action creates/updates it) and that
@@ -45,8 +44,8 @@ object exists for the tag (the action creates/updates it) and that
 
 | Surface | Where | Notes |
 |---------|--------|--------|
-| Python package | `pyproject.toml` → `project.version` | Current line: `0.2.0` (Phase 1B) |
-| Git tag | `v0.1.0` shipped; **`v0.2.0`** for Phase 1B | Prefer `v` prefix |
+| Python package | `pyproject.toml` → `project.version` | Current line: `0.2.1` (Phase 1C patch) |
+| Git tag | `v0.2.0` Phase 1B; **`v0.2.1`** Phase 1C harden | Prefer `v` prefix |
 | Go module | `go/go.mod` | No separate semver tag yet; consumers use commit or a later policy |
 
 ### Choosing 0.1.0 vs 0.1.1

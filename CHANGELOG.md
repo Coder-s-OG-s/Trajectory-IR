@@ -9,19 +9,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+### Changed
+
+### Fixed
+
+## [0.2.1] - 2026-08-13
+
+Phase 1C harden-and-adopt patch: merge gates on public `main`, live Docker
+matrix tooling, and release workflow proof cut.
+
+### Added
+
 - Phase 1C: `docker-compose.live.yml` and `docs/LIVE_INTEGRATION_DOCKER.md` for
-  local Postgres + MinIO + Temporal live matrix (#154).
-- Phase 1C: maintainer merge policy while branch protection is blocked (#152).
+  local Postgres + MinIO + Temporal live matrix (#154, #157).
+- Phase 1C: maintainer merge policy while protection was blocked (#152, #157).
 - Phase 1C: classic branch protection on `main` with required CI checks
-  (#146, #158).
-- Phase 1C: `scripts/run_live_matrix.sh` / `.ps1` for local live smoke (#160).
+  (#146, #158, #163).
+- Phase 1C: `scripts/run_live_matrix.sh` / `.ps1` for local live smoke (#160, #164).
 
 ### Changed
 
-- Phase 1C status and milestones docs aligned with epic #151 backlog (#155).
-- Release process documents tag workflow asset verification (#153).
+- Phase 1C status and milestones docs (#155, #161).
+- Release process documents tag workflow asset verification (#153, #159).
 - Go QUICKSTART demos and live stack links after first-success audit (#156).
-- Maintainer protection docs and PHASE_1C_STATUS: protection enabled (#158, #161).
 - Live compose: drop broken `minio/mc` one-shot; create bucket via Python (#160).
 
 ### Fixed
