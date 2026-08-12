@@ -24,10 +24,21 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Run Gitleaks
-        uses: gitleaks/gitleaks-action@v2
+      # Use upstream gitleaks CLI (not gitleaks-action). The Action requires a
+      # paid GITLEAKS_LICENSE for GitHub organization repos and would block OSS CI.
+      - name: Install gitleaks
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_VERSION: "8.24.2"
+        run: |
+          set -euo pipefail
+          curl -sSfL \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            | tar -xz gitleaks
+          sudo mv gitleaks /usr/local/bin/gitleaks
+          gitleaks version
+
+      - name: Run gitleaks
+        run: gitleaks detect --source . --verbose --redact --exit-code 1
 
   actionlint:
     name: Workflow lint (actionlint)
@@ -36,8 +47,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Install actionlint
+      - name: Install and run actionlint
         run: |
+          set -euo pipefail
           bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
           ./actionlint -color
 
@@ -57,7 +69,7 @@ jobs:
         run: pip install --upgrade pip "zizmor>=1.5"
 
       - name: Audit workflows (advisory first wave)
-        # CNCF recipe recommends zizmor. Findings are uploaded for review;
-        # do not fail PRs until SHA-pinning follow-up lands.
+        # CNCF recipe recommends zizmor. Findings are reported for review;
+        # do not fail PRs until SHA-pinning follow-up lands (#167).
         continue-on-error: true
         run: zizmor --format plain .github/workflows

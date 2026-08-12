@@ -25,7 +25,7 @@ Milestone: **[Phase CI/CD harden](https://github.com/Coder-s-OG-s/Trajectory-IR/
 | **Release** | `.github/workflows/release.yml` | Build dist, SBOM, attach to GitHub Release |
 | **Scorecard** | `.github/workflows/scorecard.yml` | OpenSSF Scorecard SARIF |
 | **CodeQL** | `.github/workflows/codeql.yml` | Go + Python static analysis |
-| **Security scan** | `.github/workflows/security-scan.yml` | gitleaks, actionlint, zizmor |
+| **Security scan** | `.github/workflows/security-scan.yml` | gitleaks CLI (no paid license), actionlint, zizmor |
 
 ## Required status checks on `main`
 

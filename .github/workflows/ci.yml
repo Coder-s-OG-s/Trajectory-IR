@@ -347,9 +347,9 @@ jobs:
             -e MINIO_ROOT_PASSWORD=minioadmin \
             quay.io/minio/minio:RELEASE.2024-12-18T13-15-44Z \
             server /data --console-address ":9001"
-          for i in $(seq 1 40); do
+          for attempt in $(seq 1 40); do
             if curl -sf http://127.0.0.1:9000/minio/health/live; then
-              echo "MinIO is up"
+              echo "MinIO is up (attempt ${attempt})"
               exit 0
             fi
             sleep 1
