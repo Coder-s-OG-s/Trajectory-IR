@@ -9,7 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Phase 1C: `docker-compose.live.yml` and `docs/LIVE_INTEGRATION_DOCKER.md` for
+  local Postgres + MinIO + Temporal live matrix (#154).
+- Phase 1C: maintainer merge policy while branch protection is blocked (#152).
+
 ### Changed
+
+- Phase 1C status and milestones docs aligned with epic #151 backlog (#155).
+- Release process documents tag workflow asset verification (#153).
+- Go QUICKSTART demos and live stack links after first-success audit (#156).
 
 ### Fixed
 

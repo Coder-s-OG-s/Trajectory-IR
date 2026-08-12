@@ -3,12 +3,43 @@
 How to cut a GitHub release and optionally publish to PyPI. **Do not** push tags
 from unreviewed automation. Package owner credentials never belong in the repo.
 
+## Automated dist on `v*` tags (#147 / #153)
+
+Workflow: [`.github/workflows/release.yml`](../.github/workflows/release.yml)
+
+On every push of a tag matching `v*`:
+
+1. Build sdist + wheel (`python -m build`)
+2. `twine check dist/*`
+3. Upload Actions artifacts (`python-dist`)
+4. Attach `dist/*` to the GitHub Release for that tag (`softprops/action-gh-release`)
+
+### Verify after a tag push (#153)
+
+```bash
+# Workflow must be green
+gh run list --workflow=release.yml --limit 5
+
+# Release must list wheel + sdist assets (not empty)
+gh release view vX.Y.Z --json assets,url
+```
+
+**Baseline note:** `v0.2.0` was cut as a Phase 1B library tag; its Release
+currently has **no attached wheel/sdist** (manual notes only). The **next**
+version tag on `main` (with release.yml present) is the acceptance run for
+#153: green `Release` workflow + non-empty assets.
+
+If the workflow is green but assets are missing, check that a GitHub Release
+object exists for the tag (the action creates/updates it) and that
+`permissions: contents: write` remains on the workflow.
+
 ## Preconditions
 
 1. `main` is green (Quality + Go green on the merge commit / latest PR).
 2. CHANGELOG has a version section that matches what you intend to ship.
 3. Working tree clean; `git pull origin main`.
 4. You have rights to push tags and (for PyPI) upload the project.
+5. After the tag push: confirm **Release** workflow green and assets attached.
 
 ## Version numbers
 
@@ -42,12 +73,14 @@ git tag -a v0.2.0 -m "Trajectory IR v0.2.0 Phase 1B Go primary SDK"
 git push origin v0.2.0
 ```
 
-Create a **GitHub Release** for the tag:
+Create or update a **GitHub Release** for the tag:
 
-1. Title: `v0.2.0`
+1. Title: `v0.2.0` (or the version you are cutting)
 2. Body: paste or adapt [RELEASE_NOTES_0.2.0.md](RELEASE_NOTES_0.2.0.md)
    (older notes: [RELEASE_NOTES_0.1.1.md](RELEASE_NOTES_0.1.1.md), [RELEASE_NOTES_0.1.0.md](RELEASE_NOTES_0.1.0.md))
-3. Attach nothing required (source zip is automatic)
+3. Prefer letting **release.yml** attach wheel + sdist automatically on tag push.
+   Source zip remains automatic from GitHub.
+4. Confirm assets: `gh release view vX.Y.Z --json assets`
 
 ### Historical: v0.1.0
 
