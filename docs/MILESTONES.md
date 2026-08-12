@@ -22,12 +22,11 @@ Board: [Milestones](https://github.com/Coder-s-OG-s/Trajectory-IR/milestones)
 2. **Do not mix scopes.** Phase 1C harden work stays on Phase 1C. Deferred product ideas go to Future, not Phase 1C.
 3. **Exit criteria live in the milestone description.** Close the milestone only when those criteria are met (and the matching release or epic is done).
 4. **Suggested work order right now (Phase 1C)**
-   1. Maintainer merge policy while #146 blocked ([#152](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/152))
-   2. Docker live matrix docs/compose ([#154](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/154))
-   3. Status docs keep pace ([#155](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/155))
-   4. First-success Go path audit ([#156](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/156))
-   5. Next `v*` tag: prove Release attaches wheel/sdist ([#153](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/153))
-   6. Branch protection when public or paid plan allows ([#146](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/146))
+   1. ~~Branch protection on `main`~~ ([#146](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/146) / [#158](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/158)) — **done**
+   2. Refresh status docs ([#161](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/161))
+   3. Smoke live Docker stack ([#160](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/160))
+   4. Next `v*` tag: prove Release attaches wheel/sdist ([#159](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/159))
+   5. Close Phase 1C epic when exit criteria met ([#162](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/162) / [#151](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/151))
 5. **Future milestone is a parking lot.** Implementing from Future needs a README scope bump (§14) and a new active milestone or epic first. Example: [#149](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/149) signatures.
 6. **Labels still matter** (`go`, `phase-1c`, `SPEC-QUESTION`, …). Milestone answers *when/why*; labels answer *kind of work*.
 
