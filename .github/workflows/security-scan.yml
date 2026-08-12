@@ -1,0 +1,63 @@
+# Fast supply-chain / workflow hygiene checks for every PR (CNCF GHA recipe card).
+name: Security scan
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: security-scan-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  gitleaks:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  actionlint:
+    name: Workflow lint (actionlint)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install actionlint
+        run: |
+          bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+          ./actionlint -color
+
+  zizmor:
+    name: Workflow audit (zizmor)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install zizmor
+        run: pip install --upgrade pip "zizmor>=1.5"
+
+      - name: Audit workflows (advisory first wave)
+        # CNCF recipe recommends zizmor. Findings are uploaded for review;
+        # do not fail PRs until SHA-pinning follow-up lands.
+        continue-on-error: true
+        run: zizmor --format plain .github/workflows

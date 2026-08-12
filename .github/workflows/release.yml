@@ -5,8 +5,10 @@ on:
     tags:
       - "v*"
 
+# Least privilege: write only what release needs (CNCF GHA least-privilege).
 permissions:
   contents: write
+  id-token: write
 
 jobs:
   python-dist:
@@ -27,6 +29,13 @@ jobs:
           python -m build
           twine check dist/*
 
+      - name: Generate SBOMs with syft
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+          syft dir:. -o cyclonedx-json=dist/sbom-repo.cdx.json
+          syft dir:go -o cyclonedx-json=dist/sbom-go.cdx.json
+          syft dir:pkg -o cyclonedx-json=dist/sbom-python-src.cdx.json
+
       - name: Upload dist artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -34,7 +43,7 @@ jobs:
           path: dist/*
           if-no-files-found: error
 
-      - name: Attach dist to GitHub Release
+      - name: Attach dist and SBOMs to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: dist/*

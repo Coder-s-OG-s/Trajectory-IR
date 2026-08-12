@@ -227,6 +227,11 @@ jobs:
         working-directory: go
         run: go test ./... -count=1
 
+      - name: Go race detector (core packages)
+        working-directory: go
+        # Race on IR packages only; temporal integration stays optional.
+        run: go test -race ./trajir/client/... ./trajir/log/... ./trajir/resume/... ./trajir/cas/... ./trajir/nodes/... ./trajir/tir/... -count=1
+
       - name: Upload Go coverage profile
         if: always()
         uses: actions/upload-artifact@v4
