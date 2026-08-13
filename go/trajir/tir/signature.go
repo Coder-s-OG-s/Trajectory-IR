@@ -185,11 +185,29 @@ func Sign(path string, privateKey ed25519.PrivateKey, meta SignerMeta) error {
 
 // Verify checks package signature policy for path.
 // When SIGNATURE is absent and RequireSignature is false, returns (nil, nil).
+//
+// Prefer verifySignatureFromZipFiles when the archive is already open (Load/Import)
+// so signature metadata cannot come from a different file than the parsed members
+// (TOCTOU / CWE-367).
 func Verify(path string, opts VerifyOptions) (*SignatureInfo, error) {
 	members, sigRaw, err := readZipMembersAndSignature(path)
 	if err != nil {
 		return nil, err
 	}
+	return verifyFromMembers(members, sigRaw, opts)
+}
+
+// verifySignatureFromZipFiles verifies SIGNATURE against members from an already-open
+// zip.Reader (same archive instance Load is parsing). Do not re-open path here.
+func verifySignatureFromZipFiles(files []*zip.File, opts VerifyOptions) (*SignatureInfo, error) {
+	members, sigRaw, err := collectZipMembers(files)
+	if err != nil {
+		return nil, err
+	}
+	return verifyFromMembers(members, sigRaw, opts)
+}
+
+func verifyFromMembers(members map[string][]byte, sigRaw []byte, opts VerifyOptions) (*SignatureInfo, error) {
 	if sigRaw == nil {
 		if opts.RequireSignature {
 			return nil, fmt.Errorf("%w: package is unsigned (SIGNATURE missing)", ErrSignature)
@@ -301,10 +319,18 @@ func readZipMembersAndSignature(path string) (members map[string][]byte, signatu
 	if len(zr.File) > MaxZipEntries {
 		return nil, nil, fmt.Errorf("%w: too many zip entries: %d > %d", ErrLimit, len(zr.File), MaxZipEntries)
 	}
+	return collectZipMembers(zr.File)
+}
 
+// collectZipMembers reads all non-directory entries from an open archive.
+// Rejects duplicate member names, including duplicate SIGNATURE (CWE-436).
+func collectZipMembers(files []*zip.File) (members map[string][]byte, signature []byte, err error) {
+	if len(files) > MaxZipEntries {
+		return nil, nil, fmt.Errorf("%w: too many zip entries: %d > %d", ErrLimit, len(files), MaxZipEntries)
+	}
 	members = make(map[string][]byte)
 	budget := MaxTotalUncompressedBytes
-	for _, f := range zr.File {
+	for _, f := range files {
 		name := f.Name
 		if strings.HasSuffix(name, "/") {
 			continue
@@ -339,6 +365,9 @@ func readZipMembersAndSignature(path string) (members map[string][]byte, signatu
 		}
 		budget -= len(data)
 		if name == SignatureMemberName {
+			if signature != nil {
+				return nil, nil, fmt.Errorf("%w: duplicate zip member %q", ErrTir, name)
+			}
 			signature = data
 			continue
 		}

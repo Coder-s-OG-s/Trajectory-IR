@@ -269,6 +269,92 @@ func TestSignFatPackage(t *testing.T) {
 	}
 }
 
+func TestDuplicateSignatureMemberRejected(t *testing.T) {
+	src := openLog(t, "src.sqlite")
+	seedSample(t, src)
+	out := filepath.Join(t.TempDir(), "dup-sig.tir")
+	priv := testOnlySeed()
+	path, err := tir.Export(src, "t-export", out, tir.ExportOptions{Mode: tir.ModeThin, SignKey: priv})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Append a second SIGNATURE entry with different bytes (zip confusion).
+	if err := appendDuplicateZipMember(path, tir.SignatureMemberName, []byte(`{"scheme":"evil"}`)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tir.Verify(path, tir.VerifyOptions{}); !errors.Is(err, tir.ErrTir) {
+		t.Fatalf("Verify: want ErrTir for duplicate SIGNATURE, got %v", err)
+	}
+	if _, err := tir.Load(path); !errors.Is(err, tir.ErrTir) {
+		t.Fatalf("Load: want ErrTir for duplicate SIGNATURE, got %v", err)
+	}
+}
+
+func TestSignRejectsInvalidKey(t *testing.T) {
+	src := openLog(t, "src.sqlite")
+	seedSample(t, src)
+	out := filepath.Join(t.TempDir(), "k.tir")
+	path, err := tir.Export(src, "t-export", out, tir.ExportOptions{Mode: tir.ModeThin})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := tir.Sign(path, ed25519.PrivateKey{1, 2, 3}, tir.SignerMeta{}); !errors.Is(err, tir.ErrSignature) {
+		t.Fatalf("want ErrSignature, got %v", err)
+	}
+}
+
+func TestTrustedKeyIDAllowlist(t *testing.T) {
+	src := openLog(t, "src.sqlite")
+	seedSample(t, src)
+	out := filepath.Join(t.TempDir(), "kid.tir")
+	priv := testOnlySeed()
+	path, err := tir.Export(src, "t-export", out, tir.ExportOptions{Mode: tir.ModeThin, SignKey: priv})
+	if err != nil {
+		t.Fatal(err)
+	}
+	kid := tir.KeyID(priv.Public().(ed25519.PublicKey))
+	if _, err := tir.Verify(path, tir.VerifyOptions{TrustedKeyIDs: []string{"not-this-key"}}); !errors.Is(err, tir.ErrSignature) {
+		t.Fatalf("want key_id trust failure: %v", err)
+	}
+	if _, err := tir.Verify(path, tir.VerifyOptions{TrustedKeyIDs: []string{kid}}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestLoadUsesSameArchiveForSignature(t *testing.T) {
+	// Load must not re-open path for signature: after Load succeeds, Signature
+	// matches Verify of the same path, and package nodes remain consistent.
+	src := openLog(t, "src.sqlite")
+	seedSample(t, src)
+	out := filepath.Join(t.TempDir(), "same.tir")
+	priv := testOnlySeed()
+	path, err := tir.Export(src, "t-export", out, tir.ExportOptions{
+		Mode:       tir.ModeThin,
+		SignKey:    priv,
+		SignerMeta: tir.SignerMeta{ID: "same-archive"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pkg, err := tir.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pkg.Signature == nil || pkg.Signature.SignerID != "same-archive" {
+		t.Fatalf("signature=%v", pkg.Signature)
+	}
+	info, err := tir.Verify(path, tir.VerifyOptions{RequireSignature: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.KeyID != pkg.Signature.KeyID {
+		t.Fatalf("key_id Load=%s Verify=%s", pkg.Signature.KeyID, info.KeyID)
+	}
+	if len(pkg.Nodes) != 5 {
+		t.Fatalf("nodes=%d", len(pkg.Nodes))
+	}
+}
+
 func TestUnknownSchemeFails(t *testing.T) {
 	src := openLog(t, "src.sqlite")
 	seedSample(t, src)
@@ -295,6 +381,70 @@ func TestUnknownSchemeFails(t *testing.T) {
 	if _, err := tir.Verify(path, tir.VerifyOptions{}); !errors.Is(err, tir.ErrSignature) {
 		t.Fatalf("expected scheme error: %v", err)
 	}
+}
+
+func appendDuplicateZipMember(path, name string, data []byte) error {
+	// Read existing entries, rewrite with an extra copy of name (second SIGNATURE).
+	type entry struct {
+		name string
+		data []byte
+	}
+	var entries []entry
+	if err := func() error {
+		zr, err := zip.OpenReader(path)
+		if err != nil {
+			return err
+		}
+		defer zr.Close()
+		for _, f := range zr.File {
+			if f.Name == "" || f.Name[len(f.Name)-1] == '/' {
+				continue
+			}
+			rc, err := f.Open()
+			if err != nil {
+				return err
+			}
+			body, err := io.ReadAll(rc)
+			_ = rc.Close()
+			if err != nil {
+				return err
+			}
+			entries = append(entries, entry{name: f.Name, data: body})
+		}
+		return nil
+	}(); err != nil {
+		return err
+	}
+	entries = append(entries, entry{name: name, data: data})
+
+	tmp := path + ".dup"
+	f, err := os.Create(tmp)
+	if err != nil {
+		return err
+	}
+	zw := zip.NewWriter(f)
+	for _, e := range entries {
+		w, err := zw.Create(e.name)
+		if err != nil {
+			_ = f.Close()
+			return err
+		}
+		if _, err := w.Write(e.data); err != nil {
+			_ = f.Close()
+			return err
+		}
+	}
+	if err := zw.Close(); err != nil {
+		_ = f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	if err := os.Remove(path); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
 }
 
 func mutateZipMember(path, member string, mut func([]byte) []byte) error {
