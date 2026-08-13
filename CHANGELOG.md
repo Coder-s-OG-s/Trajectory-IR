@@ -9,7 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- CNCF Sandbox process pack: `MAINTAINERS.md`, `GOVERNANCE.md`, `docs/ROADMAP.md`,
+  `ADOPTERS.md`, `docs/SCOPE_AND_NON_GOALS.md` (#172).
+
 ### Changed
+
+- README project links; SECURITY.md supported versions for 0.2.x (#172).
 
 ### Fixed
 

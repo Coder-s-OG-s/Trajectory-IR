@@ -47,20 +47,21 @@ Update this table monthly.
 | Apache-2.0 project license | **Ready** | `LICENSE` |
 | Public code, works | **Ready** | Go + Python, releases `v0.2.0` / `v0.2.1` |
 | DCO on contributions | **Ready** | CI DCO job + CONTRIBUTING |
-| Code of Conduct file | **Ready** | `CODE_OF_CONDUCT.md` (confirm README deep link) |
+| Code of Conduct file | **Ready** | `CODE_OF_CONDUCT.md` + README links |
 | Contributing guide | **Ready** | `CONTRIBUTING.md` |
-| Security policy | **Check** | Ensure `SECURITY.md` exists and is linked |
-| MAINTAINERS.md (Name / GitHub ID / **Company**) | **Gap** | Required for form; auto-close if missing |
-| GOVERNANCE.md | **Gap** | Expected soon; strong for review |
-| ROADMAP (public URL) | **Gap** | Form requires roadmap URL |
-| ADOPTERS (optional) | **Gap** | Helps a lot if non-empty |
-| Org diversity of maintainers | **Risk** | TOC considers employer diversity |
+| Security policy | **Ready** | `SECURITY.md` (0.2.x supported versions) |
+| MAINTAINERS.md (Name / GitHub ID / **Company**) | **Ready** | `MAINTAINERS.md` |
+| GOVERNANCE.md | **Ready** | `GOVERNANCE.md` |
+| ROADMAP (public URL) | **Ready** | `docs/ROADMAP.md` |
+| ADOPTERS (optional) | **Template** | `ADOPTERS.md` (empty until real consent) |
+| Scope / non-goals / product separation | **Ready** | `docs/SCOPE_AND_NON_GOALS.md` + roadmap |
+| Org diversity of maintainers | **Partial** | Documented; more multi-employer diversity still helps |
 | Neutral GitHub org transfer-ready | **Plan** | Onboarding requires neutral org |
 | OpenSSF Best Practices badge | **Start** | Not Sandbox-hard-required; expected for maturity |
-| Scorecard / CI harden | **In progress** | Phase CI/CD harden |
+| Scorecard / CI harden | **In progress** | Phase CI/CD harden (#169 / #167 / #168) |
 | Landscape listing | **No** | After acceptance typically |
-| Repo age 6+ months | **Verify** | Auto-close risk if younger than 6 months |
-| Product decoupling story | **Draft needed** | Required form field |
+| Repo age 6+ months | **Not yet** | Created 2026-07-26; wait before apply |
+| Contribution Agreement signatory | **Open** | Org/legal decision |
 
 ---
 
@@ -71,23 +72,23 @@ Copied and adapted from the official form “Pre-Submission Checklist.”
 
 ### Critical (application closed without TOC review if failed)
 
-- [ ] Project uses **Apache-2.0** (or allowlist license) **now**, not “after acceptance”
-- [ ] **MAINTAINERS.md** (or `MAINTAINERS`) with table: **Name | GitHub ID | Company/Organization**
-- [ ] Form links to that file via **GitHub `/blob/` path**, not contributors graph
+- [x] Project uses **Apache-2.0** (or allowlist license) **now**, not “after acceptance”
+- [x] **MAINTAINERS.md** (or `MAINTAINERS`) with table: **Name | GitHub ID | Company/Organization**
+- [x] Form links to that file via **GitHub `/blob/` path**, not contributors graph
 - [ ] Primary repository is **≥ 6 months old** with active development
-- [ ] Project is a **reusable tool/library**, not a reference architecture or company platform demo
-- [ ] If splitting from a parent org/project: public parent maintainer consensus issue linked
+- [x] Project is a **reusable tool/library**, not a reference architecture or company platform demo
+- [x] If splitting from a parent org/project: N/A (standalone repo)
 - [ ] Dependency licenses are on the [CNCF third-party allowlist](https://github.com/cncf/foundation/blob/main/policies-guidance/allowed-third-party-license-policy.md) (or documented plan with FOSSA/Snyk)
 
 ### Strongly recommended before review
 
-- [ ] README links CoC, Contributing, Security, license, quickstart
-- [ ] Public **roadmap** URL (issues milestone or `docs/ROADMAP.md`)
-- [ ] **SECURITY.md** with private reporting path
-- [ ] **GOVERNANCE.md** (decision process, maintainers, emeritus)
-- [ ] Clear **scope and non-goals** (durable engines, agent frameworks, memory products)
-- [ ] **Similar projects** section ready (Temporal, Restate, DBOS, LangGraph, OTel, MCP)
-- [ ] At least a thin **ADOPTERS.md** or “early interest” list (even design partners)
+- [x] README links CoC, Contributing, Security, license, quickstart
+- [x] Public **roadmap** URL (`docs/ROADMAP.md`)
+- [x] **SECURITY.md** with private reporting path
+- [x] **GOVERNANCE.md** (decision process, maintainers, emeritus)
+- [x] Clear **scope and non-goals** (`docs/SCOPE_AND_NON_GOALS.md`)
+- [x] **Similar projects** section ready (see outline section 7; freeze before apply)
+- [x] Thin **ADOPTERS.md** template (fill when real adopters consent)
 - [ ] Contribution Agreement signatories identified (legal can sign)
 - [ ] Maintainers agree trademarks/accounts can transfer to LF if accepted
 - [ ] TAG awareness (optional GTR / presentation notes linked)
