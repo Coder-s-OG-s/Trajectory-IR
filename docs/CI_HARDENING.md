@@ -58,11 +58,11 @@ Local live stack (optional): [LIVE_INTEGRATION_DOCKER.md](LIVE_INTEGRATION_DOCKE
 
 ## Follow-up backlog (issues under Phase CI/CD harden)
 
-1. **SHA-pin GitHub Actions** (digest + Dependabot comments) — Scorecard “Pinned-Dependencies”
-2. **Require** gitleaks + actionlint on `main` protection once stable
+1. ~~**SHA-pin GitHub Actions**~~ — done (#167): digests + version comments in workflows
+2. ~~**Require** gitleaks + actionlint on `main`~~ — done (#168)
 3. **SLSA provenance** / cosign sign release artifacts (when maintainers pick a key strategy)
 4. **Fork PR approval** settings: require approval for first-time contributors (org setting)
-5. **zizmor fail-closed** after pin migration
+5. **zizmor fail-closed** after reviewing residual findings
 
 ## References
 

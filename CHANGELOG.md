@@ -18,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - README project links; SECURITY.md supported versions for 0.2.x (#172).
+- Pin GitHub Actions to commit digests with version comments (#167).
+- Require `Secret scan (gitleaks)` and `Workflow lint (actionlint)` on `main` (#168).
 
 ### Fixed
 
