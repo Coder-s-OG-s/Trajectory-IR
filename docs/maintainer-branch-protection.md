@@ -27,6 +27,8 @@ Expected live settings:
 
 Match Actions job names exactly:
 
+**CI workflow**
+
 1. `DCO`
 2. `Quality (Python 3.11)`
 3. `Quality (Python 3.12)`
@@ -38,7 +40,18 @@ Match Actions job names exactly:
 9. `Integration (Postgres)`
 10. `Integration (MinIO)`
 
-If a job is renamed in `.github/workflows/ci.yml`, update protection in the same PR.
+**Security scan workflow** (#168)
+
+11. `Secret scan (gitleaks)`
+12. `Workflow lint (actionlint)`
+
+If a job is renamed in `.github/workflows/*.yml`, update protection in the same PR.
+
+### Action SHA pinning (#167)
+
+Third-party and GitHub-owned Actions in workflows are pinned to full commit SHAs
+with a version comment (e.g. `actions/checkout@3d3c42e5… # v7`). Dependabot
+still updates the `github-actions` ecosystem weekly; review pin bumps carefully.
 
 ## Merge policy (historical while protection was blocked)
 
@@ -123,7 +136,9 @@ gh api -X PUT repos/Coder-s-OG-s/Trajectory-IR/branches/main/protection \
       "Conformance & E2E (Python 3.11)",
       "Conformance & E2E (Python 3.12)",
       "Integration (Postgres)",
-      "Integration (MinIO)"
+      "Integration (MinIO)",
+      "Secret scan (gitleaks)",
+      "Workflow lint (actionlint)"
     ]
   },
   "enforce_admins": false,
