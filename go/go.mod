@@ -10,7 +10,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.97.3
 	github.com/aws/smithy-go v1.27.7
 	github.com/gowebpki/jcs v1.0.1
-	github.com/jackc/pgx/v5 v5.9.2
+	github.com/jackc/pgx/v5 v5.10.0
 	go.temporal.io/api v1.63.5
 	go.temporal.io/sdk v1.47.0
 	modernc.org/sqlite v1.56.0
