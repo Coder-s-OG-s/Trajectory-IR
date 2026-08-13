@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Go: `trajir/tir` package signatures — `Sign` / `Verify`, optional
+  `ExportOptions.SignKey`, Load verifies present `SIGNATURE` (README §9.1,
+  [#177](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/177) / epic
+  [#149](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/149)). Golden
+  vectors under `go/trajir/tir/testdata/sig_v1/` for Python parity (Phase C).
 - Spec: package signature scheme **`trajir-pkg-sig-v1`** in README §9.1
   (payload digest, domain-separated Ed25519, file-only `SIGNATURE` member,
   unsigned default). Implementation remains Future ([#149](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/149)).
