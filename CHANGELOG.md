@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Spec: package signature scheme **`trajir-pkg-sig-v1`** in README §9.1
+  (payload digest, domain-separated Ed25519, file-only `SIGNATURE` member,
+  unsigned default). Implementation remains Future ([#149](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/149)).
 - Phase CI/CD harden: OpenSSF Scorecard, CodeQL (Go+Python), gitleaks,
   actionlint, zizmor advisory scan, Go race on core packages, CODEOWNERS,
   CycloneDX SBOM on release tags ([docs/CI_HARDENING.md](docs/CI_HARDENING.md)).
@@ -17,6 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- README §5 out-of-scope: signature **implementation** deferred; scheme is
+  normative in §9.1. Proposed conformance R09–R11 listed for Future.
+- Scope/roadmap/milestone docs: distinguish defined scheme vs implementation
+  for [#149](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/149).
 - README project links; SECURITY.md supported versions for 0.2.x (#172).
 - Pin GitHub Actions to commit digests with version comments (#167).
 - Require `Secret scan (gitleaks)` and `Workflow lint (actionlint)` on `main` (#168).

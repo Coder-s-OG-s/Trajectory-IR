@@ -26,8 +26,8 @@ Board: [Milestones](https://github.com/Coder-s-OG-s/Trajectory-IR/milestones)
 4. **Suggested work order right now**
    1. **Phase CI/CD harden** — supply-chain / contributor CI ([CI_HARDENING.md](CI_HARDENING.md)): Scorecard, CodeQL, gitleaks, actionlint, zizmor, Go race, SBOM, CODEOWNERS; then SHA-pin digests (#167) and optionally require new checks on `main` (#168)
    2. **CNCF Sandbox prep** — MAINTAINERS, governance, roadmap, application pack ([CNCF_SANDBOX_APPLICATION_OUTLINE.md](CNCF_SANDBOX_APPLICATION_OUTLINE.md)); **do not apply** until critical checklist is green
-   3. Future product only after README scope bump (§14); SLSA/cosign when maintainers choose a signing strategy
-5. **Future milestone is a parking lot.** Example: [#149](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/149) signatures.
+   3. Future product only after README scope bump (§14); SLSA/cosign when maintainers choose a signing strategy; package signature **scheme** is README §9.1 — **implementation** still Future ([#149](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/149))
+5. **Future milestone is a parking lot.** Example: [#149](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/149) package signature implementation (scheme already in README §9.1).
 6. **Labels still matter** (`go`, `ci`, `SPEC-QUESTION`, …). Milestone answers *when/why*; labels answer *kind of work*.
 
 ## How to assign (maintainers and contributors)

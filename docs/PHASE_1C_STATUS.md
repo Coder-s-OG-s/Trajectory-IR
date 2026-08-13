@@ -45,14 +45,14 @@ historical; keep good merge hygiene (squash, DCO, milestones).
 ## Maintainer checklist (post v0.2.0)
 
 1. Confirm latest `main` / PR CI is green (required checks must pass to merge).
-2. Prefer milestone **Phase 1C** for remaining harden work; park signatures/Fluid/SaaS under **Future** ([#149](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/149)).
+2. Prefer milestone **Phase 1C** for remaining harden work; park signature **implementation**/Fluid/SaaS under **Future** ([#149](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/149); scheme text is README §9.1).
 3. When cutting a tag: version + CHANGELOG + annotated tag; confirm **Release** attaches wheel + sdist ([#159](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/159), [RELEASE.md](RELEASE.md)).
 4. Live services: [LIVE_INTEGRATION_DOCKER.md](LIVE_INTEGRATION_DOCKER.md) ([#160](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/160)).
 5. First-success path: [go/QUICKSTART.md](../go/QUICKSTART.md).
 
 ## Explicitly not Phase 1C product
 
-- Package signatures ([#149](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/149))
+- Package signature **implementation** ([#149](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/149); scheme defined in README §9.1)
 - Fluid / multi-tenant SaaS / automated PyPI Trusted Publishing (Future milestone)
 
 ## Related

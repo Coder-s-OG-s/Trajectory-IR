@@ -138,7 +138,7 @@ The following records what Phase 1A required. It is not a license to prefer Pyth
 - Any Kubernetes provisioning layer (CAMI style claims/classes).
 - Fluid integration of any kind.
 - A second durable execution backend adapter for the Python SDK (Restate or otherwise) before the DBOS adapter is conformant. This does not apply to the Go port's already shipped, language appropriate Temporal backend (§3.1, §12.0).
-- Package signatures (`SIGNATURE` field in the `.tir` manifest is reserved but unimplemented).
+- Package signature **implementation** (scheme is defined in §9.1 as `trajir-pkg-sig-v1`; sign/verify APIs remain Future until explicitly scheduled, see [#149](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/149)). Until implementation ships, leave packages unsigned (`SIGNATURE` absent, `manifest.signature` null).
 - Multi region or multi writer high availability guarantees.
 - Live full duplex media/streaming as a first class node type.
 
@@ -296,7 +296,7 @@ artifacts-manifest.json
 artifacts/               # present only in fat packages
 projector-policy.yaml    # optional; see §7 default policy note below
 COMPAT.json
-SIGNATURE                 # reserved field; unimplemented in v0.1, see note below
+SIGNATURE                 # optional; scheme trajir-pkg-sig-v1 (§9.1). Absent = unsigned
 ```
 
 **Modes:**
@@ -307,9 +307,112 @@ SIGNATURE                 # reserved field; unimplemented in v0.1, see note belo
 
 Import verifies node ids and seals against their recorded hashes. Import does not automatically acquire a writer lease on the trajectory.
 
-**Signature note (do not implement in Phase 1A):** the `SIGNATURE` field is reserved for a future package signing scheme, deliberately left undefined until cryptography focused review has taken place. Any implementation work in this phase must leave this field absent or null rather than inventing a signing scheme.
-
 **Default projector policy (resolves the R04 dependency on an optional policy file):** when `projector-policy.yaml` is absent, the runtime applies a built in minimal policy: pinned items and all `CONSTRAINT` nodes are always included in context and are never silently dropped; if constraints alone exceed the token budget, the projector raises a hard `BUDGET_IMPOSSIBLE` error rather than trimming silently. A custom policy file must preserve this same invariant to be considered conformant.
+
+### 9.1 Package signatures (`trajir-pkg-sig-v1`)
+
+Package signatures authenticate **who produced a `.tir` export** and detect **tampering of package members** after export. They do **not** replace node identity hashing or decision seals (§6.3, §8). Content hashes prove payload consistency; signatures prove origin of the **bundle**.
+
+This scheme is **normative** for any future implementation. **Shipping sign/verify APIs remains Future deferred product** ([#149](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/149)) until dual-SDK work is explicitly scheduled. Until then, producers **must** leave the package unsigned: no `SIGNATURE` zip member, and `manifest.json` **must** keep `"signature": null` (or omit the key). Implementations **must not** invent alternate schemes.
+
+**Distinct from CI release signing:** cosign/SLSA for GitHub release tarballs and binaries (see `docs/CI_HARDENING.md`) is supply-chain signing of *release artifacts*. This section is **in-package** authenticity for `.tir` content exchanged between runtimes and partners.
+
+#### Representation (file-only)
+
+| Slot | Role |
+|---|---|
+| Zip member `SIGNATURE` | **Canonical** signature document (JSON). Absent ⇒ package is **unsigned**. |
+| `manifest.json` field `signature` | **Always `null` (or omitted) in v1**, even when `SIGNATURE` is present. All signature material lives in the zip member so the signed payload never includes the signature itself (no circularity). |
+
+Verification **always** uses the `SIGNATURE` member when present. Tools that only peek at the manifest treat `signature: null` as “see zip member if any,” not as “definitely unsigned.”
+
+#### Signed payload (`trajir-pkg-payload-v1`)
+
+The **signed payload** is a deterministic digest of package members **excluding** `SIGNATURE`.
+
+1. List all zip entry names except the exact name `SIGNATURE` (case-sensitive).
+2. Reject unsafe paths with the same rules as package Load (no absolute paths, no `..` segments).
+3. Sort names by UTF-8 byte order.
+4. For each name `N` with raw uncompressed bytes `B`:
+   - Let `H = SHA-256(B)` as 32 raw bytes.
+   - Append to a stream: `uint64_be(len(N)) || N || H`  
+     (length-prefixed name + content hash; not full body bytes, so fat packages stay cheap to re-hash).
+5. `payload_hash = SHA-256(stream)` (32 raw bytes; display as lowercase hex when needed).
+
+**Fat mode:** `artifacts/cas/...` members are included like any other member.  
+**Thin mode:** only non-artifact members (and any optional policy file if present).  
+**Optional members** (e.g. `projector-policy.yaml`): included if present.  
+**Redacted packages:** sign **after** redaction so the signature covers what is actually shared.
+
+Changing any covered member byte changes `payload_hash`. Re-export requires re-sign.
+
+#### Signature document (`SIGNATURE` JSON)
+
+```json
+{
+  "scheme": "trajir-pkg-sig-v1",
+  "payload_alg": "trajir-pkg-payload-v1",
+  "payload_hash": "<64 lowercase hex chars of SHA-256>",
+  "alg": "ed25519",
+  "public_key": "<base64 of raw 32-byte Ed25519 public key>",
+  "signature": "<base64 of raw 64-byte Ed25519 signature>",
+  "signed_at": "<RFC3339 UTC>",
+  "signer": {
+    "id": "<optional free-form identity string>",
+    "key_id": "<optional; recommended: first 16 hex chars of SHA-256(public_key raw bytes)>"
+  },
+  "extensions": {}
+}
+```
+
+**Ed25519 signature input (domain-separated):**
+
+```text
+message = SHA-256( "trajir-pkg-sig-v1" || 0x00 || payload_hash_raw )
+signature = Ed25519.Sign(private_key, message)
+```
+
+where `payload_hash_raw` is the 32-byte digest from `trajir-pkg-payload-v1` (not the hex string). Both Go and Python **must** produce identical `message` bytes for the same package.
+
+Unknown `scheme` or `alg` values **must** fail verification (fail closed). A future optional mode may set `"alg": "sigstore-bundle"` with an embedded Sigstore/cosign bundle under a documented key (e.g. `bundle`); offline hosts may reject that mode. Base **Ed25519 requires no transparency log** (air-gapped friendly).
+
+#### Verification order and policy
+
+Load / import **must** apply checks in this order:
+
+1. Path safety and size limits (zip bomb / traversal defenses).
+2. Required members present; parse manifests.
+3. Node id and seal hash verification (existing integrity).
+4. **If** `SIGNATURE` is present: parse document, recompute `payload_hash`, verify Ed25519 over the domain-separated message, then apply trust policy.
+5. **If** `SIGNATURE` is absent: package is unsigned; proceed unless policy requires a signature.
+
+| Situation | Default Load | Strict (`require_signature=true`) |
+|---|---|---|
+| No `SIGNATURE` member | OK (unsigned) | **Fail** |
+| `SIGNATURE` present and valid | OK; expose signature metadata to the caller | OK |
+| `SIGNATURE` present but invalid / payload mismatch | **Fail** (tamper) | Fail |
+| Unknown `scheme` / `alg` | Fail | Fail |
+| Trust store configured and key not listed | **Fail** | Fail |
+| No trust store configured | Accept any cryptographically valid Ed25519 key (dev / open exchange) | Same as default unless policy says otherwise |
+
+A valid package signature is **never** a substitute for node/seal hash checks.
+
+#### Trust model (no project CA)
+
+v1 supports local trust only:
+
+1. Raw Ed25519 public keys in a local trust file or environment (e.g. `TRAJIR_TRUSTED_KEYS`).
+2. Optional `key_id` allowlist.
+3. Later (optional): Sigstore identities when `sigstore-bundle` is implemented.
+
+No project-hosted CA or multi-tenant key product is required for conformance to this scheme.
+
+#### Implementation expectations (when Future work is scheduled)
+
+- **Go primary:** optional `Sign` / `Verify` (and optional Export sign key); golden payload vectors checked in.
+- **Python reference:** byte-identical payload construction and verify parity.
+- **Conformance (proposed when coding starts):** R09 sign/verify + mutate fails; R10 unsigned still passes R05, strict mode rejects unsigned; R11 Go-signed verifies in Python and vice versa.
+- **Security-review** required before merge of any sign/verify code. Private keys never in the repository; tests use ephemeral keys.
 
 ---
 
@@ -327,6 +430,9 @@ These are runnable tests, not descriptions of intent. R01 and R02 are the hard g
 | R06 | A sandbox/what if branch rejects any real `NON_IDEMPOTENT_WRITE` execution. Runnable: `conformance/r06_sandbox_test.py`. |
 | R07 | Grafting an artifact between agents transfers only the artifact reference, never private `THOUGHT` nodes. Runnable: `conformance/r07_graft_test.py`. |
 | R08 | Redaction removes secrets/flagged content from what gets projected into context. Runnable: `conformance/r08_projection_redaction_test.py`. |
+| R09 | (Proposed; Future) Sign a thin package; verify succeeds; mutate one byte of `nodes.ndjson`; verify fails. Blocked on §9.1 implementation ([#149](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/149)). |
+| R10 | (Proposed; Future) Unsigned package still passes R05; strict `require_signature` rejects unsigned. |
+| R11 | (Proposed; Future) Go-signed package verifies in Python and vice versa (cross-language payload parity). |
 
 **Phase 1A completion bar:** DBOS backend adapter wired in, SQLite (or file backed) IR log, Python SDK, R01 and R02 passing against the adapter, and a recorded kill-mid-deploy demonstration. R03–R08 are tracked but not blocking for this milestone.
 
@@ -587,6 +693,7 @@ Trajectory IR deliberately does not attempt to:
 | 1.1 (`spec-v0.2-draft`) | 2026-07-23 | Repositions Trajectory IR from a standalone execution runtime to a semantics and portability layer over a pluggable durable execution backend (DBOS default, Restate optional), see new §3.1. Removes custom crash detection/retry/lease heartbeat from scope; reframes §8's resume protocol as semantics enforced jointly with the backend; adds explicit prior art boundaries against Temporal, Restate, DBOS, LangGraph family checkpointing, and MCP tool annotations, so the project's non redundant contribution, a portable, hash verifiable, runtime independent trajectory export, is stated once, explicitly, and can be evaluated on its own terms (including for CNCF Sandbox review, where "why not just use X" is always the first question asked). |
 | 1.2 | 2026-08-07 | Reconciles §3, §3.1, §5, and §12.0 with the Go port's already shipped Temporal adapter (`go/trajir/durable/temporal`, issues #16, #24). Formally recognizes Temporal as the production durable execution backend for Go, alongside DBOS (Python Phase 1A default) and Restate (optional additional adapter for either language), and adds rationale in §3.1 for why Go diverges from the DBOS-first posture. Clarifies that §5's "one backend adapter" Phase 1A gate and its "no second adapter" out-of-scope item apply to the Python/DBOS conformance track only, and do not restrict the Go port's own language appropriate backend. Updates §17 glossary and §18 references accordingly. Resolves #67. |
 | 1.3 | 2026-08-07 | Declares **Phase 1B**: Go is the primary SDK and default onboarding language; Python is the reference/parity port. Updates §5 (phase structure), §12.1 languages, and §12.2 local onboarding guidance. Tracks work under epic #113. Resolves #114. |
+| 1.4 | 2026-08-13 | Defines package signature scheme **`trajir-pkg-sig-v1`** in new §9.1 (payload over zip members excluding `SIGNATURE`, domain-separated Ed25519, file-only document, unsigned default). Implementation remains Future ([#149](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/149)). Updates §5 out-of-scope wording and lists proposed conformance R09–R11. |
 
 ---
 
