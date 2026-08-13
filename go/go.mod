@@ -11,7 +11,7 @@ require (
 	github.com/aws/smithy-go v1.27.7
 	github.com/gowebpki/jcs v1.0.1
 	github.com/jackc/pgx/v5 v5.9.2
-	go.temporal.io/api v1.63.4
+	go.temporal.io/api v1.63.5
 	go.temporal.io/sdk v1.47.0
 	modernc.org/sqlite v1.55.0
 )
