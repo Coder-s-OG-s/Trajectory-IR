@@ -6,12 +6,14 @@ This policy is tightly integrated with our [Infrastructure Design](infrastructur
 
 ## 1. Supported Versions
 
-Trajectory IR is currently in its **Phase 1A / v0.1.x** development cycle. 
+Trajectory IR ships **0.2.x** (Phase 1B Go primary + Phase 1C harden). Older
+0.1.x tags remain available but are not the active development line.
 
 | Version | Supported          | Notes |
 | ------- | ------------------ | ----- |
-| v0.1.x  | :white_check_mark: | Active development (DBOS embedded backend) |
-| < v0.1  | :x:                | Historical (CAMI/CLOOP prototypes) |
+| v0.2.x  | :white_check_mark: | Current (Go primary, Python reference) |
+| v0.1.x  | :warning:          | Security fixes only if maintainers agree; prefer upgrade |
+| < v0.1  | :x:                | Historical prototypes |
 
 ## 2. Reporting a Vulnerability
 

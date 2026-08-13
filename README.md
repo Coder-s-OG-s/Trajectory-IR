@@ -8,6 +8,8 @@
 | **Status** | `spec-v0.2-draft`. Supersedes the frozen `spec-v0.1` under the version bump process in §14. This revision narrows the project's scope from a standalone execution runtime to a semantics and portability layer over a pluggable, existing durable execution backend, see §3.1. |
 | **Precedence** | This document is authoritative. If any prior document, chat message, or verbal agreement conflicts with this file, this file wins. |
 
+**Project links:** [License (Apache-2.0)](LICENSE) · [Code of Conduct](CODE_OF_CONDUCT.md) · [Contributing (DCO)](CONTRIBUTING.md) · [Security](SECURITY.md) · [Maintainers](MAINTAINERS.md) · [Governance](GOVERNANCE.md) · [Roadmap](docs/ROADMAP.md) · [Adopters](ADOPTERS.md) · [Scope and non-goals](docs/SCOPE_AND_NON_GOALS.md) · [Quickstart (Go first)](go/QUICKSTART.md) · [CNCF Sandbox prep](docs/CNCF_SANDBOX_APPLICATION_OUTLINE.md)
+
 ---
 
 ## 0. Purpose of this document
@@ -433,8 +435,14 @@ This section is binding for implementation choices. Do not introduce alternative
 trajectory-ir/
   README.md                     # Master Specification (this file)
   LICENSE                       # Apache-2.0
-  CODE_OF_CONDUCT.md            # CNCF Code of Conduct
-  CONTRIBUTING.md                # DCO sign-off requirement, PR process
+  CODE_OF_CONDUCT.md            # Code of Conduct
+  CONTRIBUTING.md               # DCO sign-off requirement, PR process
+  MAINTAINERS.md                # Active maintainers (Name / GitHub / Company)
+  GOVERNANCE.md                 # Decision process and maintainership
+  SECURITY.md                   # Vulnerability reporting
+  ADOPTERS.md                   # Adopter list (fill as consent is given)
+  docs/ROADMAP.md               # Public roadmap
+  docs/SCOPE_AND_NON_GOALS.md   # Short scope summary
   spec/
     node-kinds.md
     effect-classes.md
