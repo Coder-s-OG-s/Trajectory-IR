@@ -1,0 +1,23 @@
+# Gitleaks config for Trajectory IR.
+# Fake AWS-shaped strings are intentional fixtures for redaction tests
+# (they must look like credentials for the product under test).
+
+title = "Trajectory IR"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Test fixtures that intentionally contain secret-shaped values for redaction coverage"
+paths = [
+  '''(^|/)go/trajir/redact/.*_test\.go$''',
+  '''(^|/)pkg/trajectory_ir/runtime/.*redact.*''',
+  '''(^|/)test/unit/test_.*redact.*\.py$''',
+  '''(^|/)test/unit/test_tir_package\.py$''',
+  '''(^|/)conformance/r08_.*\.py$''',
+  '''(^|/)test/unit/test_redact\.py$''',
+]
+regexTarget = "match"
+regexes = [
+  '''AKIAABCDEFGHIJKLMNOP''',
+]

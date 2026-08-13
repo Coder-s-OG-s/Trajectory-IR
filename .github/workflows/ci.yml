@@ -227,6 +227,11 @@ jobs:
         working-directory: go
         run: go test ./... -count=1
 
+      - name: Go race detector (core packages)
+        working-directory: go
+        # Race on IR packages only; temporal integration stays optional.
+        run: go test -race ./trajir/client/... ./trajir/log/... ./trajir/resume/... ./trajir/cas/... ./trajir/nodes/... ./trajir/tir/... -count=1
+
       - name: Upload Go coverage profile
         if: always()
         uses: actions/upload-artifact@v4
@@ -342,9 +347,9 @@ jobs:
             -e MINIO_ROOT_PASSWORD=minioadmin \
             quay.io/minio/minio:RELEASE.2024-12-18T13-15-44Z \
             server /data --console-address ":9001"
-          for i in $(seq 1 40); do
+          for attempt in $(seq 1 40); do
             if curl -sf http://127.0.0.1:9000/minio/health/live; then
-              echo "MinIO is up"
+              echo "MinIO is up (attempt ${attempt})"
               exit 0
             fi
             sleep 1

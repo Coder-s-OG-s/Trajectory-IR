@@ -1,0 +1,12 @@
+# CI/CD and process surface needs maintainer review (CNCF-style CODEOWNERS gate).
+# Users must be org members with write access for reviews to be required.
+# Adjust handles if the maintainer set changes.
+
+# Workflows and automation
+.github/ @Siddhartha-singh01
+
+# Release and security-sensitive policy docs
+docs/RELEASE.md @Siddhartha-singh01
+docs/maintainer-branch-protection.md @Siddhartha-singh01
+docs/CI_HARDENING.md @Siddhartha-singh01
+SECURITY.md @Siddhartha-singh01

@@ -1,0 +1,81 @@
+# Fast supply-chain / workflow hygiene checks for every PR (CNCF GHA recipe card).
+name: Security scan
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: security-scan-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  gitleaks:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # Free CLI (not gitleaks-action): org repos would require a paid GITLEAKS_LICENSE.
+      - name: Install gitleaks
+        env:
+          GITLEAKS_VERSION: "8.24.2"
+        run: |
+          set -euo pipefail
+          curl -sSfL --retry 5 --retry-all-errors \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            | tar -xz gitleaks
+          sudo mv gitleaks /usr/local/bin/gitleaks
+          gitleaks version
+
+      - name: Run gitleaks
+        # --no-git: scan working tree only (current tree is what merges).
+        # Allowlist for intentional redaction fixtures: .gitleaks.toml
+        run: gitleaks detect --source . --no-git --verbose --redact --exit-code 1 --config .gitleaks.toml
+
+  actionlint:
+    name: Workflow lint (actionlint)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: "1.25.x"
+
+      # go install is more reliable than curl|tar from GitHub releases on flaky networks.
+      - name: Install and run actionlint
+        run: |
+          set -euo pipefail
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
+          "$(go env GOPATH)/bin/actionlint" -color
+
+  zizmor:
+    name: Workflow audit (zizmor)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install zizmor
+        run: pip install --upgrade pip "zizmor>=1.5"
+
+      - name: Audit workflows (advisory first wave)
+        # Findings reported for review; fail-closed after SHA-pinning (#167).
+        continue-on-error: true
+        run: zizmor --format plain .github/workflows

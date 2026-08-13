@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Phase CI/CD harden: OpenSSF Scorecard, CodeQL (Go+Python), gitleaks,
+  actionlint, zizmor advisory scan, Go race on core packages, CODEOWNERS,
+  CycloneDX SBOM on release tags ([docs/CI_HARDENING.md](docs/CI_HARDENING.md)).
 - CNCF Sandbox process pack: `MAINTAINERS.md`, `GOVERNANCE.md`, `docs/ROADMAP.md`,
   `ADOPTERS.md`, `docs/SCOPE_AND_NON_GOALS.md` (#172).
 
