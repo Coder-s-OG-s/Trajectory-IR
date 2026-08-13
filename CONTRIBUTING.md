@@ -4,6 +4,10 @@ Thanks for helping. Trajectory IR is a portable semantic layer for agent runs
 (seals, effect classes, `.tir`, honest resume). The root `README.md` is the
 master specification.
 
+Also read: [MAINTAINERS.md](MAINTAINERS.md), [GOVERNANCE.md](GOVERNANCE.md),
+[docs/ROADMAP.md](docs/ROADMAP.md), [docs/SCOPE_AND_NON_GOALS.md](docs/SCOPE_AND_NON_GOALS.md),
+[SECURITY.md](SECURITY.md), [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
+
 ## 1. Spec before code
 
 1. Read the root `README.md` (Phase 1B language priority is in §5 and §12.1).
