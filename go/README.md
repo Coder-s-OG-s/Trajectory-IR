@@ -17,7 +17,11 @@ Python remains the supported **reference and parity port** from Phase 1A.
 | `trajir/client` | Thin SDK: open, project, seal, exec, commit, resume, RunStep |
 | `trajir/cas` | Filesystem CAS and S3 compatible CAS (sharded layout; thin rehydrate; AWS SDK v2 via `NewS3StoreFromEnv`) |
 | `trajir/tir` | Portable `.tir` package export / import (thin and fat) |
+| `trajir/mcp` | Model Context Protocol server tools (status, export/import, verify) |
+| `cmd/trajir-mcp` | stdio MCP binary for Claude Code / Cursor style hosts |
 | `trajir/projector` | Default context projector (R04; size metric = RFC 8785 / JCS bytes) |
+
+Integrations contract: [docs/INTEGRATIONS.md](../docs/INTEGRATIONS.md).
 
 ## Durable backend decision (issues #16 and #24)
 

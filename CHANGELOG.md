@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- MCP: in-tree Trajectory IR server (`go/trajir/mcp`, `go/cmd/trajir-mcp`) with
+  tools `trajectory_status`, `trajectory_export_tir`, `trajectory_import_tir`,
+  `trajectory_verify_signature`; docs in [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md)
+  and [integrations/mcp/README.md](integrations/mcp/README.md).
 - Go: `trajir/tir` package signatures — `Sign` / `Verify`, optional
   `ExportOptions.SignKey`, Load verifies present `SIGNATURE` (README §9.1,
   [#177](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/177) / epic
