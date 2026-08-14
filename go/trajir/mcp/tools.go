@@ -14,7 +14,7 @@ import (
 
 // Common path args for tools that touch a local workdir NodeLog.
 type workdirArgs struct {
-	WorkDir      string `json:"work_dir" jsonschema:"directory for nodes.sqlite (and memo.sqlite when opening a client)"`
+	WorkDir      string `json:"work_dir" jsonschema:"directory under TRAJIR_MCP_ROOT (or cwd) holding nodes.sqlite"`
 	TenantID     string `json:"tenant_id" jsonschema:"tenant id for the trajectory"`
 	TrajectoryID string `json:"trajectory_id" jsonschema:"trajectory id"`
 }
@@ -36,7 +36,11 @@ func toolStatus(ctx context.Context, _ *mcp.CallToolRequest, in workdirArgs) (*m
 	if err := requireIDs(in.TenantID, in.TrajectoryID); err != nil {
 		return nil, zero, err
 	}
-	nodesPath := nodesPathFromWorkDir(in.WorkDir)
+	workDir, err := requireBoundedWorkDir(in.WorkDir)
+	if err != nil {
+		return nil, zero, err
+	}
+	nodesPath := filepath.Join(workDir, "nodes.sqlite")
 	nl, err := nodelog.Open(nodesPath)
 	if err != nil {
 		return nil, zero, err
@@ -61,7 +65,7 @@ func toolStatus(ctx context.Context, _ *mcp.CallToolRequest, in workdirArgs) (*m
 		kinds = append(kinds, k)
 	}
 	return nil, statusOut{
-		WorkDir:      in.WorkDir,
+		WorkDir:      workDir,
 		NodesPath:    nodesPath,
 		TenantID:     in.TenantID,
 		TrajectoryID: in.TrajectoryID,
@@ -73,10 +77,10 @@ func toolStatus(ctx context.Context, _ *mcp.CallToolRequest, in workdirArgs) (*m
 }
 
 type exportIn struct {
-	WorkDir      string `json:"work_dir" jsonschema:"directory containing nodes.sqlite"`
+	WorkDir      string `json:"work_dir" jsonschema:"directory under workspace root containing nodes.sqlite"`
 	TenantID     string `json:"tenant_id" jsonschema:"tenant id"`
 	TrajectoryID string `json:"trajectory_id" jsonschema:"trajectory id"`
-	Dest         string `json:"dest" jsonschema:"output path for the .tir file (extension optional)"`
+	Dest         string `json:"dest" jsonschema:"output .tir path (must stay under work_dir / workspace)"`
 	Mode         string `json:"mode,omitempty" jsonschema:"package mode: thin (default) or fat"`
 }
 
@@ -107,13 +111,22 @@ func toolExportTIR(ctx context.Context, _ *mcp.CallToolRequest, in exportIn) (*m
 		return nil, zero, fmt.Errorf("mcp: unsupported mode %q (use thin or fat)", in.Mode)
 	}
 
-	tr, err := client.OpenTrajectory(in.TenantID, in.TrajectoryID, client.Options{WorkDir: in.WorkDir})
+	workDir, err := requireBoundedWorkDir(in.WorkDir)
+	if err != nil {
+		return nil, zero, err
+	}
+	dest, err := requireBoundedPath(in.Dest, workDir)
+	if err != nil {
+		return nil, zero, err
+	}
+
+	tr, err := client.OpenTrajectory(in.TenantID, in.TrajectoryID, client.Options{WorkDir: workDir})
 	if err != nil {
 		return nil, zero, err
 	}
 	defer tr.Close()
 
-	path, err := tir.Export(tr.Log(), in.TrajectoryID, in.Dest, tir.ExportOptions{
+	path, err := tir.Export(tr.Log(), in.TrajectoryID, dest, tir.ExportOptions{
 		Mode:     mode,
 		TenantID: &in.TenantID,
 	})
@@ -134,7 +147,7 @@ func toolExportTIR(ctx context.Context, _ *mcp.CallToolRequest, in exportIn) (*m
 }
 
 type pathIn struct {
-	Path string `json:"path" jsonschema:"filesystem path to a .tir package"`
+	Path string `json:"path" jsonschema:"path to a .tir package under the workspace root"`
 }
 
 type importOut struct {
@@ -153,7 +166,11 @@ func toolImportTIR(ctx context.Context, _ *mcp.CallToolRequest, in pathIn) (*mcp
 	if strings.TrimSpace(in.Path) == "" {
 		return nil, zero, fmt.Errorf("mcp: path is required")
 	}
-	pkg, err := tir.Load(in.Path)
+	path, err := requireBoundedPath(in.Path, "")
+	if err != nil {
+		return nil, zero, err
+	}
+	pkg, err := tir.Load(path)
 	if err != nil {
 		return nil, zero, err
 	}
@@ -161,7 +178,7 @@ func toolImportTIR(ctx context.Context, _ *mcp.CallToolRequest, in pathIn) (*mcp
 	traj, _ := pkg.Manifest["trajectory_id"].(string)
 	tenant, _ := pkg.Manifest["tenant_id"].(string)
 	return nil, importOut{
-		Path:         in.Path,
+		Path:         path,
 		Mode:         mode,
 		TrajectoryID: traj,
 		TenantID:     tenant,
@@ -172,8 +189,8 @@ func toolImportTIR(ctx context.Context, _ *mcp.CallToolRequest, in pathIn) (*mcp
 }
 
 type verifyIn struct {
-	Path              string `json:"path" jsonschema:"filesystem path to a .tir package"`
-	RequireSignature  bool   `json:"require_signature,omitempty" jsonschema:"if true, unsigned packages fail"`
+	Path             string `json:"path" jsonschema:"path to a .tir package under the workspace root"`
+	RequireSignature bool   `json:"require_signature,omitempty" jsonschema:"if true, unsigned packages fail"`
 }
 
 type verifyOut struct {
@@ -193,13 +210,17 @@ func toolVerifySignature(ctx context.Context, _ *mcp.CallToolRequest, in verifyI
 	if strings.TrimSpace(in.Path) == "" {
 		return nil, zero, fmt.Errorf("mcp: path is required")
 	}
-	info, err := tir.Verify(in.Path, tir.VerifyOptions{RequireSignature: in.RequireSignature})
+	path, err := requireBoundedPath(in.Path, "")
+	if err != nil {
+		return nil, zero, err
+	}
+	info, err := tir.Verify(path, tir.VerifyOptions{RequireSignature: in.RequireSignature})
 	if err != nil {
 		return nil, zero, err
 	}
 	if info == nil {
 		return nil, verifyOut{
-			Path:     in.Path,
+			Path:     path,
 			Signed:   false,
 			Verified: true,
 			Message:  "unsigned package (no SIGNATURE member); hash verification not run by this tool",
@@ -210,7 +231,7 @@ func toolVerifySignature(ctx context.Context, _ *mcp.CallToolRequest, in verifyI
 		scheme = info.Document.Scheme
 	}
 	return nil, verifyOut{
-		Path:       in.Path,
+		Path:       path,
 		Signed:     true,
 		Verified:   true,
 		Scheme:     scheme,
@@ -226,11 +247,4 @@ func requireIDs(tenantID, trajectoryID string) error {
 		return fmt.Errorf("mcp: tenant_id and trajectory_id are required")
 	}
 	return nil
-}
-
-func nodesPathFromWorkDir(workDir string) string {
-	if strings.TrimSpace(workDir) == "" {
-		return "nodes.sqlite"
-	}
-	return filepath.Join(workDir, "nodes.sqlite")
 }

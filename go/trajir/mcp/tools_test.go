@@ -31,6 +31,7 @@ func seedTrajectory(t *testing.T, workDir string) {
 
 func TestToolsViaInMemoryMCP(t *testing.T) {
 	work := t.TempDir()
+	t.Setenv("TRAJIR_MCP_ROOT", work)
 	seedTrajectory(t, work)
 
 	ctx := context.Background()
@@ -98,15 +99,14 @@ func TestToolsViaInMemoryMCP(t *testing.T) {
 		t.Fatalf("node_count=%v", status["node_count"])
 	}
 
-	// export
-	dest := filepath.Join(work, "pkg.tir")
+	// export (relative dest under workspace)
 	ex, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
 		Name: "trajectory_export_tir",
 		Arguments: map[string]any{
 			"work_dir":      work,
 			"tenant_id":     "demo",
 			"trajectory_id": "mcp-traj",
-			"dest":          dest,
+			"dest":          "pkg.tir",
 			"mode":          "thin",
 		},
 	})
@@ -115,6 +115,19 @@ func TestToolsViaInMemoryMCP(t *testing.T) {
 	}
 	if ex.IsError {
 		t.Fatalf("export error: %+v", ex)
+	}
+	dest := filepath.Join(work, "pkg.tir")
+
+	// path escape must fail
+	escape, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
+		Name: "trajectory_import_tir",
+		Arguments: map[string]any{"path": filepath.Join(t.TempDir(), "evil.tir")},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !escape.IsError {
+		t.Fatal("expected path escape to fail closed")
 	}
 
 	// import
@@ -139,6 +152,19 @@ func TestToolsViaInMemoryMCP(t *testing.T) {
 	}
 	if vr.IsError {
 		t.Fatalf("verify error: %+v", vr)
+	}
+
+	// bad mode / missing ids
+	if bad, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
+		Name: "trajectory_export_tir",
+		Arguments: map[string]any{
+			"work_dir": work, "tenant_id": "demo", "trajectory_id": "mcp-traj",
+			"dest": "x.tir", "mode": "bogus",
+		},
+	}); err != nil {
+		t.Fatal(err)
+	} else if !bad.IsError {
+		t.Fatal("expected bad mode error")
 	}
 }
 

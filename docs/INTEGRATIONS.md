@@ -62,6 +62,29 @@ The server speaks MCP over **stdio** until the client disconnects.
 Use an absolute path to the built binary. Do not put private signing keys in
 config files; use environment variables when signing tools are added.
 
+### Workspace confinement
+
+| Variable | Meaning |
+|----------|---------|
+| `TRAJIR_MCP_ROOT` | Approved workspace root. All `work_dir`, `dest`, and `path` values must resolve under this directory. When unset, the process **current working directory** is the root. |
+
+This bounds prompt-injected tool paths (CWE-73). Host configs should set
+`TRAJIR_MCP_ROOT` to the project directory and start the server with that cwd.
+
+```json
+{
+  "mcpServers": {
+    "trajectory-ir": {
+      "command": "/absolute/path/to/trajir-mcp",
+      "args": [],
+      "env": {
+        "TRAJIR_MCP_ROOT": "/absolute/path/to/project"
+      }
+    }
+  }
+}
+```
+
 ## Non-goals
 
 - Agent graph orchestration (LangGraph-class)
