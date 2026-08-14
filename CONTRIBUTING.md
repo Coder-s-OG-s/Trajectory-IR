@@ -49,9 +49,13 @@ still require a matching `Signed-off-by`.
 
 1. Prefer a linked issue (`Closes #N`).
 2. Keep the change focused.
-3. Fill in the PR template.
-4. Wait for CI to go green.
-5. Set the **Milestone** on both the issue and the PR (see
+3. **New functionality must include tests in the same PR** (unit tests at
+   minimum; add integration/conformance coverage where relevant). This is
+   enforced indirectly by the coverage floor below, but do not treat the
+   floor as the bar — add tests for the behavior you actually added.
+4. Fill in the PR template.
+5. Wait for CI to go green.
+6. Set the **Milestone** on both the issue and the PR (see
    [docs/MILESTONES.md](docs/MILESTONES.md)). Right now prefer **Phase 1C harden
    and adopt**. Park signatures, Fluid, and SaaS under **Future deferred product**.
 

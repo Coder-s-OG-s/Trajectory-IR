@@ -23,6 +23,7 @@ cd go && go test ./... -count=1
 ## Checklist
 
 - [ ] Commits are DCO signed (`git commit -s`)
+- [ ] New functionality includes tests in this PR
 - [ ] Change matches the master README (no invented APIs)
 - [ ] Relevant CI checks pass locally (or will pass on the PR)
 - [ ] If you changed `.github/workflows/**`, note it under Safety and expect extra review
