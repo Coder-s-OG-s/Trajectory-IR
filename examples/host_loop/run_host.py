@@ -11,6 +11,7 @@ No paid model API is required: ``stub_model`` is a deterministic stand in.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import os
 import sys
 import tempfile
@@ -21,17 +22,17 @@ for _path in (_REPO_ROOT, os.path.join(_REPO_ROOT, "pkg")):
     if _path not in sys.path:
         sys.path.insert(0, _path)
 
-from client.python.trajectory_client import (  # noqa: E402
+from client.python.trajectory_client import (
     commit_step,
     exec_tool,
     open_trajectory,
     project,
     seal_decision,
 )
-from trajectory_ir.effects import EffectClass  # noqa: E402
-from trajectory_ir.runtime.log import NodeLog  # noqa: E402
-from trajectory_ir.runtime.sandbox import SandboxForbidden  # noqa: E402
-from trajectory_ir.runtime.tool import Tool  # noqa: E402
+from trajectory_ir.effects import EffectClass
+from trajectory_ir.runtime.log import NodeLog
+from trajectory_ir.runtime.sandbox import SandboxForbidden
+from trajectory_ir.runtime.tool import Tool
 
 TENANT_ID = "demo"
 TRAJECTORY_ID = "host-loop-demo"
@@ -153,10 +154,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     finally:
         if cleanup:
-            try:
+            with contextlib.suppress(OSError):
                 os.remove(db_path)
-            except OSError:
-                pass
 
 
 if __name__ == "__main__":

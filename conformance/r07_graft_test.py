@@ -71,7 +71,7 @@ def test_r07_refuses_graft_from_thought_payload_hash(tmp_path) -> None:
             "demo",
             0,
         )
-        with pytest.raises(GraftError, match="refusing|no ARTIFACT"):
+        with pytest.raises(GraftError, match=r"refusing|no ARTIFACT"):
             graft_artifact_ref(
                 dst,
                 content_hash=h,

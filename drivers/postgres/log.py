@@ -267,17 +267,15 @@ class PostgresNodeLog:
             sql += " AND seq = %s"
             params.append(seq)
         sql += " LIMIT 1"
-        with self._lock:
-            with self._conn.cursor() as cur:
-                cur.execute(sql, params)
-                return cur.fetchone() is not None
+        with self._lock, self._conn.cursor() as cur:
+            cur.execute(sql, params)
+            return cur.fetchone() is not None
 
     def count(self, node_id: str) -> int:
-        with self._lock:
-            with self._conn.cursor() as cur:
-                cur.execute("SELECT COUNT(*) FROM nodes WHERE id = %s", (node_id,))
-                row = cur.fetchone()
-                return int(row[0]) if row else 0
+        with self._lock, self._conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM nodes WHERE id = %s", (node_id,))
+            row = cur.fetchone()
+            return int(row[0]) if row else 0
 
     def list_nodes(
         self,
@@ -306,24 +304,23 @@ class PostgresNodeLog:
             sql += " AND tenant_id = %s"
             params.append(tenant_id)
         sql += " ORDER BY COALESCE(step_n, -1), seq"
-        with self._lock:
-            with self._conn.cursor() as cur:
-                cur.execute(sql, params)
-                rows: list[dict[str, Any]] = []
-                for row in cur.fetchall():
-                    rows.append(
-                        {
-                            "id": row[0],
-                            "trajectory_id": row[1],
-                            "tenant_id": row[2],
-                            "step_n": row[3],
-                            "seq": row[4],
-                            "kind": row[5],
-                            "payload": json.loads(row[6]),
-                            "ts": row[7],
-                        }
-                    )
-                return rows
+        with self._lock, self._conn.cursor() as cur:
+            cur.execute(sql, params)
+            rows: list[dict[str, Any]] = []
+            for row in cur.fetchall():
+                rows.append(
+                    {
+                        "id": row[0],
+                        "trajectory_id": row[1],
+                        "tenant_id": row[2],
+                        "step_n": row[3],
+                        "seq": row[4],
+                        "kind": row[5],
+                        "payload": json.loads(row[6]),
+                        "ts": row[7],
+                    }
+                )
+            return rows
 
     def close(self) -> None:
         with self._lock:

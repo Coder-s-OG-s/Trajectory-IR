@@ -43,11 +43,7 @@ class _FakeStore:
 
     def execute(self, sql: str, params: tuple | list) -> list[tuple]:
         s = " ".join(sql.split()).lower()
-        if (
-            s.startswith("create table")
-            or s.startswith("create unique index")
-            or s.startswith("create index")
-        ):
+        if s.startswith(("create table", "create unique index", "create index")):
             return []
         if s.startswith("insert into nodes") and "on conflict" in s:
             (

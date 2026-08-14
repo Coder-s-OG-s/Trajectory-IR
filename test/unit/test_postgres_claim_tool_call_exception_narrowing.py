@@ -25,11 +25,7 @@ class _RaisingCursor:
 
     def execute(self, sql: str, params=None) -> None:
         normalized = " ".join(sql.lower().split())
-        if (
-            normalized.startswith("create table")
-            or normalized.startswith("create unique index")
-            or normalized.startswith("create index")
-        ):
+        if normalized.startswith(("create table", "create unique index", "create index")):
             # PostgresNodeLog._ensure_schema DDL; no-op for this fake.
             return
         if normalized.startswith("select 1 from nodes"):

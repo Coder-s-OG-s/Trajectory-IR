@@ -19,6 +19,7 @@ Crash safe durable workflow demos remain under ``examples/kill-mid-deploy/``.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import sys
@@ -356,26 +357,20 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     finally:
         if cleanup_db:
-            try:
+            with contextlib.suppress(OSError):
                 os.remove(db_path)
-            except OSError:
-                pass
         if cleanup_tir and tir_out:
-            try:
+            with contextlib.suppress(OSError):
                 os.remove(tir_out)
-            except OSError:
-                pass
         if cleanup_cas and cas_root:
             # Best effort: leave CAS contents if remove fails mid walk.
-            try:
+            with contextlib.suppress(OSError):
                 for root, dirs, files in os.walk(cas_root, topdown=False):
                     for name in files:
                         os.remove(os.path.join(root, name))
                     for name in dirs:
                         os.rmdir(os.path.join(root, name))
                 os.rmdir(cas_root)
-            except OSError:
-                pass
 
 
 if __name__ == "__main__":

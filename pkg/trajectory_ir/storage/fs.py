@@ -15,6 +15,7 @@ never observe a partial object. Hash is always recomputed on ``get``.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import tempfile
 from pathlib import Path
@@ -83,10 +84,8 @@ class FileSystemCAS:
                 os.fsync(tmp.fileno())
             os.replace(tmp_name, dest)
         except Exception:
-            try:
+            with contextlib.suppress(OSError):
                 os.unlink(tmp_name)
-            except OSError:
-                pass
             raise
         return h
 
