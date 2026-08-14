@@ -1,0 +1,15 @@
+{
+  "members_b64": {
+    "COMPAT.json": "ewogICJwYWNrYWdlX2Zvcm1hdCI6ICIwLjEiCn0K",
+    "artifacts-manifest.json": "W10K",
+    "manifest.json": "ewogICJtb2RlIjogInRoaW4iLAogICJzaWduYXR1cmUiOiBudWxsCn0K",
+    "nodes.ndjson": "eyJpZCI6ImFiYyJ9Cg==",
+    "seals.json": "W10K"
+  },
+  "payload_hash_hex": "44d57203477da4f7c28e3bfada4508999b88beca20a9faff977abbe5841cc0d1",
+  "domain_message_hex": "a131e47e143c00ffc8fd1f974c4800f34d0d62f0465f638bc838dd2f7b48a459",
+  "seed_note": "ed25519 seed = SHA-256(\"trajir-pkg-sig-v1-test-vector-seed\") — TEST ONLY",
+  "public_key_b64": "rEZz2c+1eYPMWeokIMaZYHipIzkatMoHsw7Hkaa2CsE=",
+  "signature_b64": "5OCrIUddhpEHHvPCWdRf6PmWEFPQrog+HbUaubknAsovnQWgSKKFGtsMmgTsRV0uRgjDax5U+zjCW8AMP/CTCw==",
+  "key_id": "dc7aa4226be10c69"
+}

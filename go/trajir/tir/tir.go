@@ -8,14 +8,17 @@
 //	artifacts-manifest.json
 //	COMPAT.json
 //	artifacts/cas/<shard>/<hash>   // fat only
+//	SIGNATURE                      // optional; trajir-pkg-sig-v1 (README §9.1)
 //
-// SIGNATURE remains absent/null (reserved). Load enforces size limits and path
-// safety so untrusted packages cannot zip-bomb the reader.
+// Unsigned packages remain valid by default. When SIGNATURE is present, Load
+// verifies it (fail closed on tamper). Sign/Verify implement the package
+// signature scheme; see signature.go.
 package tir
 
 import (
 	"archive/zip"
 	"bytes"
+	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -88,6 +91,8 @@ type Package struct {
 	Seals             []map[string]any
 	ArtifactsManifest []map[string]any
 	ArtifactBytes     map[string][]byte // content_hash -> bytes (fat only)
+	// Signature is set when the package has a valid SIGNATURE member (nil if unsigned).
+	Signature *SignatureInfo
 }
 
 // ExportOptions configure Export.
@@ -96,6 +101,9 @@ type ExportOptions struct {
 	TenantID      *string // when set, only that tenant's nodes are exported
 	Artifacts     []ArtifactRef
 	ArtifactBytes map[string][]byte // content_hash -> bytes (required for fat)
+	// SignKey, when a full ed25519 private key, writes SIGNATURE after export (README §9.1).
+	SignKey    ed25519.PrivateKey
+	SignerMeta SignerMeta
 }
 
 // contentHash returns SHA-256 hex of data.
@@ -367,7 +375,12 @@ func Export(nodeLog *nodelog.NodeLog, trajectoryID, dest string, opts ExportOpti
 	if err != nil {
 		return "", err
 	}
-	defer f.Close()
+	fileClosed := false
+	defer func() {
+		if !fileClosed {
+			_ = f.Close()
+		}
+	}()
 
 	zw := zip.NewWriter(f)
 	writeFile := func(name string, body []byte) error {
@@ -446,6 +459,17 @@ func Export(nodeLog *nodelog.NodeLog, trajectoryID, dest string, opts ExportOpti
 
 	if err := zw.Close(); err != nil {
 		return "", err
+	}
+	if err := f.Close(); err != nil {
+		fileClosed = true
+		return "", err
+	}
+	fileClosed = true
+
+	if len(opts.SignKey) == ed25519.PrivateKeySize {
+		if err := Sign(destPath, opts.SignKey, opts.SignerMeta); err != nil {
+			return "", err
+		}
 	}
 	return destPath, nil
 }
@@ -684,12 +708,21 @@ func loadImpl(path string, verify bool) (*Package, error) {
 		}
 	}
 
+	// Signature check after hash/seal integrity (README §9.1 order).
+	// Use the already-open archive only — never re-open path (TOCTOU / CWE-367).
+	// Present-but-invalid SIGNATURE fails even for LoadUnverified (tamper).
+	sigInfo, err := verifySignatureFromZipFiles(zr.File, VerifyOptions{})
+	if err != nil {
+		return nil, err
+	}
+
 	return &Package{
 		Manifest:          manifest,
 		Nodes:             nodeList,
 		Seals:             seals,
 		ArtifactsManifest: artManifest,
 		ArtifactBytes:     artifactBytes,
+		Signature:         sigInfo,
 	}, nil
 }
 
