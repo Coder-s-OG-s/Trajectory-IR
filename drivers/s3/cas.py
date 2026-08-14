@@ -69,9 +69,7 @@ def _is_not_found(exc: BaseException) -> bool:
     name = type(exc).__name__
     if name == "NoSuchKey":
         return True
-    if isinstance(exc, KeyError):
-        return True
-    return False
+    return isinstance(exc, KeyError)
 
 
 class S3CAS:

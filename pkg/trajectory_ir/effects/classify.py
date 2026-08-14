@@ -1,4 +1,5 @@
 from enum import Enum
+from typing import Any
 
 
 class EffectClass(Enum):
@@ -21,7 +22,7 @@ def requires_block_and_gate(effect: EffectClass) -> bool:
     return effect is EffectClass.NON_IDEMPOTENT_WRITE
 
 
-def classify_from_mcp(annotations: dict) -> EffectClass:
+def classify_from_mcp(annotations: Any) -> EffectClass:
     """Fail-closed per spec §7.2. Any missing or ambiguous annotation -> NON_IDEMPOTENT_WRITE.
 
     Contradictory annotations (e.g., readOnlyHint=True AND destructiveHint=True)

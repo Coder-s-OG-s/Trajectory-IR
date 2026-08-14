@@ -113,10 +113,9 @@ def project_context(
     seen: set[str] = set()
     for n in nodes:
         nid = str(n.get("id") or "")
-        if n.get("kind") in always_kinds or nid in pinned:
-            if nid and nid not in seen:
-                must.append(n)
-                seen.add(nid)
+        if (n.get("kind") in always_kinds or nid in pinned) and (nid and nid not in seen):
+            must.append(n)
+            seen.add(nid)
 
     must_sorted = sorted(must, key=_sort_key)
     must_size = sum(node_size_units(n) for n in must_sorted)

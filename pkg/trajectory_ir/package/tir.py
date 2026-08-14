@@ -18,6 +18,7 @@ packages cannot zip-bomb or path-traverse the reader.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
@@ -100,7 +101,7 @@ def _content_hash(data: bytes) -> str:
 
 def _safe_zip_name(name: str) -> None:
     """Reject path traversal and absolute paths inside the zip."""
-    if not name or name.startswith("/") or name.startswith("\\"):
+    if not name or name.startswith(("/", "\\")):
         raise TirVerificationError(f"unsafe zip member path: {name!r}")
     # Normalize separators and reject .. segments
     parts = name.replace("\\", "/").split("/")
@@ -342,10 +343,8 @@ def export_tir(
             os.fsync(raw.fileno())
         os.replace(tmp_name, dest_path)
     except Exception:
-        try:
+        with contextlib.suppress(OSError):
             os.unlink(tmp_name)
-        except OSError:
-            pass
         raise
 
     return dest_path

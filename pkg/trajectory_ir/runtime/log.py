@@ -1,3 +1,4 @@
+import contextlib
 import json
 import sqlite3
 import threading
@@ -163,10 +164,8 @@ class NodeLog:
                 self._conn.execute("ROLLBACK")
                 return False
             except Exception:
-                try:
+                with contextlib.suppress(sqlite3.Error):
                     self._conn.execute("ROLLBACK")
-                except sqlite3.Error:
-                    pass
                 raise
 
     def has(self, trajectory_id: str, step_n: int, kind: str, seq: int | None = None) -> bool:
@@ -190,7 +189,7 @@ class NodeLog:
     def count(self, node_id: str) -> int:
         with self._lock:
             cur = self._conn.execute("SELECT COUNT(*) FROM nodes WHERE id = ?", (node_id,))
-            return cur.fetchone()[0]
+            return int(cur.fetchone()[0])
 
     def list_nodes(
         self,
@@ -262,7 +261,5 @@ class NodeLog:
         # of open SQLite connections. This is a best-effort backstop, not a
         # substitute for callers using close()/a context manager when they
         # can.
-        try:
+        with contextlib.suppress(Exception):
             self._conn.close()
-        except Exception:
-            pass

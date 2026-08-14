@@ -53,10 +53,7 @@ def put_artifact(
         raise RuntimeError(f"CAS put returned hash {h} that does not match content")
     if uri is None:
         uri_fn = getattr(store, "uri_for", None)
-        if callable(uri_fn):
-            uri = str(uri_fn(h))
-        else:
-            uri = f"cas://{h}"
+        uri = str(uri_fn(h)) if callable(uri_fn) else f"cas://{h}"
     return ArtifactRef(
         logical_path=logical_path,
         content_hash=h,

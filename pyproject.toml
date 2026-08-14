@@ -67,6 +67,11 @@ select = [
     "I",
     "UP",
     "B",
+    "C4",
+    "SIM",
+    "RUF",
+    "PIE",
+    "RET",
 ]
 ignore = [
     "E501",
@@ -86,3 +91,8 @@ mypy_path = "pkg"
 packages = ["trajectory_ir"]
 warn_unused_configs = true
 show_error_codes = true
+warn_return_any = true
+warn_unreachable = true
+strict_equality = true
+warn_redundant_casts = true
+no_implicit_reexport = true
