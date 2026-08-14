@@ -2,6 +2,8 @@ module github.com/Coder-s-OG-s/Trajectory-IR/go
 
 go 1.25.4
 
+toolchain go1.25.13
+
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/aws/aws-sdk-go-v2 v1.43.5
