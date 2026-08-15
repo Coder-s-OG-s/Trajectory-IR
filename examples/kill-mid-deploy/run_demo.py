@@ -2,6 +2,7 @@
 """Run (or resume) the kill-mid-deploy demo trajectory.
 
 Usage:
+    pip install -e .
     python examples/kill-mid-deploy/run_demo.py
     # in another terminal, once you see "TOOL_CALL: deploy_server started":
     kill -9 <pid>

@@ -7,6 +7,7 @@ implemented once.
 
 Run it twice against the same working directory to exercise crash recovery:
 
+    pip install -e .
     python examples/kill-mid-deploy/agent.py --crash-during=tool_call   # then kill -9
     python examples/kill-mid-deploy/agent.py --resume
 
@@ -24,13 +25,6 @@ import argparse
 import os
 import sys
 import time
-
-# Run directly from a checkout (`python examples/kill-mid-deploy/agent.py`)
-# without requiring an installed package or a preset PYTHONPATH.
-_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-for _path in (_REPO_ROOT, os.path.join(_REPO_ROOT, "pkg")):
-    if _path not in sys.path:
-        sys.path.insert(0, _path)
 
 from dbos import SetWorkflowID
 

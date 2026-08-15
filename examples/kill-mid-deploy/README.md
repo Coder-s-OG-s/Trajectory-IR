@@ -4,6 +4,11 @@ Demonstrates the milestone's core claim: a crash mid-tool-execution never silent
 
 ## Run it
 
+First, ensure the repository is installed locally:
+```bash
+pip install -e .
+```
+
 ```bash
 python examples/kill-mid-deploy/run_demo.py
 # in another terminal, once you see "TOOL_CALL: deploy_server started":

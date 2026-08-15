@@ -29,11 +29,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-# Allow ``python examples/adoption_host/run_demo.py`` without a prior editable install.
-_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-for _path in (_REPO_ROOT, os.path.join(_REPO_ROOT, "pkg")):
-    if _path not in sys.path:
-        sys.path.insert(0, _path)
 
 from client.python.trajectory_client import (  # noqa: E402
     commit_step,
