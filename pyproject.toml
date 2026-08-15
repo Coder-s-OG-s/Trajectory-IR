@@ -47,6 +47,9 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["pkg/trajectory_ir", "drivers", "client"]
+exclude = [
+    "drivers/durable_backend/restate/local_memo.py",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["test", "conformance"]
