@@ -66,11 +66,11 @@ func TestRunStepHappyPathIdempotentTool(t *testing.T) {
 		t.Fatalf("results=%#v", results)
 	}
 
-	ok, _ := nl.Has("t1", 1, "DECISION", nil)
+	ok, _ := nl.Has("t1", "demo", 1, "DECISION", nil)
 	if !ok {
 		t.Fatal("missing DECISION")
 	}
-	ok, _ = nl.Has("t1", 1, "COMMIT_STEP", nil)
+	ok, _ = nl.Has("t1", "demo", 1, "COMMIT_STEP", nil)
 	if !ok {
 		t.Fatal("missing COMMIT_STEP")
 	}
@@ -331,7 +331,7 @@ func TestRunStepNonGatedToolErrorNotLogged(t *testing.T) {
 	if _, err := resume.RunStep(ctx, cfg, 1, model, nil); !errors.Is(err, boom) {
 		t.Fatalf("err=%v want %v", err, boom)
 	}
-	ok, err := nl.Has("t1", 1, "TOOL_CALL", intPtr(2))
+	ok, err := nl.Has("t1", "demo", 1, "TOOL_CALL", intPtr(2))
 	if err != nil {
 		t.Fatal(err)
 	}

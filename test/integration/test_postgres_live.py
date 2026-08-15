@@ -31,7 +31,7 @@ def test_live_append_has_list_and_idempotent(log):
     n1 = log.append("DECISION", 1, {"plan": "x"}, traj, "demo", 1)
     n2 = log.append("DECISION", 1, {"plan": "x"}, traj, "demo", 1)
     assert n1.id == n2.id
-    assert log.has(traj, 1, "DECISION")
+    assert log.has(traj, "demo", 1, "DECISION")
     rows = log.list_nodes(traj, tenant_id="demo")
     assert len(rows) == 1
     assert rows[0]["id"] == n1.id
@@ -74,4 +74,4 @@ def test_live_claim_tool_call_single_winner(log):
     for t in threads:
         t.join()
     assert sum(1 for w in wins if w) == 1
-    assert log.has(traj, 1, "TOOL_CALL", seq=2)
+    assert log.has(traj, "demo", 1, "TOOL_CALL", seq=2)

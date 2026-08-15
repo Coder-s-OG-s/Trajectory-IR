@@ -32,11 +32,11 @@ func TestOpenProjectSealCommit(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ok, err := tr.Log().Has("t1", 1, "DECISION", nil)
+	ok, err := tr.Log().Has("t1", "demo", 1, "DECISION", nil)
 	if err != nil || !ok {
 		t.Fatalf("DECISION present=%v err=%v", ok, err)
 	}
-	ok, err = tr.Log().Has("t1", 1, "COMMIT_STEP", nil)
+	ok, err = tr.Log().Has("t1", "demo", 1, "COMMIT_STEP", nil)
 	if err != nil || !ok {
 		t.Fatalf("COMMIT_STEP present=%v err=%v", ok, err)
 	}
@@ -139,11 +139,11 @@ func TestExecToolLogsPlainTools(t *testing.T) {
 	if res.Result != "hi" {
 		t.Fatalf("result=%v", res.Result)
 	}
-	ok, err := tr.Log().Has("t-plain", 1, "TOOL_CALL", intPtr(2))
+	ok, err := tr.Log().Has("t-plain", "demo", 1, "TOOL_CALL", intPtr(2))
 	if err != nil || !ok {
 		t.Fatalf("TOOL_CALL has=%v err=%v", ok, err)
 	}
-	ok, err = tr.Log().Has("t-plain", 1, "TOOL_RESULT", intPtr(3))
+	ok, err = tr.Log().Has("t-plain", "demo", 1, "TOOL_RESULT", intPtr(3))
 	if err != nil || !ok {
 		t.Fatalf("TOOL_RESULT has=%v err=%v", ok, err)
 	}

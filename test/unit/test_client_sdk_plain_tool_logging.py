@@ -14,8 +14,8 @@ def test_exec_tool_logs_tool_call_and_result_for_non_gated_tool(tmp_path, monkey
 
     assert result.result == 10
     log = NodeLog(db_path)
-    assert log.has("plain-1", 1, "TOOL_CALL", seq=2)
-    assert log.has("plain-1", 1, "TOOL_RESULT", seq=3)
+    assert log.has("plain-1", "demo", 1, "TOOL_CALL", seq=2)
+    assert log.has("plain-1", "demo", 1, "TOOL_RESULT", seq=3)
 
 
 def test_exec_tool_logs_two_plain_tools_same_step_distinct_seq(tmp_path, monkeypatch):
@@ -30,7 +30,7 @@ def test_exec_tool_logs_two_plain_tools_same_step_distinct_seq(tmp_path, monkeyp
     exec_tool(traj, step_n=1, call={"args": {"x": 3}}, tool=tool_b, seq=4)
 
     log = NodeLog(db_path)
-    assert log.has("plain-2", 1, "TOOL_CALL", seq=2)
-    assert log.has("plain-2", 1, "TOOL_RESULT", seq=3)
-    assert log.has("plain-2", 1, "TOOL_CALL", seq=4)
-    assert log.has("plain-2", 1, "TOOL_RESULT", seq=5)
+    assert log.has("plain-2", "demo", 1, "TOOL_CALL", seq=2)
+    assert log.has("plain-2", "demo", 1, "TOOL_RESULT", seq=3)
+    assert log.has("plain-2", "demo", 1, "TOOL_CALL", seq=4)
+    assert log.has("plain-2", "demo", 1, "TOOL_RESULT", seq=5)

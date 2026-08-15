@@ -235,7 +235,7 @@ from drivers.postgres.log import open_postgres_node_log
 log = open_postgres_node_log()  # reads TRAJIR_DATABASE_URL
 traj, tenant = "e2e-pg-1", "demo"
 log.append("DECISION", 1, {"plan": {"tool_calls": []}}, traj, tenant, seq=1)
-assert log.has(traj, 1, "DECISION")
+assert log.has(traj, tenant, 1, "DECISION")
 rows = log.list_nodes(traj, tenant_id=tenant)
 print("count", len(rows), "id", rows[0]["id"][:16])
 log.close()

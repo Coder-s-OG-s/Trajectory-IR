@@ -90,9 +90,9 @@ def test_make_run_step_with_restate_local_memo(tmp_path):
     # Durable memo: model and tool body run once across replay.
     assert model_calls["n"] == 1
     assert tool_calls["n"] == 1
-    assert node_log.has(TRAJECTORY_ID, 1, "DECISION")
-    assert node_log.has(TRAJECTORY_ID, 1, "TOOL_CALL", seq=2)
-    assert node_log.has(TRAJECTORY_ID, 1, "COMMIT_STEP")
+    assert node_log.has(TRAJECTORY_ID, TENANT_ID, 1, "DECISION")
+    assert node_log.has(TRAJECTORY_ID, TENANT_ID, 1, "TOOL_CALL", seq=2)
+    assert node_log.has(TRAJECTORY_ID, TENANT_ID, 1, "COMMIT_STEP")
 
 
 def test_partial_durable_injection_fails_loud(tmp_path):
