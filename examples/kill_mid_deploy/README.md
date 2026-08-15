@@ -1,14 +1,14 @@
-# kill-mid-deploy demo
+# kill_mid_deploy demo
 
 Demonstrates the milestone's core claim: a crash mid-tool-execution never silently re-runs the model or the side effect on resume.
 
 ## Run it
 
 ```bash
-python examples/kill-mid-deploy/run_demo.py
+python examples/kill_mid_deploy/run_demo.py
 # in another terminal, once you see "TOOL_CALL: deploy_server started":
 kill -9 <pid>
-python examples/kill-mid-deploy/run_demo.py --resume
+python examples/kill_mid_deploy/run_demo.py --resume
 ```
 
 Expected final output: `Resumed. deploy_server executed exactly once.`

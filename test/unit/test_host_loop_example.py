@@ -2,17 +2,8 @@
 
 from __future__ import annotations
 
-import os
-import sys
-
+import examples.host_loop.run_host as run_host
 import pytest
-
-_REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-_HOST = os.path.join(_REPO, "examples", "host_loop")
-if _HOST not in sys.path:
-    sys.path.insert(0, _HOST)
-
-import run_host  # noqa: E402
 
 
 def test_live_host_step(tmp_path, monkeypatch):
