@@ -2,7 +2,10 @@ import hashlib
 import time
 from dataclasses import dataclass, field
 
-import rfc8785
+try:
+    import rfc8785  # type: ignore[import-not-found]
+except ImportError:
+    rfc8785 = None
 
 NODE_KINDS = frozenset(
     {
@@ -53,6 +56,8 @@ def payload_hash(payload: dict) -> str:
         raise NodeValidationError("payload must be an object")
     if "ts" in payload:
         raise NodeValidationError("wall-clock ts must never be hashed (spec §6.3)")
+    if rfc8785 is None:
+        raise ModuleNotFoundError("rfc8785 is required for payload hashing. Please install it.")
     canon = rfc8785.dumps(payload)
     return hashlib.sha256(canon).hexdigest()
 
