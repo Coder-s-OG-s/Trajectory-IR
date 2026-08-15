@@ -123,7 +123,7 @@ When building, code must be placed strictly according to this physical infrastru
 * **`pkg/trajectory_ir/resume/`**: The block-and-gate protocol semantics.
 * **`drivers/durable-backend/dbos/`**: The ONLY place where DBOS imports and workflow step wrappers exist.
 * **`conformance/`**: The R01-R08 tests that prove the drivers work. 
-* **`examples/kill-mid-deploy/`**: A runnable E2E harness demonstrating crash-safety in the real world.
+* **`examples/kill_mid_deploy/`**: A runnable E2E harness demonstrating crash-safety in the real world.
 
 > [!WARNING]
 > **Boundary Violation Rule**: The `pkg/trajectory_ir/runtime/` module must **never** import `dbos`. All durable execution logic must remain completely isolated behind the interface in `drivers/durable-backend/`.

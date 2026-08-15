@@ -434,7 +434,7 @@ These are runnable tests, not descriptions of intent. R01 and R02 are the hard g
 | R10 | (Proposed; Future) Unsigned package still passes R05; strict `require_signature` rejects unsigned. |
 | R11 | (Proposed; Future) Go-signed package verifies in Python and vice versa (cross-language payload parity). |
 
-**Phase 1A completion bar:** DBOS backend adapter wired in, SQLite (or file backed) IR log, Python SDK, R01 and R02 passing against the adapter, and a recorded kill-mid-deploy demonstration. R03–R08 are tracked but not blocking for this milestone.
+**Phase 1A completion bar:** DBOS backend adapter wired in, SQLite (or file backed) IR log, Python SDK, R01 and R02 passing against the adapter, and a recorded kill_mid_deploy demonstration. R03–R08 are tracked but not blocking for this milestone.
 
 ---
 
@@ -530,7 +530,7 @@ This section is binding for implementation choices. Do not introduce alternative
 ### 12.6 Testing and quality gates
 
 - **pytest** for the Python conformance suite and unit tests.
-- A `make e2e` target that runs the kill-mid-deploy demonstration end to end (spawn agent, seal a decision, forcibly kill the process, resume, assert exactly one execution of the non idempotent tool).
+- A `make e2e` target that runs the kill_mid_deploy demonstration end to end (spawn agent, seal a decision, forcibly kill the process, resume, assert exactly one execution of the non idempotent tool).
 - No feature is considered complete without an accompanying conformance test reference (even if the full R03–R08 suite is not yet green, new work must state which conformance ID it targets).
 
 ---
@@ -577,7 +577,7 @@ trajectory-ir/
     r02_non_idempotent_test.py
     ...
   examples/
-    kill-mid-deploy/
+    kill_mid_deploy/
     graft-artifact/
   charts/
     trajectory-ir/                # Helm chart for server-s3 / k8s-fluid profiles
