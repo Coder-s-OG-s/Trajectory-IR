@@ -140,3 +140,46 @@ func isSubpath(root, target string) bool {
 	// Windows volume mismatches yield paths like `..\..`
 	return !strings.HasPrefix(rel, "..")
 }
+
+// requireNonSymlinkLeaf rejects symlinked files under an approved directory.
+// Missing files are allowed (callers create regular files on open).
+// Existing regular files are re-checked so their resolved path stays under root.
+func requireNonSymlinkLeaf(root, leafPath string) error {
+	info, err := os.Lstat(leafPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("mcp: inspect %q: %w", filepath.Base(leafPath), err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("mcp: %q must not be a symlink", filepath.Base(leafPath))
+	}
+	// Re-validate resolved path stays under workspace (covers unexpected link types).
+	abs, err := canonicalizeExisting(leafPath)
+	if err != nil {
+		return err
+	}
+	if !isSubpath(root, abs) {
+		return fmt.Errorf("mcp: %q escapes workspace root %q", filepath.Base(leafPath), root)
+	}
+	return nil
+}
+
+// workdirSQLitePaths returns validated nodes/memo paths under workDir (no symlink leaves).
+func workdirSQLitePaths(workDir string) (nodesPath, memoPath string, err error) {
+	root, err := approvedRoot()
+	if err != nil {
+		return "", "", err
+	}
+	// workDir is already bounded; still re-check leaf confinement against root.
+	nodesPath = filepath.Join(workDir, "nodes.sqlite")
+	memoPath = filepath.Join(workDir, "memo.sqlite")
+	if err := requireNonSymlinkLeaf(root, nodesPath); err != nil {
+		return "", "", err
+	}
+	if err := requireNonSymlinkLeaf(root, memoPath); err != nil {
+		return "", "", err
+	}
+	return nodesPath, memoPath, nil
+}

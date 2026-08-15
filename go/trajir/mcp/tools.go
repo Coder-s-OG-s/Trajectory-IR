@@ -3,7 +3,6 @@ package mcp
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/client"
@@ -40,7 +39,10 @@ func toolStatus(ctx context.Context, _ *mcp.CallToolRequest, in workdirArgs) (*m
 	if err != nil {
 		return nil, zero, err
 	}
-	nodesPath := filepath.Join(workDir, "nodes.sqlite")
+	nodesPath, _, err := workdirSQLitePaths(workDir)
+	if err != nil {
+		return nil, zero, err
+	}
 	nl, err := nodelog.Open(nodesPath)
 	if err != nil {
 		return nil, zero, err
@@ -119,8 +121,15 @@ func toolExportTIR(ctx context.Context, _ *mcp.CallToolRequest, in exportIn) (*m
 	if err != nil {
 		return nil, zero, err
 	}
+	nodesPath, memoPath, err := workdirSQLitePaths(workDir)
+	if err != nil {
+		return nil, zero, err
+	}
 
-	tr, err := client.OpenTrajectory(in.TenantID, in.TrajectoryID, client.Options{WorkDir: workDir})
+	tr, err := client.OpenTrajectory(in.TenantID, in.TrajectoryID, client.Options{
+		NodesPath: nodesPath,
+		MemoPath:  memoPath,
+	})
 	if err != nil {
 		return nil, zero, err
 	}

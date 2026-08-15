@@ -65,3 +65,74 @@ func TestRequireIDs(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestRejectSymlinkSQLiteLeaves(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv(EnvWorkspaceRoot, root)
+	proj := filepath.Join(root, "proj")
+	if err := os.Mkdir(proj, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	outside := t.TempDir()
+	outsideDB := filepath.Join(outside, "nodes.sqlite")
+	if err := os.WriteFile(outsideDB, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(proj, "nodes.sqlite")
+	if err := os.Symlink(outsideDB, link); err != nil {
+		t.Skipf("symlink not available: %v", err)
+	}
+	if _, _, err := workdirSQLitePaths(proj); err == nil {
+		t.Fatal("expected symlink leaf to be rejected")
+	} else if !strings.Contains(err.Error(), "symlink") {
+		t.Fatalf("err=%v", err)
+	}
+
+	// Regular missing leaves are OK (will be created).
+	clean := filepath.Join(root, "clean")
+	if err := os.Mkdir(clean, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := workdirSQLitePaths(clean); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestEmptyWorkDirUsesRoot(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv(EnvWorkspaceRoot, root)
+	got, err := requireBoundedWorkDir("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Canonical forms may differ by symlink resolution.
+	if filepath.Clean(got) != filepath.Clean(root) {
+		// Allow EvalSymlinks normalization
+		g2, _ := filepath.EvalSymlinks(got)
+		r2, _ := filepath.EvalSymlinks(root)
+		if g2 != r2 {
+			t.Fatalf("got=%q root=%q", got, root)
+		}
+	}
+}
+
+func TestRegularSQLiteLeafAllowed(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv(EnvWorkspaceRoot, root)
+	nodes := filepath.Join(root, "nodes.sqlite")
+	if err := os.WriteFile(nodes, []byte("not-really-sqlite"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := requireNonSymlinkLeaf(root, nodes); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := requireBoundedPath("", ""); err == nil {
+		t.Fatal("empty path should fail")
+	}
+	if _, err := requireBoundedPath("ok.tir", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := requireBoundedWorkDir(nodes); err == nil {
+		t.Fatal("file as work_dir should fail")
+	}
+}

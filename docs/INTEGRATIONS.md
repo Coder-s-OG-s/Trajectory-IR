@@ -71,6 +71,9 @@ config files; use environment variables when signing tools are added.
 This bounds prompt-injected tool paths (CWE-73). Host configs should set
 `TRAJIR_MCP_ROOT` to the project directory and start the server with that cwd.
 
+`nodes.sqlite` and `memo.sqlite` under a work dir must not be **symlinks**
+(CWE-59). Symlinked leaves that point outside the workspace are rejected before open.
+
 ```json
 {
   "mcpServers": {

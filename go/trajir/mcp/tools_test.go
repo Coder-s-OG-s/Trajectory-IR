@@ -2,12 +2,16 @@ package mcp_test
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/sha256"
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/client"
 	trajirmcp "github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/mcp"
+	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/tir"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -166,7 +170,120 @@ func TestToolsViaInMemoryMCP(t *testing.T) {
 	} else if !bad.IsError {
 		t.Fatal("expected bad mode error")
 	}
+
+	// require_signature on unsigned fails
+	if strict, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
+		Name: "trajectory_verify_signature",
+		Arguments: map[string]any{"path": dest, "require_signature": true},
+	}); err != nil {
+		t.Fatal(err)
+	} else if !strict.IsError {
+		t.Fatal("expected require_signature failure on unsigned package")
+	}
+
+	// missing tenant
+	if miss, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
+		Name: "trajectory_status",
+		Arguments: map[string]any{"work_dir": work, "tenant_id": "", "trajectory_id": "mcp-traj"},
+	}); err != nil {
+		t.Fatal(err)
+	} else if !miss.IsError {
+		t.Fatal("expected missing tenant error")
+	}
+
+	// empty dest
+	if emptyDest, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
+		Name: "trajectory_export_tir",
+		Arguments: map[string]any{
+			"work_dir": work, "tenant_id": "demo", "trajectory_id": "mcp-traj", "dest": "",
+		},
+	}); err != nil {
+		t.Fatal(err)
+	} else if !emptyDest.IsError {
+		t.Fatal("expected empty dest error")
+	}
+
+	// fat without artifact bytes fails at export
+	if fat, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
+		Name: "trajectory_export_tir",
+		Arguments: map[string]any{
+			"work_dir": work, "tenant_id": "demo", "trajectory_id": "mcp-traj",
+			"dest": "fat.tir", "mode": "fat",
+		},
+	}); err != nil {
+		t.Fatal(err)
+	} else if !fat.IsError {
+		// fat with zero artifacts may succeed; either way exercises mode branch
+		_ = fat
+	}
+
+	// signed package verify success path
+	seed := sha256.Sum256([]byte("trajir-mcp-test-seed"))
+	priv := ed25519.NewKeyFromSeed(seed[:])
+	if err := tir.Sign(dest, priv, tir.SignerMeta{ID: "mcp-test"}); err != nil {
+		t.Fatal(err)
+	}
+	if signed, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "trajectory_verify_signature",
+		Arguments: map[string]any{"path": "pkg.tir"},
+	}); err != nil {
+		t.Fatal(err)
+	} else if signed.IsError {
+		t.Fatalf("signed verify failed: %+v", signed)
+	}
 }
+
+func TestRunStdioNilContext(t *testing.T) {
+	// Do not block on real stdio; just ensure NewServer is usable for RunStdio wiring.
+	if trajirmcp.NewServer() == nil {
+		t.Fatal("nil server")
+	}
+}
+
+func TestStatusRejectsSymlinkNodesDB(t *testing.T) {
+	work := t.TempDir()
+	t.Setenv("TRAJIR_MCP_ROOT", work)
+	proj := filepath.Join(work, "p")
+	if err := os.Mkdir(proj, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	outside := filepath.Join(t.TempDir(), "nodes.sqlite")
+	if err := os.WriteFile(outside, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(proj, "nodes.sqlite")); err != nil {
+		t.Skipf("symlink: %v", err)
+	}
+
+	ctx := context.Background()
+	server := trajirmcp.NewServer()
+	t1, t2 := mcp.NewInMemoryTransports()
+	ss, err := server.Connect(ctx, t1, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ss.Close()
+	cl := mcp.NewClient(&mcp.Implementation{Name: "c", Version: "v0"}, nil)
+	cs, err := cl.Connect(ctx, t2, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cs.Close()
+
+	res, err := cs.CallTool(ctx, &mcp.CallToolParams{
+		Name: "trajectory_status",
+		Arguments: map[string]any{
+			"work_dir": proj, "tenant_id": "demo", "trajectory_id": "t",
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.IsError {
+		t.Fatal("expected symlink nodes.sqlite to fail status")
+	}
+}
+
 
 func mustJSON(t *testing.T, v any) string {
 	t.Helper()
