@@ -142,7 +142,8 @@ def commit_step(trajectory: Trajectory, step_n: int, seq: int) -> None:
     Args:
         trajectory: The trajectory context
         step_n: Step number
-        seq: Sequence number for commit (should be 2 + 2*num_tool_calls to follow after all tool calls)
+        seq: Sequence number for commit (should be 2 + 2*num_tool_calls to follow
+            after all tool calls)
     """
     NodeLog(trajectory.db_path).append(
         "COMMIT_STEP",
