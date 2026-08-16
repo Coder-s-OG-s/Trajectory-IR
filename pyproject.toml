@@ -50,9 +50,14 @@ packages = ["pkg/trajectory_ir", "drivers", "client"]
 
 [tool.pytest.ini_options]
 testpaths = ["test", "conformance"]
+pythonpath = ["pkg", "."]
 addopts = [
     "-ra",
     "--strict-markers",
+]
+markers = [
+    "integration: marks tests as integration tests",
+    "e2e: marks tests as end-to-end tests",
 ]
 
 [tool.ruff]
@@ -73,9 +78,7 @@ select = [
     "PIE",
     "RET",
 ]
-ignore = [
-    "E501",
-]
+
 
 
 
