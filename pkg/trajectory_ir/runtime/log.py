@@ -8,7 +8,8 @@ from trajectory_ir.runtime.nodes import Node
 
 
 class SlotConflictError(ValueError):
-    """Raised when a different payload is written to an occupied (trajectory, step, seq, kind) slot."""
+    """Raised when a different payload is written to an occupied (trajectory, step,
+    seq, kind) slot."""
 
 
 class NodeLog:

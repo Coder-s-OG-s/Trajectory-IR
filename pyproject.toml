@@ -55,6 +55,10 @@ addopts = [
     "-ra",
     "--strict-markers",
 ]
+markers = [
+    "integration: marks tests as integration tests",
+    "e2e: marks tests as end-to-end tests",
+]
 
 [tool.ruff]
 line-length = 100
@@ -74,9 +78,7 @@ select = [
     "PIE",
     "RET",
 ]
-ignore = [
-    "E501",
-]
+
 
 [tool.ruff.lint.per-file-ignores]
 # Fixture agent adjusts sys.path before local imports on purpose.
