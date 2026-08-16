@@ -53,9 +53,14 @@ exclude = [
 
 [tool.pytest.ini_options]
 testpaths = ["test", "conformance"]
+pythonpath = ["pkg", "."]
 addopts = [
     "-ra",
     "--strict-markers",
+]
+markers = [
+    "integration: marks tests as integration tests",
+    "e2e: marks tests as end-to-end tests",
 ]
 
 [tool.ruff]
@@ -76,9 +81,7 @@ select = [
     "PIE",
     "RET",
 ]
-ignore = [
-    "E501",
-]
+
 
 [tool.ruff.lint.per-file-ignores]
 # Fixture agent adjusts sys.path before local imports on purpose.
