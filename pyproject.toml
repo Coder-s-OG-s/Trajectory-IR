@@ -74,9 +74,7 @@ select = [
     "PIE",
     "RET",
 ]
-ignore = [
-    "E501",
-]
+
 
 [tool.ruff.lint.per-file-ignores]
 # Fixture agent adjusts sys.path before local imports on purpose.
