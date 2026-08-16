@@ -55,6 +55,10 @@ addopts = [
     "-ra",
     "--strict-markers",
 ]
+markers = [
+    "integration: marks tests as integration tests",
+    "e2e: marks tests as end-to-end tests",
+]
 
 [tool.ruff]
 line-length = 100
