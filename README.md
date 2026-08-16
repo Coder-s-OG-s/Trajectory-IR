@@ -1,5 +1,7 @@
 # Trajectory IR: Master Specification and Contributor Guide
 
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/14075/badge)](https://www.bestpractices.dev/projects/14075)
+
 | | |
 |---|---|
 | **Project** | Trajectory IR (package format: `.tir`) |
