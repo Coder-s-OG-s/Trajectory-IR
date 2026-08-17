@@ -12,9 +12,12 @@ import (
 	"sync"
 
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/nodes"
+	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/postgres"
 
 	_ "modernc.org/sqlite"
 )
+
+var ErrSlotConflict = postgres.ErrSlotConflict
 
 // NodeLog is an append only SQLite log keyed by content addressed node id.
 // INSERT OR IGNORE makes replaying the same node a no op, which is what durable
@@ -57,7 +60,9 @@ ON nodes (trajectory_id, tenant_id);
 	return &NodeLog{db: db}, nil
 }
 
-// Append builds a node via trajir/nodes and stores it. Same content id is ignored.
+// Append builds a node via trajir/nodes and stores it. Same content id is
+// ignored (idempotent replay). Different payload at the same logical slot
+// returns ErrSlotConflict.
 func (l *NodeLog) Append(
 	kind string,
 	stepN *int,
@@ -83,7 +88,7 @@ func (l *NodeLog) Append(
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	_, err = l.db.Exec(
+	res, err := l.db.Exec(
 		`INSERT OR IGNORE INTO nodes
 		 (id, trajectory_id, tenant_id, step_n, seq, kind, payload_json, ts)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -99,7 +104,39 @@ func (l *NodeLog) Append(
 	if err != nil {
 		return nil, fmt.Errorf("insert node: %w", err)
 	}
+
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		return nil, fmt.Errorf("rows affected: %w", err)
+	}
+	if rowsAffected == 1 {
+		return n, nil
+	}
+
+	owner, err := l.slotOwner(tenantID, trajectoryID, step, seq, kind)
+	if err != nil {
+		return nil, fmt.Errorf("slot owner: %w", err)
+	}
+	if owner != "" && owner != n.ID {
+		return nil, fmt.Errorf("%w: trajectory=%s step=%v seq=%d kind=%s",
+			ErrSlotConflict, trajectoryID, step, seq, kind)
+	}
 	return n, nil
+}
+
+func (l *NodeLog) slotOwner(tenantID, trajectoryID string, step any, seq int, kind string) (string, error) {
+	var id string
+	err := l.db.QueryRow(
+		`SELECT id FROM nodes
+		 WHERE tenant_id = ? AND trajectory_id = ?
+		   AND IFNULL(step_n, -1) = IFNULL(?, -1)
+		   AND seq = ? AND kind = ?`,
+		tenantID, trajectoryID, step, seq, kind,
+	).Scan(&id)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	return id, err
 }
 
 // ClaimToolCall atomically inserts a TOOL_CALL at (trajectory, step, seq).
