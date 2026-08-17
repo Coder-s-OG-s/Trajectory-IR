@@ -27,6 +27,11 @@ func OpenLocal(path string) (*LocalSQLite, error) {
 	}
 	db.SetMaxOpenConns(1)
 
+	if _, err := db.Exec(`PRAGMA journal_mode=WAL;`); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("durable sqlite wal: %w", err)
+	}
+
 	schema := `
 CREATE TABLE IF NOT EXISTS step_memos (
     workflow_id TEXT NOT NULL,

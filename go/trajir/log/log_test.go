@@ -1,6 +1,7 @@
 package nodelog_test
 
 import (
+	"errors"
 	"path/filepath"
 	"testing"
 
@@ -209,5 +210,41 @@ func TestPipeInTenantRejected(t *testing.T) {
 	_, err := nl.Append("DECISION", &step, map[string]any{"plan": "x"}, "t1", "a|b", 1)
 	if err == nil {
 		t.Fatal("expected delimiter rejection")
+	}
+}
+
+func TestAppendSlotConflictDifferentPayload(t *testing.T) {
+	nl := openTemp(t)
+	step := 1
+	if _, err := nl.Append("DECISION", &step, map[string]any{"plan": "a"}, "t1", "demo", 1); err != nil {
+		t.Fatal(err)
+	}
+	_, err := nl.Append("DECISION", &step, map[string]any{"plan": "b"}, "t1", "demo", 1)
+	if !errors.Is(err, nodelog.ErrSlotConflict) {
+		t.Fatalf("err=%v want ErrSlotConflict", err)
+	}
+}
+
+func TestAppendSlotConflictPreservesOriginal(t *testing.T) {
+	nl := openTemp(t)
+	step := 1
+	n1, err := nl.Append("TOOL_RESULT", &step, map[string]any{"result": "first"}, "t1", "demo", 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = nl.Append("TOOL_RESULT", &step, map[string]any{"result": "second"}, "t1", "demo", 2)
+	if !errors.Is(err, nodelog.ErrSlotConflict) {
+		t.Fatalf("err=%v want ErrSlotConflict", err)
+	}
+
+	rows, err := nl.ListNodes("t1", "demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("rows=%d want 1", len(rows))
+	}
+	if rows[0]["id"] != n1.ID {
+		t.Fatalf("stored id=%v want %s", rows[0]["id"], n1.ID)
 	}
 }
