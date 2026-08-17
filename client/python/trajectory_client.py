@@ -1,7 +1,11 @@
 from dataclasses import dataclass
 from typing import Any
 
-from drivers.durable_backend.dbos.adapter import init_backend
+try:
+    from drivers.durable_backend.dbos.adapter import init_backend
+except ImportError:
+    def init_backend(app_name: str = "trajectory-ir-local") -> None:
+        pass
 from trajectory_ir.effects import requires_block_and_gate
 from trajectory_ir.resume.gate import make_gated_tool_call
 from trajectory_ir.runtime.log import NodeLog
