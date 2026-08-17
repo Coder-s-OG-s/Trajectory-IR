@@ -232,7 +232,10 @@ func TestAppendSlotConflictPreservesOriginal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, _ = nl.Append("TOOL_RESULT", &step, map[string]any{"result": "second"}, "t1", "demo", 2)
+	_, err = nl.Append("TOOL_RESULT", &step, map[string]any{"result": "second"}, "t1", "demo", 2)
+	if !errors.Is(err, nodelog.ErrSlotConflict) {
+		t.Fatalf("err=%v want ErrSlotConflict", err)
+	}
 
 	rows, err := nl.ListNodes("t1", "demo")
 	if err != nil {

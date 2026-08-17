@@ -8,18 +8,16 @@ package nodelog
 import (
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"sync"
 
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/nodes"
+	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/postgres"
 
 	_ "modernc.org/sqlite"
 )
 
-// ErrSlotConflict is returned when a different payload already occupies the
-// logical slot (tenant_id, trajectory_id, step_n, seq, kind).
-var ErrSlotConflict = errors.New("nodelog: slot conflict")
+var ErrSlotConflict = postgres.ErrSlotConflict
 
 // NodeLog is an append only SQLite log keyed by content addressed node id.
 // INSERT OR IGNORE makes replaying the same node a no op, which is what durable
@@ -90,7 +88,7 @@ func (l *NodeLog) Append(
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	_, err = l.db.Exec(
+	res, err := l.db.Exec(
 		`INSERT OR IGNORE INTO nodes
 		 (id, trajectory_id, tenant_id, step_n, seq, kind, payload_json, ts)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -107,9 +105,17 @@ func (l *NodeLog) Append(
 		return nil, fmt.Errorf("insert node: %w", err)
 	}
 
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		return nil, fmt.Errorf("rows affected: %w", err)
+	}
+	if rowsAffected == 1 {
+		return n, nil
+	}
+
 	owner, err := l.slotOwner(tenantID, trajectoryID, step, seq, kind)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("slot owner: %w", err)
 	}
 	if owner != "" && owner != n.ID {
 		return nil, fmt.Errorf("%w: trajectory=%s step=%v seq=%d kind=%s",
