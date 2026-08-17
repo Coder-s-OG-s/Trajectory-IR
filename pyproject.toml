@@ -101,3 +101,11 @@ warn_unreachable = true
 strict_equality = true
 warn_redundant_casts = true
 no_implicit_reexport = true
+
+[[tool.mypy.overrides]]
+module = [
+    "boto3",
+    "botocore.*",
+]
+ignore_missing_imports = true
+
