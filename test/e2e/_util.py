@@ -2,6 +2,8 @@ import os
 import subprocess
 import sys
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 AGENT_SCRIPT = os.path.join(REPO_ROOT, "examples", "kill-mid-deploy", "agent.py")
@@ -27,27 +29,21 @@ def agent_cmd(*args: str) -> list:
     return [sys.executable, AGENT_SCRIPT, *args]
 
 
-def start_agent(*args: str, cwd: str, log_path: str) -> subprocess.Popen:
+@contextmanager
+def start_agent(*args: str, cwd: str, log_path: str) -> Iterator[subprocess.Popen]:
     """Launch the agent as a real child process, to be hard-killed later.
 
     Output goes to a file rather than a pipe: a hard-killed process's piped
     output is lost, and these runs are killed by design.
-
-    The log file must remain open for the entire lifetime of the child process
-    (it is the process's stdout fd), so it cannot be managed with a plain
-    ``with`` block inside this function.  Instead we guard with try/except: if
-    ``subprocess.Popen`` raises for any reason we close the file immediately so
-    no descriptor is leaked.  On the happy path the handle is stored on the
-    Popen object and closed by :func:`hard_kill` after the process is reaped.
     """
-    log = open(log_path, "w", encoding="utf-8")  # noqa: SIM115
-    try:
+    with open(log_path, "w", encoding="utf-8") as log:
         proc = subprocess.Popen(agent_cmd(*args), cwd=cwd, stdout=log, stderr=subprocess.STDOUT)
-    except Exception:
-        log.close()
-        raise
-    proc._log_file = log  # keep the handle alive until the process is reaped
-    return proc
+        try:
+            yield proc
+        finally:
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait()
 
 
 def run_agent(*args: str, cwd: str, timeout: float = 120.0) -> subprocess.CompletedProcess:
@@ -68,9 +64,6 @@ def hard_kill(proc: subprocess.Popen) -> None:
     are non-graceful hard kills, so no platform branching is needed."""
     proc.kill()
     proc.wait()
-    log = getattr(proc, "_log_file", None)
-    if log is not None:
-        log.close()
 
 
 def wait_for_marker(path: str, timeout: float = 60.0) -> None:

@@ -58,13 +58,13 @@ def test_crash_before_seal_allows_reinference(tmp_path):
     # and left pending and the resume below is a real crash-recovery replay.
     # Killing right after Popen instead would land before the backend launches,
     # leaving nothing pending and making the "resume" a cold first run.
-    proc = start_agent(
+    with start_agent(
         "--crash-during=inference",
         cwd=workdir,
         log_path=os.path.join(workdir, "crash_run.log"),
-    )
-    wait_for_marker(os.path.join(workdir, INFERENCE_STARTED_MARKER))
-    hard_kill(proc)
+    ) as proc:
+        wait_for_marker(os.path.join(workdir, INFERENCE_STARTED_MARKER))
+        hard_kill(proc)
 
     # The kill landed in the intended pre-seal window: inference had started but
     # the decision was never sealed, so no DECISION node exists to replay from.
@@ -94,13 +94,13 @@ def test_crash_after_seal_before_tool_completes_no_reinfer(tmp_path):
     called a second time (assert the counter, not just 'tools ran once')."""
     workdir = str(tmp_path)
 
-    proc = start_agent(
+    with start_agent(
         "--crash-after=decision_sealed",
         cwd=workdir,
         log_path=os.path.join(workdir, "crash_run.log"),
-    )
-    wait_for_marker(os.path.join(workdir, DECISION_SEALED_MARKER))
-    hard_kill(proc)
+    ) as proc:
+        wait_for_marker(os.path.join(workdir, DECISION_SEALED_MARKER))
+        hard_kill(proc)
 
     # The kill landed in the intended window: inference ran and the decision was
     # sealed, but the non-idempotent side effect had not started yet.
@@ -124,13 +124,13 @@ def test_crash_mid_nonidempotent_tool_blocks_not_retries(tmp_path):
     BLOCKED_NEEDS_GATE, nothing auto-retries."""
     workdir = str(tmp_path)
 
-    proc = start_agent(
+    with start_agent(
         "--crash-during=tool_call",
         cwd=workdir,
         log_path=os.path.join(workdir, "crash_run.log"),
-    )
-    wait_for_marker(os.path.join(workdir, TOOL_STARTED_MARKER))
-    hard_kill(proc)
+    ) as proc:
+        wait_for_marker(os.path.join(workdir, TOOL_STARTED_MARKER))
+        hard_kill(proc)
 
     # The kill landed inside the non-idempotent tool call: it was logged as
     # started but never completed.
