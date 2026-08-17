@@ -27,14 +27,14 @@ classifiers = [
     "Topic :: Software Development :: Libraries",
 ]
 dependencies = [
-    "dbos",
     "rfc8785",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "pytest-cov", "ruff", "mypy", "pip-audit"]
+dev = ["dbos", "pytest", "pytest-cov", "ruff", "mypy", "pip-audit"]
 postgres = ["psycopg[binary]>=3.1"]
 s3 = ["boto3"]
+dbos = ["dbos"]
 
 [project.urls]
 Homepage = "https://github.com/Coder-s-OG-s/Trajectory-IR"
