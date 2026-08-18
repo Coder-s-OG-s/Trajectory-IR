@@ -88,7 +88,7 @@ jobs:
         run: ruff format --check pkg drivers client test conformance examples
 
       - name: Mypy
-        run: mypy pkg/trajectory_ir
+        run: mypy
 
       - name: Cross language hash goldens (Python)
         run: pytest test/unit/test_hash_vectors.py test/unit/test_node_identity.py -q
