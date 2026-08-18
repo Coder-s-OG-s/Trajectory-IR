@@ -202,7 +202,7 @@ Useful commands:
 ```bash
 ruff check pkg drivers client test conformance examples
 ruff format pkg drivers client test conformance examples
-mypy pkg/trajectory_ir
+mypy
 pytest test/unit/test_hash_vectors.py -q
 pytest test/unit -q
 pytest test/e2e -q
