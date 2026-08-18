@@ -21,7 +21,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-import rfc8785
+try:
+    import rfc8785
+except ImportError:
+    rfc8785 = None
 
 SIZE_METRIC = "rfc8785_bytes"
 
@@ -55,6 +58,8 @@ def node_size_units(node: dict[str, Any]) -> int:
         payload = {}
     if not isinstance(payload, dict):
         raise TypeError("payload must be an object for size measurement")
+    if rfc8785 is None:
+        raise RuntimeError("rfc8785 is required for size measurement but is not installed")
     # RFC 8785 JCS — same stack as runtime.nodes.payload_hash (byte-stable vs Go jcs).
     canon = rfc8785.dumps({"kind": kind, "payload": payload})
     return len(canon)
