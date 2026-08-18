@@ -89,8 +89,8 @@ known-first-party = ["trajectory_ir", "drivers", "client", "test"]
 
 [tool.mypy]
 python_version = "3.11"
-mypy_path = "pkg"
-packages = ["trajectory_ir"]
+mypy_path = "pkg:."
+packages = ["trajectory_ir", "client", "drivers"]
 warn_unused_configs = true
 show_error_codes = true
 warn_return_any = true
@@ -98,3 +98,11 @@ warn_unreachable = true
 strict_equality = true
 warn_redundant_casts = true
 no_implicit_reexport = true
+
+[[tool.mypy.overrides]]
+module = [
+    "boto3",
+    "botocore.*",
+]
+ignore_missing_imports = true
+
