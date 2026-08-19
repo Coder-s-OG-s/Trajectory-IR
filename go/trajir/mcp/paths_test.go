@@ -167,6 +167,30 @@ func TestSymlinkParentNonexistentLeafRejected(t *testing.T) {
 	}
 }
 
+func TestApprovedRootRequiresEnvVar(t *testing.T) {
+	t.Setenv(EnvWorkspaceRoot, "")
+	if _, err := approvedRoot(); err == nil {
+		t.Fatal("expected error when TRAJIR_MCP_ROOT is unset")
+	}
+	if _, err := requireBoundedWorkDir(""); err == nil {
+		t.Fatal("expected requireBoundedWorkDir to fail closed when TRAJIR_MCP_ROOT is unset")
+	}
+	if _, err := requireBoundedPath("out.tir", ""); err == nil {
+		t.Fatal("expected requireBoundedPath to fail closed when TRAJIR_MCP_ROOT is unset")
+	}
+}
+
+func TestRequireBoundedPathFailsClosedOnInvalidPreferRoot(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv(EnvWorkspaceRoot, root)
+
+	// preferRoot that does not exist under root must not silently widen the
+	// confinement boundary back out to the full workspace root.
+	if _, err := requireBoundedPath("out.tir", filepath.Join(root, "missing-workdir")); err == nil {
+		t.Fatal("expected requireBoundedPath to fail when preferRoot cannot be resolved")
+	}
+}
+
 func TestIsSubpathExactDotDot(t *testing.T) {
 	root := t.TempDir()
 	if !isSubpath(root, filepath.Join(root, "..secrets", "a")) {

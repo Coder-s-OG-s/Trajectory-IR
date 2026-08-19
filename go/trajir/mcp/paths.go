@@ -8,19 +8,17 @@ import (
 )
 
 // EnvWorkspaceRoot is the environment variable for the approved workspace root.
-// When unset, the process working directory is used. All MCP tool paths must
-// resolve under this root (CWE-73 / prompt-injected path confinement).
+// It must be set explicitly: all MCP tool paths must resolve under this root
+// (CWE-73 / prompt-injected path confinement), so silently falling back to the
+// process's cwd when unset would let confinement widen to whatever directory
+// happened to launch the binary. Fail closed instead.
 const EnvWorkspaceRoot = "TRAJIR_MCP_ROOT"
 
 // approvedRoot returns the canonical absolute workspace root.
 func approvedRoot() (string, error) {
 	root := strings.TrimSpace(os.Getenv(EnvWorkspaceRoot))
 	if root == "" {
-		wd, err := os.Getwd()
-		if err != nil {
-			return "", fmt.Errorf("mcp: resolve workspace root: %w", err)
-		}
-		root = wd
+		return "", fmt.Errorf("mcp: %s must be set to an approved workspace root", EnvWorkspaceRoot)
 	}
 	return canonicalizeDir(root)
 }
@@ -51,9 +49,10 @@ func requireBoundedPath(path, preferRoot string) (string, error) {
 	base := root
 	if strings.TrimSpace(preferRoot) != "" {
 		pref, err := resolveUnderRoot(root, preferRoot, true)
-		if err == nil {
-			base = pref
+		if err != nil {
+			return "", err
 		}
+		base = pref
 	}
 	return resolveUnderRoot(base, path, false)
 }

@@ -2,7 +2,9 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/client"
@@ -66,6 +68,7 @@ func toolStatus(ctx context.Context, _ *mcp.CallToolRequest, in workdirArgs) (*m
 	for k := range byKind {
 		kinds = append(kinds, k)
 	}
+	sort.Strings(kinds)
 	return nil, statusOut{
 		WorkDir:      workDir,
 		NodesPath:    nodesPath,
@@ -227,6 +230,18 @@ func toolVerifySignature(ctx context.Context, _ *mcp.CallToolRequest, in verifyI
 	}
 	info, err := tir.Verify(path, tir.VerifyOptions{RequireSignature: in.RequireSignature})
 	if err != nil {
+		if errors.Is(err, tir.ErrSignature) {
+			// Signature policy failures (tamper, mismatch, missing-when-required)
+			// are a defined tool outcome, not a protocol error: return a
+			// structured Status:"failed" result so it reaches the wire, instead
+			// of letting the generic MCP error wrapper discard verifyOut.
+			return nil, verifyOut{
+				Path:     path,
+				Status:   "failed",
+				Verified: false,
+				Message:  err.Error(),
+			}, nil
+		}
 		return nil, zero, err
 	}
 	if info == nil {

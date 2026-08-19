@@ -1,10 +1,13 @@
 package mcp_test
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -14,6 +17,46 @@ import (
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/tir"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
+
+// mutateZipMember rewrites one member of the zip at path, keeping others intact.
+func mutateZipMember(t *testing.T, path, name string, mutate func([]byte) []byte) {
+	t.Helper()
+	zr, err := zip.OpenReader(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer zr.Close()
+
+	buf := &bytes.Buffer{}
+	zw := zip.NewWriter(buf)
+	for _, f := range zr.File {
+		rc, err := f.Open()
+		if err != nil {
+			t.Fatal(err)
+		}
+		data, err := io.ReadAll(rc)
+		rc.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if f.Name == name {
+			data = mutate(data)
+		}
+		w, err := zw.Create(f.Name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := w.Write(data); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, buf.Bytes(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
 
 func seedTrajectory(t *testing.T, workDir string) {
 	t.Helper()
@@ -171,14 +214,17 @@ func TestToolsViaInMemoryMCP(t *testing.T) {
 		t.Fatal("expected bad mode error")
 	}
 
-	// require_signature on unsigned fails
+	// require_signature on unsigned reports a structured failure (not a
+	// protocol error), so status:"failed" actually reaches the wire.
 	if strict, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
 		Name: "trajectory_verify_signature",
 		Arguments: map[string]any{"path": dest, "require_signature": true},
 	}); err != nil {
 		t.Fatal(err)
-	} else if !strict.IsError {
-		t.Fatal("expected require_signature failure on unsigned package")
+	} else if strict.IsError {
+		t.Fatalf("expected structured failure, got protocol error: %+v", strict)
+	} else if m, ok := strict.StructuredContent.(map[string]any); !ok || m["status"] != "failed" {
+		t.Fatalf("expected status=failed in structured content, got %+v", strict.StructuredContent)
 	}
 
 	// missing tenant
@@ -203,7 +249,7 @@ func TestToolsViaInMemoryMCP(t *testing.T) {
 		t.Fatal("expected empty dest error")
 	}
 
-	// fat without artifact bytes fails at export
+	// fat mode with zero artifacts (no ArtifactRefs supplied via the tool) succeeds.
 	if fat, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
 		Name: "trajectory_export_tir",
 		Arguments: map[string]any{
@@ -212,9 +258,8 @@ func TestToolsViaInMemoryMCP(t *testing.T) {
 		},
 	}); err != nil {
 		t.Fatal(err)
-	} else if !fat.IsError {
-		// fat with zero artifacts may succeed; either way exercises mode branch
-		_ = fat
+	} else if fat.IsError {
+		t.Fatalf("fat export failed: %+v", fat)
 	}
 
 	// signed package verify success path
@@ -230,6 +275,31 @@ func TestToolsViaInMemoryMCP(t *testing.T) {
 		t.Fatal(err)
 	} else if signed.IsError {
 		t.Fatalf("signed verify failed: %+v", signed)
+	}
+
+	// tampered signed package reports status:"failed" (structured, not a
+	// protocol error), distinguishing it from "unsigned".
+	mutateZipMember(t, dest, "COMPAT.json", func(b []byte) []byte {
+		var m map[string]any
+		if err := json.Unmarshal(b, &m); err != nil {
+			t.Fatal(err)
+		}
+		m["min_runtime"] = "9.9.9"
+		out, err := json.MarshalIndent(m, "", "  ")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return append(out, '\n')
+	})
+	if tampered, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "trajectory_verify_signature",
+		Arguments: map[string]any{"path": "pkg.tir"},
+	}); err != nil {
+		t.Fatal(err)
+	} else if tampered.IsError {
+		t.Fatalf("expected structured failure, got protocol error: %+v", tampered)
+	} else if m, ok := tampered.StructuredContent.(map[string]any); !ok || m["status"] != "failed" {
+		t.Fatalf("expected status=failed in structured content, got %+v", tampered.StructuredContent)
 	}
 }
 
