@@ -32,10 +32,20 @@ def start_agent(*args: str, cwd: str, log_path: str) -> subprocess.Popen:
 
     Output goes to a file rather than a pipe: a hard-killed process's piped
     output is lost, and these runs are killed by design.
+
+    The log file must remain open for the entire lifetime of the child process
+    (it is the process's stdout fd), so it cannot be managed with a plain
+    ``with`` block inside this function.  Instead we guard with try/except: if
+    ``subprocess.Popen`` raises for any reason we close the file immediately so
+    no descriptor is leaked.  On the happy path the handle is stored on the
+    Popen object and closed by :func:`hard_kill` after the process is reaped.
     """
-    # Handle must stay open for the life of the child; closed in hard_kill.
     log = open(log_path, "w", encoding="utf-8")  # noqa: SIM115
-    proc = subprocess.Popen(agent_cmd(*args), cwd=cwd, stdout=log, stderr=subprocess.STDOUT)
+    try:
+        proc = subprocess.Popen(agent_cmd(*args), cwd=cwd, stdout=log, stderr=subprocess.STDOUT)
+    except Exception:
+        log.close()
+        raise
     proc._log_file = log  # keep the handle alive until the process is reaped
     return proc
 

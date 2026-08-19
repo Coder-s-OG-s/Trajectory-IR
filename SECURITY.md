@@ -2,7 +2,7 @@
 
 Trajectory IR acts as the durable semantic and execution layer for autonomous AI agents. A compromise in this layer could lead to unauthorized tool execution, state manipulation, or the leakage of sensitive data (like PII or secrets). 
 
-This policy is tightly integrated with our [Infrastructure Design](infrastructure.md), [Contributing Guidelines](CONTRIBUTING.md), and [Code of Conduct](CODE_OF_CONDUCT.md).
+This policy is tightly integrated with our [Infrastructure Design](infrastructure.md), [Contributing Guidelines](CONTRIBUTING.md), [AI Usage Policy](AI_POLICY.md), and [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## 1. Supported Versions
 
@@ -65,7 +65,7 @@ Based on the [Infrastructure Blueprint](infrastructure.md) and [Master Spec](REA
 ## 4. Security Accountability for Contributors
 
 As defined in our [Contributing Guidelines](CONTRIBUTING.md):
-1. **AI Generation Liability**: If you use AI coding assistants (Antigravity IDE, Claude Code, Everything Claude Code [ECC]) to draft PRs, **you, the human contributor, are 100% accountable** for any security flaws they introduce. AI agents have zero built-in trust regarding security boundaries.
+1. **AI Generation Liability**: If you use AI coding assistants (Antigravity IDE, Claude Code, Everything Claude Code [ECC]) to draft PRs, **you, the human contributor, are 100% accountable** for any security flaws they introduce. AI agents have zero built-in trust regarding security boundaries. See [AI_POLICY.md](AI_POLICY.md) for the full policy, rules, and enforcement (progressive warnings, permanent ban).
 2. **Mandatory Security Reviews (Procedural Governance Gate)**: Any pull request that modifies files in `pkg/effects/` (tool safety mapping) or `pkg/resume/` (block-and-gate semantics) is automatically flagged for maximum scrutiny. As a required procedural development policy, such pull requests demand peer review verification from the **Security-Review Agent** and explicit manual sign-off from a human core maintainer prior to merge.
 
 Thank you for helping keep Trajectory IR safe and verifiable!

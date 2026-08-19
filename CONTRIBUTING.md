@@ -6,7 +6,8 @@ master specification.
 
 Also read: [MAINTAINERS.md](MAINTAINERS.md), [GOVERNANCE.md](GOVERNANCE.md),
 [docs/ROADMAP.md](docs/ROADMAP.md), [docs/SCOPE_AND_NON_GOALS.md](docs/SCOPE_AND_NON_GOALS.md),
-[SECURITY.md](SECURITY.md), [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
+[SECURITY.md](SECURITY.md), [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md),
+[AI_POLICY.md](AI_POLICY.md).
 
 ## 1. Spec before code
 
@@ -156,7 +157,9 @@ review (`pkg/trajectory_ir/effects/`, `pkg/trajectory_ir/resume/`, and the Go
 packages under `go/trajir/effects` and `go/trajir/resume`).
 
 If you use AI tools for a meaningful share of a change, say so in the PR. You
-are still responsible for correctness against the spec.
+are still responsible for correctness against the spec. See
+[AI_POLICY.md](AI_POLICY.md) for the full AI usage policy and enforcement
+process.
 
 ## 4. Local setup (Go, primary for Phase 1B)
 
@@ -199,7 +202,7 @@ Useful commands:
 ```bash
 ruff check pkg drivers client test conformance examples
 ruff format pkg drivers client test conformance examples
-mypy pkg/trajectory_ir
+mypy
 pytest test/unit/test_hash_vectors.py -q
 pytest test/unit -q
 pytest test/e2e -q
