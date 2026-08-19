@@ -213,6 +213,8 @@ pytest conformance/ -q
 
 Use the issue forms when you can: bug report, feature, or spec question.
 
+Community issues (opened by non-maintainers) are automatically labeled with `needs triage` for review.
+
 Security issues go through private vulnerability reporting (`SECURITY.md`),
 not public issues.
 
@@ -221,3 +223,4 @@ not public issues.
 Enable branch protection on `main` as described in
 `docs/maintainer-branch-protection.md` so DCO, Quality, and Go checks are
 required before merge.
+
