@@ -203,7 +203,9 @@ type verifyIn struct {
 }
 
 type verifyOut struct {
-	Path       string `json:"path"`
+	Path string `json:"path"`
+	// Status is unsigned | verified | failed. Unsigned is not the same as verified.
+	Status     string `json:"status"`
 	Signed     bool   `json:"signed"`
 	Verified   bool   `json:"verified"`
 	Scheme     string `json:"scheme,omitempty"`
@@ -230,9 +232,10 @@ func toolVerifySignature(ctx context.Context, _ *mcp.CallToolRequest, in verifyI
 	if info == nil {
 		return nil, verifyOut{
 			Path:     path,
+			Status:   "unsigned",
 			Signed:   false,
-			Verified: true,
-			Message:  "unsigned package (no SIGNATURE member); hash verification not run by this tool",
+			Verified: false,
+			Message:  "unsigned package (no SIGNATURE member); crypto verify was not run",
 		}, nil
 	}
 	scheme := ""
@@ -241,6 +244,7 @@ func toolVerifySignature(ctx context.Context, _ *mcp.CallToolRequest, in verifyI
 	}
 	return nil, verifyOut{
 		Path:       path,
+		Status:     "verified",
 		Signed:     true,
 		Verified:   true,
 		Scheme:     scheme,

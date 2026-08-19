@@ -25,9 +25,7 @@ func TestPathConfinementRejectsEscape(t *testing.T) {
 	}
 
 	if _, err := requireBoundedPath(filepath.Join("..", filepath.Base(outside), "secret.tir"), ""); err == nil {
-		// may fail for other reasons; only fail if it succeeds under root
-		// relative .. from root should escape
-		t.Log("relative escape rejected or not applicable")
+		t.Fatal("expected relative escape via .. to fail")
 	}
 
 	// Valid relative path under root (file may not exist yet for export).
@@ -37,6 +35,19 @@ func TestPathConfinementRejectsEscape(t *testing.T) {
 	}
 	if !strings.HasPrefix(dest, root) {
 		t.Fatalf("dest=%q root=%q", dest, root)
+	}
+
+	// Names that start with ".." but are not parent traversal must be allowed.
+	dotdotSecrets := filepath.Join(root, "..secrets")
+	if err := os.Mkdir(dotdotSecrets, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	allowed, err := requireBoundedPath(filepath.Join("..secrets", "file.txt"), "")
+	if err != nil {
+		t.Fatalf("..secrets under root should be allowed: %v", err)
+	}
+	if !strings.HasPrefix(allowed, root) {
+		t.Fatalf("allowed=%q root=%q", allowed, root)
 	}
 
 	// work_dir must exist as directory
@@ -134,5 +145,37 @@ func TestRegularSQLiteLeafAllowed(t *testing.T) {
 	}
 	if _, err := requireBoundedWorkDir(nodes); err == nil {
 		t.Fatal("file as work_dir should fail")
+	}
+}
+
+func TestSymlinkParentNonexistentLeafRejected(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv(EnvWorkspaceRoot, root)
+
+	outside := t.TempDir()
+	link := filepath.Join(root, "link")
+	if err := os.Symlink(outside, link); err != nil {
+		t.Skipf("symlink not available: %v", err)
+	}
+
+	// Nonexistent leaf under a symlinked parent must not resolve outside root.
+	escape := filepath.Join("link", "newdir", "out.tir")
+	if _, err := requireBoundedPath(escape, ""); err == nil {
+		t.Fatal("expected symlinked parent with missing leaf to be rejected")
+	} else if !strings.Contains(err.Error(), "escapes workspace") {
+		t.Fatalf("unexpected err: %v", err)
+	}
+}
+
+func TestIsSubpathExactDotDot(t *testing.T) {
+	root := t.TempDir()
+	if !isSubpath(root, filepath.Join(root, "..secrets", "a")) {
+		t.Fatal("..secrets should count as under root")
+	}
+	if isSubpath(root, filepath.Join(root, "..", "outside")) {
+		t.Fatal("parent traversal should not count as under root")
+	}
+	if !isSubpath(root, root) {
+		t.Fatal("root itself should be under root")
 	}
 }

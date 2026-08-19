@@ -22,11 +22,11 @@ func approvedRoot() (string, error) {
 		}
 		root = wd
 	}
-	return canonicalizeExisting(root)
+	return canonicalizeDir(root)
 }
 
 // requireBoundedWorkDir validates work_dir under the approved root.
-// Empty work_dir means the root itself.
+// Empty work_dir means the root itself. The directory must already exist.
 func requireBoundedWorkDir(workDir string) (string, error) {
 	root, err := approvedRoot()
 	if err != nil {
@@ -48,7 +48,6 @@ func requireBoundedPath(path, preferRoot string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	// Allow paths under preferRoot if it is itself under root.
 	base := root
 	if strings.TrimSpace(preferRoot) != "" {
 		pref, err := resolveUnderRoot(root, preferRoot, true)
@@ -60,9 +59,9 @@ func requireBoundedPath(path, preferRoot string) (string, error) {
 }
 
 // resolveUnderRoot cleans and absolute-izes path, ensuring it stays under root.
-// requireDir when true requires the path to be an existing directory (or creatable under root).
+// When requireDir is true, path must already exist and be a directory.
 func resolveUnderRoot(root, userPath string, requireDir bool) (string, error) {
-	rootAbs, err := canonicalizeExisting(root)
+	rootAbs, err := canonicalizeDir(root)
 	if err != nil {
 		return "", err
 	}
@@ -73,58 +72,82 @@ func resolveUnderRoot(root, userPath string, requireDir bool) (string, error) {
 	}
 	candidate = filepath.Clean(candidate)
 
-	// For paths that may not exist yet (export dest), bound via parent.
-	if _, err := os.Lstat(candidate); err != nil {
-		if !os.IsNotExist(err) {
-			return "", fmt.Errorf("mcp: path %q: %w", userPath, err)
-		}
-		parent := filepath.Dir(candidate)
-		parentAbs, err := canonicalizeExisting(parent)
-		if err != nil {
-			return "", fmt.Errorf("mcp: path parent %q not under workspace: %w", parent, err)
-		}
-		if !isSubpath(rootAbs, parentAbs) {
-			return "", fmt.Errorf("mcp: path %q escapes workspace root %q", userPath, rootAbs)
-		}
-		// Rebuild absolute candidate under cleaned parent (no symlink escape on file itself yet).
-		final := filepath.Join(parentAbs, filepath.Base(candidate))
-		if requireDir {
-			return "", fmt.Errorf("mcp: work_dir %q does not exist", userPath)
-		}
-		return final, nil
-	}
-
-	abs, err := canonicalizeExisting(candidate)
+	resolved, err := resolveViaExistingAncestor(candidate)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("mcp: path %q: %w", userPath, err)
 	}
-	if !isSubpath(rootAbs, abs) {
+	if !isSubpath(rootAbs, resolved) {
 		return "", fmt.Errorf("mcp: path %q escapes workspace root %q", userPath, rootAbs)
 	}
 	if requireDir {
-		st, err := os.Stat(abs)
+		st, err := os.Stat(resolved)
 		if err != nil {
+			if os.IsNotExist(err) {
+				return "", fmt.Errorf("mcp: work_dir %q does not exist", userPath)
+			}
 			return "", err
 		}
 		if !st.IsDir() {
 			return "", fmt.Errorf("mcp: work_dir %q is not a directory", userPath)
 		}
 	}
-	return abs, nil
+	return resolved, nil
 }
 
-func canonicalizeExisting(path string) (string, error) {
+// resolveViaExistingAncestor finds the nearest existing ancestor, resolves
+// symlinks there with EvalSymlinks, then rejoins any missing trailing components.
+// This blocks junction/symlink parents used with a nonexistent leaf path.
+func resolveViaExistingAncestor(path string) (string, error) {
 	abs, err := filepath.Abs(path)
 	if err != nil {
 		return "", err
 	}
-	// EvalSymlinks fails if path does not exist; caller handles that case.
+	abs = filepath.Clean(abs)
+
+	var missing []string
+	cur := abs
+	for {
+		_, err := os.Lstat(cur)
+		if err == nil {
+			break
+		}
+		if !os.IsNotExist(err) {
+			return "", err
+		}
+		base := filepath.Base(cur)
+		missing = append([]string{base}, missing...)
+		parent := filepath.Dir(cur)
+		if parent == cur {
+			return "", fmt.Errorf("no existing ancestor")
+		}
+		cur = parent
+	}
+
+	resolvedAncestor, err := filepath.EvalSymlinks(cur)
+	if err != nil {
+		return "", err
+	}
+	if len(missing) == 0 {
+		return resolvedAncestor, nil
+	}
+	return filepath.Join(append([]string{resolvedAncestor}, missing...)...), nil
+}
+
+func canonicalizeDir(path string) (string, error) {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
 	resolved, err := filepath.EvalSymlinks(abs)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return filepath.Clean(abs), nil
-		}
 		return "", err
+	}
+	st, err := os.Stat(resolved)
+	if err != nil {
+		return "", err
+	}
+	if !st.IsDir() {
+		return "", fmt.Errorf("not a directory: %s", path)
 	}
 	return resolved, nil
 }
@@ -134,11 +157,11 @@ func isSubpath(root, target string) bool {
 	if err != nil {
 		return false
 	}
+	// Only treat true parent traversal as escape, not names like "..secrets".
 	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return false
 	}
-	// Windows volume mismatches yield paths like `..\..`
-	return !strings.HasPrefix(rel, "..")
+	return true
 }
 
 // requireNonSymlinkLeaf rejects symlinked files under an approved directory.
@@ -155,8 +178,7 @@ func requireNonSymlinkLeaf(root, leafPath string) error {
 	if info.Mode()&os.ModeSymlink != 0 {
 		return fmt.Errorf("mcp: %q must not be a symlink", filepath.Base(leafPath))
 	}
-	// Re-validate resolved path stays under workspace (covers unexpected link types).
-	abs, err := canonicalizeExisting(leafPath)
+	abs, err := resolveViaExistingAncestor(leafPath)
 	if err != nil {
 		return err
 	}
@@ -172,7 +194,6 @@ func workdirSQLitePaths(workDir string) (nodesPath, memoPath string, err error) 
 	if err != nil {
 		return "", "", err
 	}
-	// workDir is already bounded; still re-check leaf confinement against root.
 	nodesPath = filepath.Join(workDir, "nodes.sqlite")
 	memoPath = filepath.Join(workDir, "memo.sqlite")
 	if err := requireNonSymlinkLeaf(root, nodesPath); err != nil {
