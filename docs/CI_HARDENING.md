@@ -13,7 +13,7 @@ Milestone: **[Phase CI/CD harden](https://github.com/Coder-s-OG-s/Trajectory-IR/
 | Least privilege | Workflows default `contents: read`; release only gets `contents: write` + `id-token` |
 | Trusted sources | Prefer GitHub-owned actions; Dependabot weekly for `github-actions` |
 | Keep fresh | Dependabot for pip, gomod, and GitHub Actions |
-| Audit the kitchen | Scorecard, zizmor (advisory), actionlint, gitleaks |
+| Audit the kitchen | Scorecard, zizmor (advisory), actionlint, gitleaks, dependency license scan |
 | Test before ship | Existing CI gates + Go race on core packages |
 | Release integrity | Wheel/sdist + CycloneDX SBOMs attached on `v*` tags |
 
@@ -25,7 +25,7 @@ Milestone: **[Phase CI/CD harden](https://github.com/Coder-s-OG-s/Trajectory-IR/
 | **Release** | `.github/workflows/release.yml` | Build dist, SBOM, attach to GitHub Release |
 | **Scorecard** | `.github/workflows/scorecard.yml` | OpenSSF Scorecard SARIF |
 | **CodeQL** | `.github/workflows/codeql.yml` | Go + Python static analysis |
-| **Security scan** | `.github/workflows/security-scan.yml` | gitleaks CLI (no paid license), actionlint, zizmor |
+| **Security scan** | `.github/workflows/security-scan.yml` | gitleaks CLI (no paid license), actionlint, zizmor, dependency license scan (Python + Go) vs [CNCF allowlist](THIRD_PARTY_LICENSES.md) |
 
 ## Required status checks on `main`
 

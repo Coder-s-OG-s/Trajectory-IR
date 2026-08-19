@@ -10,7 +10,7 @@
 | **Status** | `spec-v0.2-draft`. Supersedes the frozen `spec-v0.1` under the version bump process in §14. This revision narrows the project's scope from a standalone execution runtime to a semantics and portability layer over a pluggable, existing durable execution backend, see §3.1. |
 | **Precedence** | This document is authoritative. If any prior document, chat message, or verbal agreement conflicts with this file, this file wins. |
 
-**Project links:** [License (Apache-2.0)](LICENSE) · [Code of Conduct](CODE_OF_CONDUCT.md) · [Contributing (DCO)](CONTRIBUTING.md) · [AI Usage Policy](AI_POLICY.md) · [Security](SECURITY.md) · [Maintainers](MAINTAINERS.md) · [Governance](GOVERNANCE.md) · [Roadmap](docs/ROADMAP.md) · [Adopters](ADOPTERS.md) · [Scope and non-goals](docs/SCOPE_AND_NON_GOALS.md) · [Quickstart (Go first)](go/QUICKSTART.md) · [CNCF Sandbox prep](docs/CNCF_SANDBOX_APPLICATION_OUTLINE.md)
+**Project links:** [License (Apache-2.0)](LICENSE) · [Code of Conduct](CODE_OF_CONDUCT.md) · [Contributing (DCO)](CONTRIBUTING.md) · [AI Usage Policy](AI_POLICY.md) · [Security](SECURITY.md) · [Maintainers](MAINTAINERS.md) · [Governance](GOVERNANCE.md) · [Roadmap](docs/ROADMAP.md) · [Adopters](ADOPTERS.md) · [Third-party licenses](docs/THIRD_PARTY_LICENSES.md) · [Scope and non-goals](docs/SCOPE_AND_NON_GOALS.md) · [Quickstart (Go first)](go/QUICKSTART.md) · [CNCF Sandbox prep](docs/CNCF_SANDBOX_APPLICATION_OUTLINE.md)
 
 ---
 
