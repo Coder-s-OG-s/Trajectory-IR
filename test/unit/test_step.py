@@ -43,5 +43,5 @@ def test_plain_tool_logs_tool_call_and_result(tmp_path, monkeypatch):
         results = run_step(step_n=1, model_call=_model_call, context={})
 
     assert results == ["hello"]
-    assert node_log.has(TRAJECTORY_ID, 1, "TOOL_CALL", seq=2)
-    assert node_log.has(TRAJECTORY_ID, 1, "TOOL_RESULT", seq=3)
+    assert node_log.has(TRAJECTORY_ID, TENANT_ID, 1, "TOOL_CALL", seq=2)
+    assert node_log.has(TRAJECTORY_ID, TENANT_ID, 1, "TOOL_RESULT", seq=3)

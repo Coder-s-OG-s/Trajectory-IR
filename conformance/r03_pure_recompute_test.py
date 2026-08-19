@@ -73,7 +73,7 @@ def test_r03_pure_tool_may_recompute_after_prior_tool_call(tmp_path) -> None:
         assert ei.value.step_n == 1
         assert ei.value.tool_name == "compute"
         assert calls["n"] == 2
-        assert log.has(traj, 1, "ABORT", seq=3)
+        assert log.has(traj, tenant, 1, "ABORT", seq=3)
     finally:
         log.close()
 
@@ -105,7 +105,7 @@ def test_r03_pure_run_step_does_not_block_on_second_invocation(tmp_path, monkeyp
     assert r1 == [1]
     assert r2 == [2]
     assert _R03_CALLS["n"] == 2
-    assert log.has(traj, 1, "TOOL_CALL", seq=2)
-    assert log.has(traj, 2, "TOOL_CALL", seq=2)
-    assert not log.has(traj, 1, "ABORT", seq=3)
-    assert not log.has(traj, 2, "ABORT", seq=3)
+    assert log.has(traj, tenant, 1, "TOOL_CALL", seq=2)
+    assert log.has(traj, tenant, 2, "TOOL_CALL", seq=2)
+    assert not log.has(traj, tenant, 1, "ABORT", seq=3)
+    assert not log.has(traj, tenant, 2, "ABORT", seq=3)

@@ -21,13 +21,13 @@ def db_path(tmp_path, monkeypatch):
 def test_project_appends_project_context_node(db_path):
     traj = open_trajectory(tenant_id="demo", trajectory_id="test-t1", db_path=db_path)
     project(traj, step_n=1, context={"foo": "bar"})
-    assert NodeLog(db_path).has("test-t1", 1, "PROJECT_CONTEXT")
+    assert NodeLog(db_path).has("test-t1", "demo", 1, "PROJECT_CONTEXT")
 
 
 def test_seal_decision_appends_decision_node(db_path):
     traj = open_trajectory(tenant_id="demo", trajectory_id="test-t2", db_path=db_path)
     seal_decision(traj, step_n=1, plan={"tool_calls": []})
-    assert NodeLog(db_path).has("test-t2", 1, "DECISION")
+    assert NodeLog(db_path).has("test-t2", "demo", 1, "DECISION")
 
 
 def test_exec_tool_runs_idempotent_write_directly(db_path):
@@ -40,7 +40,7 @@ def test_exec_tool_runs_idempotent_write_directly(db_path):
 def test_commit_step_appends_commit_step_node(db_path):
     traj = open_trajectory(tenant_id="demo", trajectory_id="test-t4", db_path=db_path)
     commit_step(traj, step_n=1, seq=2)
-    assert NodeLog(db_path).has("test-t4", 1, "COMMIT_STEP")
+    assert NodeLog(db_path).has("test-t4", "demo", 1, "COMMIT_STEP")
 
 
 def test_exec_tool_two_non_idempotent_writes_same_step_distinct_seq(db_path):
@@ -59,5 +59,5 @@ def test_exec_tool_two_non_idempotent_writes_same_step_distinct_seq(db_path):
     assert result2.result == 6
 
     # Both should be logged without either being falsely blocked
-    assert NodeLog(db_path).has("test-t5", 1, "TOOL_CALL", seq=2)
-    assert NodeLog(db_path).has("test-t5", 1, "TOOL_CALL", seq=4)
+    assert NodeLog(db_path).has("test-t5", "demo", 1, "TOOL_CALL", seq=2)
+    assert NodeLog(db_path).has("test-t5", "demo", 1, "TOOL_CALL", seq=4)

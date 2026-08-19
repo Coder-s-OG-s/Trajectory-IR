@@ -54,11 +54,11 @@ func TestGatedToolRunsOnceThenBlocks(t *testing.T) {
 		t.Fatalf("sideEffects=%d after block, want 1", sideEffects)
 	}
 
-	ok, err := nl.Has("t1", 1, "TOOL_CALL", intPtr(2))
+	ok, err := nl.Has("t1", "demo", 1, "TOOL_CALL", intPtr(2))
 	if err != nil || !ok {
 		t.Fatalf("TOOL_CALL present=%v err=%v", ok, err)
 	}
-	ok, err = nl.Has("t1", 1, "ABORT", intPtr(3))
+	ok, err = nl.Has("t1", "demo", 1, "ABORT", intPtr(3))
 	if err != nil || !ok {
 		t.Fatalf("ABORT present=%v err=%v", ok, err)
 	}
@@ -111,7 +111,7 @@ func TestGatedToolPropagatesToolError(t *testing.T) {
 	if !errors.Is(err, boom) {
 		t.Fatalf("err=%v want %v", err, boom)
 	}
-	ok, err := nl.Has("t1", 1, "TOOL_RESULT", intPtr(3))
+	ok, err := nl.Has("t1", "demo", 1, "TOOL_RESULT", intPtr(3))
 	if err != nil {
 		t.Fatal(err)
 	}

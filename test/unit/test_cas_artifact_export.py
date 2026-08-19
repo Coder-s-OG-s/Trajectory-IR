@@ -49,7 +49,7 @@ def test_put_export_thin_rehydrate_roundtrip(tmp_path):
     log2 = NodeLog(db2)
     pkg2 = import_tir(dest, log2, cas=cas, rehydrate=True)
     assert pkg2.artifact_bytes[ref.content_hash] == data
-    assert log2.has("t1", 1, "DECISION")
+    assert log2.has("t1", "demo", 1, "DECISION")
     log.close()
     log2.close()
 

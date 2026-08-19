@@ -52,7 +52,7 @@ func TestMockAppendHasListClose(t *testing.T) {
 
 	mock.ExpectQuery("SELECT 1 FROM nodes WHERE trajectory_id").
 		WillReturnRows(sqlmock.NewRows([]string{"?column?"}).AddRow(1))
-	ok, err := nl.Has("t1", 1, "DECISION", nil)
+	ok, err := nl.Has("t1", "demo", 1, "DECISION", nil)
 	if err != nil || !ok {
 		t.Fatalf("Has=%v err=%v", ok, err)
 	}
@@ -60,9 +60,20 @@ func TestMockAppendHasListClose(t *testing.T) {
 	seq := 1
 	mock.ExpectQuery("SELECT 1 FROM nodes WHERE trajectory_id").
 		WillReturnRows(sqlmock.NewRows([]string{"?column?"}).AddRow(1))
-	ok, err = nl.Has("t1", 1, "DECISION", &seq)
+	ok, err = nl.Has("t1", "demo", 1, "DECISION", &seq)
 	if err != nil || !ok {
 		t.Fatalf("Has seq=%v err=%v", ok, err)
+	}
+
+	mock.ExpectQuery("SELECT 1 FROM nodes WHERE trajectory_id").
+		WillReturnRows(sqlmock.NewRows([]string{"?column?"}).AddRow(1))
+	ok, err = nl.HasAllTenants("t1", 1, "DECISION", nil)
+	if err != nil || !ok {
+		t.Fatalf("HasAllTenants=%v err=%v", ok, err)
+	}
+
+	if _, err := nl.Has("t1", "", 1, "DECISION", nil); err == nil {
+		t.Fatal("expected error on empty tenantID")
 	}
 
 	mock.ExpectQuery("SELECT id, trajectory_id, tenant_id, step_n, seq, kind, payload_json, ts").

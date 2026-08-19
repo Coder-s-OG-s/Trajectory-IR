@@ -215,14 +215,32 @@ func (l *NodeLog) ClaimToolCall(
 	return true, nil
 }
 
-// Has reports whether a node of kind exists for trajectory and step.
+// Has reports whether a node of kind exists for trajectory and step scoped to tenantID.
 // When seq is non nil, the match is limited to that sequence slot.
-func (l *NodeLog) Has(trajectoryID string, stepN int, kind string, seq *int) (bool, error) {
+// tenantID must be non-empty; use HasAllTenants for cross-tenant administrative checks.
+func (l *NodeLog) Has(trajectoryID, tenantID string, stepN int, kind string, seq *int) (bool, error) {
+	if tenantID == "" {
+		return false, fmt.Errorf("tenantID must be a non-empty string")
+	}
+	return l.has(trajectoryID, &tenantID, stepN, kind, seq)
+}
+
+// HasAllTenants reports whether a node of kind exists for trajectory and step across any tenant.
+// This bypasses tenant isolation and is intended for administrative or diagnostic tools only.
+func (l *NodeLog) HasAllTenants(trajectoryID string, stepN int, kind string, seq *int) (bool, error) {
+	return l.has(trajectoryID, nil, stepN, kind, seq)
+}
+
+func (l *NodeLog) has(trajectoryID string, tenantID *string, stepN int, kind string, seq *int) (bool, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
 	q := `SELECT 1 FROM nodes WHERE trajectory_id = ? AND step_n = ? AND kind = ?`
 	args := []any{trajectoryID, stepN, kind}
+	if tenantID != nil {
+		q += ` AND tenant_id = ?`
+		args = append(args, *tenantID)
+	}
 	if seq != nil {
 		q += ` AND seq = ?`
 		args = append(args, *seq)
