@@ -79,3 +79,64 @@ jobs:
         # Findings reported for review; fail-closed after SHA-pinning (#167).
         continue-on-error: true
         run: zizmor --format plain .github/workflows
+
+  license-scan-python:
+    name: Dependency license scan (Python)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.12"
+
+      # Clean venv install of the real runtime dependency tree (dbos, rfc8785,
+      # psycopg[binary], boto3 + transitives) -- not the ambient dev environment,
+      # which pulls in unrelated packages that were never part of this project.
+      - name: Install runtime dependencies
+        run: pip install --upgrade pip pip-licenses ".[postgres,s3]"
+
+      # CNCF allowlist: permissive licenses only. psycopg/psycopg-binary are
+      # LGPL-3.0-only -- an optional extra, imported as an unmodified library
+      # (never statically linked), which is the standard basis on which
+      # CNCF/ASF-style policy treats LGPL as acceptable. Documented exception,
+      # see docs/THIRD_PARTY_LICENSES.md. Anything else outside this list
+      # (e.g. a future GPL/AGPL/SSPL transitive dependency) fails the build.
+      - name: Check licenses against CNCF allowlist
+        run: |
+          pip-licenses \
+            --allow-only="Apache Software License;Apache-2.0;MIT License;MIT;MIT AND PSF-2.0;BSD License;BSD-3-Clause;BSD-2-Clause;ISC License (ISCL);ISC;Python Software Foundation License;PSF-2.0;Apache Software License; BSD License" \
+            --ignore-packages psycopg psycopg-binary
+
+  license-scan-go:
+    name: Dependency license scan (Go)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: "1.25.x"
+
+      - name: Install go-licenses
+        run: go install github.com/google/go-licenses@latest
+
+      # --ignore excludes: our own module (its LICENSE lives at the repo
+      # root, one level above where go-licenses looks) and two upstream
+      # modules go-licenses mis-flags Unknown -- modernc.org/mathutil has a
+      # BSD-3-Clause LICENSE file the tool's regex misses, and
+      # nexus-rpc/nexus-proto-annotations's v0.1.0 tag predates that repo
+      # adding its (confirmed MIT) LICENSE file. Neither is a real gap; see
+      # docs/THIRD_PARTY_LICENSES.md.
+      - name: Check licenses against CNCF allowlist
+        working-directory: go
+        run: |
+          "$(go env GOPATH)/bin/go-licenses" check ./... \
+            --disallowed_types=forbidden \
+            --ignore github.com/Coder-s-OG-s/Trajectory-IR/go \
+            --ignore modernc.org/mathutil \
+            --ignore github.com/nexus-rpc/nexus-proto-annotations
