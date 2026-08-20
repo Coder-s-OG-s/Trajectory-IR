@@ -419,6 +419,11 @@ func rewriteZipWithSignature(path string, members map[string][]byte, signatureJS
 	if err := zw.Close(); err != nil {
 		return err
 	}
+	// Match go/trajir/cas Put: durable bytes before rename so a crash after
+	// replaceFile cannot leave a truncated package that reported success.
+	if err := tmp.Sync(); err != nil {
+		return err
+	}
 	if err := tmp.Close(); err != nil {
 		return err
 	}
