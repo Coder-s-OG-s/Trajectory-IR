@@ -101,7 +101,9 @@ type ExportOptions struct {
 	TenantID      *string // when set, only that tenant's nodes are exported
 	Artifacts     []ArtifactRef
 	ArtifactBytes map[string][]byte // content_hash -> bytes (required for fat)
-	// SignKey, when a full ed25519 private key, writes SIGNATURE after export (README §9.1).
+	// SignKey, when set, must be a full ed25519 private key (64 bytes). Export then
+	// writes SIGNATURE after the zip (README §9.1). A non-empty key of the wrong
+	// length fails closed; it does not silently produce an unsigned package.
 	SignKey    ed25519.PrivateKey
 	SignerMeta SignerMeta
 }
@@ -278,6 +280,9 @@ func Export(nodeLog *nodelog.NodeLog, trajectoryID, dest string, opts ExportOpti
 	}
 	if mode != ModeThin && mode != ModeFat {
 		return "", fmt.Errorf("%w: unsupported mode %q; use thin or fat", ErrTir, mode)
+	}
+	if len(opts.SignKey) != 0 && len(opts.SignKey) != ed25519.PrivateKeySize {
+		return "", fmt.Errorf("%w: invalid ed25519 private key size", ErrSignature)
 	}
 
 	var nodeList []map[string]any
@@ -466,7 +471,7 @@ func Export(nodeLog *nodelog.NodeLog, trajectoryID, dest string, opts ExportOpti
 	}
 	fileClosed = true
 
-	if len(opts.SignKey) == ed25519.PrivateKeySize {
+	if len(opts.SignKey) != 0 {
 		if err := Sign(destPath, opts.SignKey, opts.SignerMeta); err != nil {
 			return "", err
 		}
