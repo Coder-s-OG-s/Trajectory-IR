@@ -158,7 +158,7 @@ func TestRehydrate(t *testing.T) {
 	}
 }
 
-func TestNewFileSystemSweepsStaleTemps(t *testing.T) {
+func TestSweepStaleTempFiles(t *testing.T) {
 	root := t.TempDir()
 	h := ContentHash([]byte("sweep-me"))
 	shard := filepath.Join(root, "cas", h[:2])
@@ -196,6 +196,12 @@ func TestNewFileSystemSweepsStaleTemps(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Default NewFileSystem must not sweep (shared-root safe).
+	if _, err := os.Stat(stale); err != nil {
+		t.Fatalf("stale temp should remain until SweepStaleTempFiles: %v", err)
+	}
+
+	fs.SweepStaleTempFiles(DefaultTempMaxAge)
 	kept, err := fs.Put([]byte("real-object"))
 	if err != nil {
 		t.Fatal(err)

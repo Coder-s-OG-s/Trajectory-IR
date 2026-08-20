@@ -32,9 +32,13 @@ var (
 var hex64 = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 // Matches CreateTemp names: ".{64-hex}." + random suffix (same as Python mkstemp).
+// ContentHash / NormalizeHash always use lowercase hex, so Put prefixes are
+// lowercase only; matching A-F would not find writer temps and is unused.
 var tempNameRe = regexp.MustCompile(`^\.[0-9a-f]{64}\.`)
 
-const defaultTempMaxAge = 24 * time.Hour
+// DefaultTempMaxAge is how old a Put temp must be before SweepStaleTempFiles
+// will delete it.
+const DefaultTempMaxAge = 24 * time.Hour
 
 // Store is the minimal CAS surface used by thin package rehydrate.
 type Store interface {
@@ -73,6 +77,8 @@ type FileSystem struct {
 }
 
 // NewFileSystem creates root if needed and returns a FileSystem store.
+// It does not sweep orphaned Put temps; call SweepStaleTempFiles when no
+// concurrent writers share this root (avoids deleting an in-flight temp).
 func NewFileSystem(root string) (*FileSystem, error) {
 	if root == "" {
 		return nil, fmt.Errorf("%w: root is required", ErrCAS)
@@ -84,14 +90,13 @@ func NewFileSystem(root string) (*FileSystem, error) {
 	if err != nil {
 		return nil, err
 	}
-	fs := &FileSystem{Root: abs}
-	fs.sweepStaleTempFiles(defaultTempMaxAge)
-	return fs, nil
+	return &FileSystem{Root: abs}, nil
 }
 
-// sweepStaleTempFiles removes orphaned Put temp files under cas/ older than maxAge.
-// Only names matching the CreateTemp prefix are considered.
-func (fs *FileSystem) sweepStaleTempFiles(maxAge time.Duration) {
+// SweepStaleTempFiles removes orphaned Put temp files under cas/ older than maxAge.
+// Only names matching the CreateTemp prefix (".{lowercase-hex64}.…") are considered.
+// Pass DefaultTempMaxAge for the usual 24h threshold.
+func (fs *FileSystem) SweepStaleTempFiles(maxAge time.Duration) {
 	casRoot := filepath.Join(fs.Root, "cas")
 	st, err := os.Stat(casRoot)
 	if err != nil || !st.IsDir() {

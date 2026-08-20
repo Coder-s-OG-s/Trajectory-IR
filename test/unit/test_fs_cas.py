@@ -124,7 +124,7 @@ def test_put_creates_sharded_dirs(store):
     assert (store.root / "cas" / h[:2]).is_dir()
 
 
-def test_init_sweeps_stale_temp_files_only(cas_root, tmp_path):
+def test_sweep_stale_temp_files_only(cas_root):
     h = content_hash(b"sweep-me")
     shard = cas_root / "cas" / h[:2]
     shard.mkdir(parents=True)
@@ -145,7 +145,11 @@ def test_init_sweeps_stale_temp_files_only(cas_root, tmp_path):
     decoy.write_text("SECRET=1", encoding="utf-8")
     os.utime(decoy, (old, old))
 
+    # Default construct must not sweep (shared-root safe).
     store = FileSystemCAS(cas_root)
+    assert stale.exists()
+
+    store.sweep_stale_temp_files()
     kept = store.put(b"real-object")
 
     assert not stale.exists()
@@ -154,9 +158,22 @@ def test_init_sweeps_stale_temp_files_only(cas_root, tmp_path):
     assert store.path_for(kept).is_file()
 
 
-def test_init_noop_when_cas_tree_missing(tmp_path):
+def test_constructor_opt_in_sweep(cas_root):
+    h = content_hash(b"opt-in-sweep")
+    shard = cas_root / "cas" / h[:2]
+    shard.mkdir(parents=True)
+    stale = shard / f".{h}.orphaned"
+    stale.write_bytes(b"partial")
+    old = time.time() - 90000
+    os.utime(stale, (old, old))
+
+    FileSystemCAS(cas_root, sweep_stale_temps=True)
+    assert not stale.exists()
+
+
+def test_sweep_noop_when_cas_tree_missing(tmp_path):
     root = tmp_path / "empty-root"
     store = FileSystemCAS(root)
+    store.sweep_stale_temp_files()
     assert store.root.is_dir()
-    # cas/ is created lazily on first put, not during init sweep.
     assert not (store.root / "cas").exists()
