@@ -1,0 +1,128 @@
+"""trajir-pkg-sig-v1 Python parity tests (Phase C / #179)."""
+
+from __future__ import annotations
+
+import base64
+import hashlib
+import json
+from pathlib import Path
+
+import pytest
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+from trajectory_ir.package.signature import (
+    TirSignatureError,
+    domain_separated_message,
+    key_id,
+    payload_hash_from_members,
+    sign_package,
+    verify_package,
+)
+from trajectory_ir.package.tir import export_tir, load_tir
+from trajectory_ir.runtime.log import NodeLog
+
+_GOLDEN = (
+    Path(__file__).resolve().parents[2]
+    / "go"
+    / "trajir"
+    / "tir"
+    / "testdata"
+    / "sig_v1"
+    / "payload_golden.json"
+)
+
+
+def _test_only_private_key() -> bytes:
+    """Same seed as Go testOnlySeed: SHA-256 of the fixed note string."""
+    seed = hashlib.sha256(b"trajir-pkg-sig-v1-test-vector-seed").digest()
+    priv = Ed25519PrivateKey.from_private_bytes(seed)
+    # Go ed25519.PrivateKey is seed || public (64 bytes).
+    return seed + priv.public_key().public_bytes_raw()
+
+
+def test_payload_and_domain_match_go_golden():
+    golden = json.loads(_GOLDEN.read_text(encoding="utf-8"))
+    members = {name: base64.b64decode(b64) for name, b64 in golden["members_b64"].items()}
+    payload = payload_hash_from_members(members)
+    assert payload.hex() == golden["payload_hash_hex"]
+    msg = domain_separated_message(payload)
+    assert msg.hex() == golden["domain_message_hex"]
+    pub = base64.b64decode(golden["public_key_b64"])
+    assert key_id(pub) == golden["key_id"]
+
+
+def test_verify_go_golden_signature():
+    golden = json.loads(_GOLDEN.read_text(encoding="utf-8"))
+    members = {name: base64.b64decode(b64) for name, b64 in golden["members_b64"].items()}
+    payload = payload_hash_from_members(members)
+    msg = domain_separated_message(payload)
+    pub = base64.b64decode(golden["public_key_b64"])
+    sig = base64.b64decode(golden["signature_b64"])
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+
+    Ed25519PublicKey.from_public_bytes(pub).verify(sig, msg)
+
+
+def test_sign_and_verify_roundtrip(tmp_path):
+    log = NodeLog(tmp_path / "nodes.sqlite")
+    log.append("DECISION", 1, {"plan": {"tool_calls": []}}, "t1", "demo", 1)
+    out = tmp_path / "p.tir"
+    export_tir(log, "t1", out, mode="thin")
+    key = _test_only_private_key()
+    sign_package(out, key)
+    info = verify_package(out)
+    assert info is not None
+    assert info.key_id == key_id(key[32:])
+    pkg = load_tir(out)
+    assert pkg.signature is not None
+
+
+def test_export_sign_key_roundtrip(tmp_path):
+    log = NodeLog(tmp_path / "nodes.sqlite")
+    log.append("DECISION", 1, {"plan": {"tool_calls": []}}, "t1", "demo", 1)
+    out = tmp_path / "signed.tir"
+    key = _test_only_private_key()
+    export_tir(log, "t1", out, mode="thin", sign_key=key)
+    info = verify_package(out)
+    assert info is not None
+
+
+def test_export_rejects_short_sign_key(tmp_path):
+    log = NodeLog(tmp_path / "nodes.sqlite")
+    log.append("DECISION", 1, {"plan": {"tool_calls": []}}, "t1", "demo", 1)
+    out = tmp_path / "bad.tir"
+    with pytest.raises(TirSignatureError):
+        export_tir(log, "t1", out, mode="thin", sign_key=b"\x00" * 32)
+    assert not out.exists()
+
+
+def test_require_signature_rejects_unsigned(tmp_path):
+    log = NodeLog(tmp_path / "nodes.sqlite")
+    log.append("DECISION", 1, {"plan": {"tool_calls": []}}, "t1", "demo", 1)
+    out = tmp_path / "u.tir"
+    export_tir(log, "t1", out, mode="thin")
+    with pytest.raises(TirSignatureError):
+        verify_package(out, require_signature=True)
+    assert verify_package(out) is None
+
+
+def test_tamper_fails_verify(tmp_path):
+    log = NodeLog(tmp_path / "nodes.sqlite")
+    log.append("DECISION", 1, {"plan": {"tool_calls": []}}, "t1", "demo", 1)
+    out = tmp_path / "t.tir"
+    key = _test_only_private_key()
+    export_tir(log, "t1", out, mode="thin", sign_key=key)
+    # Rebuild zip with mutated nodes but keep the old SIGNATURE bytes.
+    import zipfile
+
+    with zipfile.ZipFile(out, "r") as zf:
+        members = {n: zf.read(n) for n in zf.namelist() if not n.endswith("/")}
+    sig = members.pop("SIGNATURE")
+    members["nodes.ndjson"] = b'{"id":"tampered"}\n'
+    rebuild = tmp_path / "tampered.tir"
+    with zipfile.ZipFile(rebuild, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for name, data in members.items():
+            zf.writestr(name, data)
+        zf.writestr("SIGNATURE", sig)
+    with pytest.raises(TirSignatureError):
+        verify_package(rebuild)

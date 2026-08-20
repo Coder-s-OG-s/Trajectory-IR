@@ -13,14 +13,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   tools `trajectory_status`, `trajectory_export_tir`, `trajectory_import_tir`,
   `trajectory_verify_signature`; docs in [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md)
   and [integrations/mcp/README.md](integrations/mcp/README.md).
+- Python: `trajir-pkg-sig-v1` `sign_package` / `verify_package`, optional
+  `export_tir(..., sign_key=)`, load verifies present `SIGNATURE` (Phase C,
+  [#179](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/179)). Matches Go
+  golden vectors under `go/trajir/tir/testdata/sig_v1/`.
 - Go: `trajir/tir` package signatures — `Sign` / `Verify`, optional
   `ExportOptions.SignKey`, Load verifies present `SIGNATURE` (README §9.1,
   [#177](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/177) / epic
   [#149](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/149)). Golden
-  vectors under `go/trajir/tir/testdata/sig_v1/` for Python parity (Phase C).
+  vectors under `go/trajir/tir/testdata/sig_v1/`.
 - Spec: package signature scheme **`trajir-pkg-sig-v1`** in README §9.1
   (payload digest, domain-separated Ed25519, file-only `SIGNATURE` member,
-  unsigned default). Implementation remains Future ([#149](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/149)).
+  unsigned default).
 - Phase CI/CD harden: OpenSSF Scorecard, CodeQL (Go+Python), gitleaks,
   actionlint, zizmor advisory scan, Go race on core packages, CODEOWNERS,
   CycloneDX SBOM on release tags ([docs/CI_HARDENING.md](docs/CI_HARDENING.md)).

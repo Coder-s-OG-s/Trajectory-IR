@@ -8,9 +8,10 @@ Layout (master README §9):
     artifacts-manifest.json
     artifacts/          # fat only
     COMPAT.json
-    # SIGNATURE intentionally omitted (reserved, unimplemented)
+    SIGNATURE             # optional; trajir-pkg-sig-v1 (README 9.1)
 
 Import verifies every node id against runtime.nodes hashing (R05 spirit).
+When SIGNATURE is present, load also verifies the package signature.
 
 Security: load enforces zip path safety and size/count limits so untrusted
 packages cannot zip-bomb or path-traverse the reader.
@@ -28,6 +29,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
+from trajectory_ir.package.signature import (
+    SIGNATURE_MEMBER,
+    SignerMeta,
+    TirSignatureError,
+    sign_package,
+    verify_package,
+)
 from trajectory_ir.runtime.log import NodeLog
 from trajectory_ir.runtime.nodes import Node, NodeValidationError, node_id, payload_hash
 from trajectory_ir.runtime.redact import redact_payload
@@ -93,6 +101,7 @@ class TirPackage:
     seals: list[dict[str, Any]]
     artifacts_manifest: list[dict[str, Any]]
     artifact_bytes: dict[str, bytes]  # content_hash -> bytes (fat only)
+    signature: Any | None = None  # SignatureInfo when SIGNATURE verified
 
 
 def _content_hash(data: bytes) -> str:
@@ -225,6 +234,8 @@ def export_tir(
     tenant_id: str | None = None,
     redacted: bool = False,
     cas: Any | None = None,
+    sign_key: bytes | None = None,
+    signer_meta: SignerMeta | None = None,
 ) -> Path:
     """Export a trajectory from ``node_log`` to a ``.tir`` zip at ``dest``.
 
@@ -238,9 +249,14 @@ def export_tir(
         cas: Optional content addressed store. When set and ``mode`` is thin,
             every artifact content hash must already exist in the store
             (fail closed). Fat mode ignores this check (bytes are embedded).
+        sign_key: Optional full 64 byte Ed25519 private key. When set, writes
+            SIGNATURE after export (README 9.1). Wrong length fails closed.
+        signer_meta: Optional signer id / timestamp for SIGNATURE.
     """
     if mode not in ("thin", "fat"):
         raise TirError(f"unsupported mode {mode!r}; use thin or fat")
+    if sign_key is not None and len(sign_key) != 64:
+        raise TirSignatureError("invalid ed25519 private key size")
 
     if tenant_id is not None:
         nodes = node_log.list_nodes(trajectory_id, tenant_id=tenant_id)
@@ -350,6 +366,14 @@ def export_tir(
             os.unlink(tmp_name)
         raise
 
+    if sign_key is not None:
+        try:
+            sign_package(dest_path, sign_key, signer_meta)
+        except TirSignatureError:
+            with contextlib.suppress(OSError):
+                dest_path.unlink()
+            raise
+
     return dest_path
 
 
@@ -427,6 +451,8 @@ def _load_tir_impl(path: str | Path, *, verify: bool) -> TirPackage:
                 if len(artifact_bytes) > MAX_ARTIFACTS:
                     raise TirLimitError(f"too many embedded artifacts: > {MAX_ARTIFACTS}")
 
+        has_signature = SIGNATURE_MEMBER in name_set
+
     if verify:
         if not nodes:
             raise TirVerificationError("package has no nodes")
@@ -449,12 +475,22 @@ def _load_tir_impl(path: str | Path, *, verify: bool) -> TirPackage:
         if mode == "thin" and artifact_bytes:
             raise TirVerificationError("thin package must not embed artifact bytes")
 
+    # Signature check after hash/seal integrity (README 9.1 order).
+    # Present but invalid SIGNATURE fails even for load_tir_unverified (tamper).
+    sig_info = None
+    if has_signature:
+        try:
+            sig_info = verify_package(path)
+        except TirSignatureError as e:
+            raise TirVerificationError(str(e)) from e
+
     return TirPackage(
         manifest=manifest,
         nodes=nodes,
         seals=seals,
         artifacts_manifest=artifacts_manifest,
         artifact_bytes=artifact_bytes,
+        signature=sig_info,
     )
 
 
