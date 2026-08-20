@@ -47,9 +47,7 @@ class FileSystemCAS:
             root cannot delete another process's in-flight put() temp.
     """
 
-    def __init__(
-        self, root: str | Path, *, sweep_stale_temps: bool = False
-    ) -> None:
+    def __init__(self, root: str | Path, *, sweep_stale_temps: bool = False) -> None:
         self._root = Path(root).resolve()
         self._root.mkdir(parents=True, exist_ok=True)
         if sweep_stale_temps:
