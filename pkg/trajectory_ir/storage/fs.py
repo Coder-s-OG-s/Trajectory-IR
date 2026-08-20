@@ -17,7 +17,9 @@ from __future__ import annotations
 
 import contextlib
 import os
+import re
 import tempfile
+import time
 from pathlib import Path
 
 from trajectory_ir.storage.cas import (
@@ -27,6 +29,10 @@ from trajectory_ir.storage.cas import (
     normalize_content_hash,
     shard_key,
 )
+
+# Matches mkstemp / CreateTemp names: ".{64-hex}." + random suffix.
+_TEMP_NAME_RE = re.compile(r"^\.[0-9a-f]{64}\.")
+_DEFAULT_TEMP_MAX_AGE_SECONDS = 86400.0
 
 
 class FileSystemCAS:
@@ -39,6 +45,31 @@ class FileSystemCAS:
     def __init__(self, root: str | Path) -> None:
         self._root = Path(root).resolve()
         self._root.mkdir(parents=True, exist_ok=True)
+        self._sweep_stale_temp_files()
+
+    def _sweep_stale_temp_files(
+        self, max_age_seconds: float = _DEFAULT_TEMP_MAX_AGE_SECONDS
+    ) -> None:
+        """Remove orphaned put() temp files under cas/ older than max_age_seconds.
+
+        put() writes with prefix ``.{hash}.`` then os.replace. A hard kill can leave
+        those temps behind. Only the cas/ tree is scanned, and only names that match
+        the writer prefix, so unrelated hidden files under root are left alone.
+        """
+        cas_root = self._root / "cas"
+        if not cas_root.is_dir():
+            return
+        now = time.time()
+        for path in cas_root.rglob("*"):
+            if not path.is_file():
+                continue
+            if _TEMP_NAME_RE.match(path.name) is None:
+                continue
+            try:
+                if now - path.stat().st_mtime > max_age_seconds:
+                    path.unlink()
+            except OSError:
+                pass
 
     @property
     def root(self) -> Path:

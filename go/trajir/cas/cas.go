@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 )
 
 // Sentinel errors.
@@ -29,6 +30,11 @@ var (
 )
 
 var hex64 = regexp.MustCompile(`^[0-9a-f]{64}$`)
+
+// Matches CreateTemp names: ".{64-hex}." + random suffix (same as Python mkstemp).
+var tempNameRe = regexp.MustCompile(`^\.[0-9a-f]{64}\.`)
+
+const defaultTempMaxAge = 24 * time.Hour
 
 // Store is the minimal CAS surface used by thin package rehydrate.
 type Store interface {
@@ -78,7 +84,36 @@ func NewFileSystem(root string) (*FileSystem, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &FileSystem{Root: abs}, nil
+	fs := &FileSystem{Root: abs}
+	fs.sweepStaleTempFiles(defaultTempMaxAge)
+	return fs, nil
+}
+
+// sweepStaleTempFiles removes orphaned Put temp files under cas/ older than maxAge.
+// Only names matching the CreateTemp prefix are considered.
+func (fs *FileSystem) sweepStaleTempFiles(maxAge time.Duration) {
+	casRoot := filepath.Join(fs.Root, "cas")
+	st, err := os.Stat(casRoot)
+	if err != nil || !st.IsDir() {
+		return
+	}
+	now := time.Now()
+	_ = filepath.WalkDir(casRoot, func(path string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return nil
+		}
+		if !tempNameRe.MatchString(d.Name()) {
+			return nil
+		}
+		info, err := d.Info()
+		if err != nil {
+			return nil
+		}
+		if now.Sub(info.ModTime()) > maxAge {
+			_ = os.Remove(path)
+		}
+		return nil
+	})
 }
 
 // PathFor returns the absolute path for a content hash under this store.
