@@ -422,15 +422,42 @@ func rewriteZipWithSignature(path string, members map[string][]byte, signatureJS
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	if err := os.Rename(tmpName, path); err != nil {
-		// Windows: rename over existing may fail — remove target then rename.
-		if rmErr := os.Remove(path); rmErr != nil {
-			return fmt.Errorf("%w: replace package: %v (also: %v)", ErrSignature, err, rmErr)
-		}
-		if err := os.Rename(tmpName, path); err != nil {
-			return fmt.Errorf("%w: replace package: %v", ErrSignature, err)
-		}
+	if err := replaceFile(tmpName, path); err != nil {
+		return err
 	}
 	success = true
+	return nil
+}
+
+// afterBackupHook is an optional test seam run after the original package is
+// moved aside and before the temp is moved into place. Production leaves it nil.
+var afterBackupHook func(dest string)
+
+// replaceFile installs src at dest without deleting dest until src is in place.
+// On platforms where rename cannot overwrite (Windows), dest is moved to a
+// sibling backup first; if the final rename fails, the backup is restored.
+func replaceFile(src, dest string) error {
+	if err := os.Rename(src, dest); err == nil {
+		return nil
+	}
+	return replaceFileViaBackup(src, dest)
+}
+
+func replaceFileViaBackup(src, dest string) error {
+	bak := dest + ".trajir-replace-bak"
+	_ = os.Remove(bak)
+	if err := os.Rename(dest, bak); err != nil {
+		return fmt.Errorf("%w: replace package (move aside): %v", ErrSignature, err)
+	}
+	if afterBackupHook != nil {
+		afterBackupHook(dest)
+	}
+	if err := os.Rename(src, dest); err != nil {
+		if rbErr := os.Rename(bak, dest); rbErr != nil {
+			return fmt.Errorf("%w: replace package: %v (restore failed: %v)", ErrSignature, err, rbErr)
+		}
+		return fmt.Errorf("%w: replace package: %v", ErrSignature, err)
+	}
+	_ = os.Remove(bak)
 	return nil
 }

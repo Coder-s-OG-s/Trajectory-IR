@@ -303,6 +303,21 @@ func TestSignRejectsInvalidKey(t *testing.T) {
 	}
 }
 
+func TestExportRejectsWrongLengthSignKey(t *testing.T) {
+	src := openLog(t, "src.sqlite")
+	seedSample(t, src)
+	out := filepath.Join(t.TempDir(), "seed.tir")
+	// 32-byte seed is not a full private key; Export must fail closed (no silent unsigned).
+	seed := make(ed25519.PrivateKey, 32)
+	_, err := tir.Export(src, "t-export", out, tir.ExportOptions{Mode: tir.ModeThin, SignKey: seed})
+	if !errors.Is(err, tir.ErrSignature) {
+		t.Fatalf("want ErrSignature for 32-byte seed, got %v", err)
+	}
+	if _, statErr := os.Stat(out); !os.IsNotExist(statErr) {
+		t.Fatal("export must not leave a package after rejecting SignKey")
+	}
+}
+
 func TestTrustedKeyIDAllowlist(t *testing.T) {
 	src := openLog(t, "src.sqlite")
 	seedSample(t, src)
