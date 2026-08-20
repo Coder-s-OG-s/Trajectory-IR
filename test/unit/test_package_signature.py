@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 
 import pytest
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from nacl.signing import SigningKey, VerifyKey
 
 from trajectory_ir.package.signature import (
     TirSignatureError,
@@ -35,9 +35,9 @@ _GOLDEN = (
 def _test_only_private_key() -> bytes:
     """Same seed as Go testOnlySeed: SHA-256 of the fixed note string."""
     seed = hashlib.sha256(b"trajir-pkg-sig-v1-test-vector-seed").digest()
-    priv = Ed25519PrivateKey.from_private_bytes(seed)
+    sk = SigningKey(seed)
     # Go ed25519.PrivateKey is seed || public (64 bytes).
-    return seed + priv.public_key().public_bytes_raw()
+    return seed + bytes(sk.verify_key)
 
 
 def test_payload_and_domain_match_go_golden():
@@ -58,9 +58,7 @@ def test_verify_go_golden_signature():
     msg = domain_separated_message(payload)
     pub = base64.b64decode(golden["public_key_b64"])
     sig = base64.b64decode(golden["signature_b64"])
-    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
-
-    Ed25519PublicKey.from_public_bytes(pub).verify(sig, msg)
+    VerifyKey(pub).verify(msg, sig)
 
 
 def test_sign_and_verify_roundtrip(tmp_path):

@@ -20,11 +20,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from cryptography.exceptions import InvalidSignature
-from cryptography.hazmat.primitives.asymmetric.ed25519 import (
-    Ed25519PrivateKey,
-    Ed25519PublicKey,
-)
+from nacl.exceptions import BadSignatureError
+from nacl.signing import SigningKey, VerifyKey
 
 SIGNATURE_MEMBER = "SIGNATURE"
 SCHEME_V1 = "trajir-pkg-sig-v1"
@@ -100,11 +97,11 @@ def _safe_member_name(name: str) -> None:
             raise TirSignatureError(f"unsafe zip path: {name!r}")
 
 
-def _private_key_from_bytes(key: bytes) -> Ed25519PrivateKey:
+def _signing_key_from_bytes(key: bytes) -> SigningKey:
     if len(key) == _PRIVATE_KEY_SIZE:
-        return Ed25519PrivateKey.from_private_bytes(key[:_SEED_SIZE])
+        return SigningKey(key[:_SEED_SIZE])
     if len(key) == _SEED_SIZE:
-        return Ed25519PrivateKey.from_private_bytes(key)
+        return SigningKey(key)
     raise TirSignatureError("invalid ed25519 private key size")
 
 
@@ -192,10 +189,9 @@ def _verify_signature_bytes(
         raise TirSignatureError("invalid signature encoding")
 
     msg = domain_separated_message(want_hash)
-    pub = Ed25519PublicKey.from_public_bytes(pub_raw)
     try:
-        pub.verify(sig, msg)
-    except InvalidSignature as e:
+        VerifyKey(pub_raw).verify(msg, sig)
+    except BadSignatureError as e:
         raise TirSignatureError("ed25519 verification failed") from e
 
     signer = doc.get("signer") or {}
@@ -232,10 +228,10 @@ def sign_package(
     path = Path(path)
     members, _existing = _read_zip_members(path)
     payload = payload_hash_from_members(members)
-    priv = _private_key_from_bytes(private_key)
-    pub = priv.public_key().public_bytes_raw()
+    sk = _signing_key_from_bytes(private_key)
+    pub = bytes(sk.verify_key)
     msg = domain_separated_message(payload)
-    sig = priv.sign(msg)
+    sig = sk.sign(msg).signature
 
     meta = meta or SignerMeta()
     signed_at = meta.signed_at or datetime.now(UTC)

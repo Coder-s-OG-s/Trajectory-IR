@@ -28,6 +28,7 @@ classifiers = [
 ]
 dependencies = [
     "dbos",
+    "pynacl",
 ]
 
 [project.optional-dependencies]

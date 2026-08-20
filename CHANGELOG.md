@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Python: `trajir-pkg-sig-v1` `sign_package` / `verify_package`, optional
   `export_tir(..., sign_key=)`, load verifies present `SIGNATURE` (Phase C,
   [#179](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/179)). Matches Go
-  golden vectors under `go/trajir/tir/testdata/sig_v1/`.
+  golden vectors under `go/trajir/tir/testdata/sig_v1/`. Uses PyNaCl (Apache-2.0).
 - Go: `trajir/tir` package signatures — `Sign` / `Verify`, optional
   `ExportOptions.SignKey`, Load verifies present `SIGNATURE` (README §9.1,
   [#177](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/177) / epic
