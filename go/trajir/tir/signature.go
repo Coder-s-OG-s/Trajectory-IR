@@ -381,6 +381,12 @@ func collectZipMembers(files []*zip.File) (members map[string][]byte, signature 
 
 func rewriteZipWithSignature(path string, members map[string][]byte, signatureJSON []byte) error {
 	dir := filepath.Dir(path)
+	// Preserve destination mode across CreateTemp (which uses 0600) so signed
+	// exports keep the same permissions as the unsigned zip Export wrote.
+	origMode := os.FileMode(0o644)
+	if st, err := os.Stat(path); err == nil {
+		origMode = st.Mode().Perm()
+	}
 	tmp, err := os.CreateTemp(dir, "tir-sign-*.tmp")
 	if err != nil {
 		return err
@@ -426,6 +432,9 @@ func rewriteZipWithSignature(path string, members map[string][]byte, signatureJS
 	}
 	if err := tmp.Close(); err != nil {
 		return err
+	}
+	if err := os.Chmod(tmpName, origMode); err != nil {
+		return fmt.Errorf("%w: preserve package mode: %v", ErrSignature, err)
 	}
 	if err := replaceFile(tmpName, path); err != nil {
 		return err
