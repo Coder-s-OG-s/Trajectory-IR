@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 )
 
 // Sentinel errors.
@@ -29,6 +30,15 @@ var (
 )
 
 var hex64 = regexp.MustCompile(`^[0-9a-f]{64}$`)
+
+// Matches CreateTemp names: ".{64-hex}." + random suffix (same as Python mkstemp).
+// ContentHash / NormalizeHash always use lowercase hex, so Put prefixes are
+// lowercase only; matching A-F would not find writer temps and is unused.
+var tempNameRe = regexp.MustCompile(`^\.[0-9a-f]{64}\.`)
+
+// DefaultTempMaxAge is how old a Put temp must be before SweepStaleTempFiles
+// will delete it.
+const DefaultTempMaxAge = 24 * time.Hour
 
 // Store is the minimal CAS surface used by thin package rehydrate.
 type Store interface {
@@ -67,6 +77,8 @@ type FileSystem struct {
 }
 
 // NewFileSystem creates root if needed and returns a FileSystem store.
+// It does not sweep orphaned Put temps; call SweepStaleTempFiles when no
+// concurrent writers share this root (avoids deleting an in-flight temp).
 func NewFileSystem(root string) (*FileSystem, error) {
 	if root == "" {
 		return nil, fmt.Errorf("%w: root is required", ErrCAS)
@@ -79,6 +91,34 @@ func NewFileSystem(root string) (*FileSystem, error) {
 		return nil, err
 	}
 	return &FileSystem{Root: abs}, nil
+}
+
+// SweepStaleTempFiles removes orphaned Put temp files under cas/ older than maxAge.
+// Only names matching the CreateTemp prefix (".{lowercase-hex64}.…") are considered.
+// Pass DefaultTempMaxAge for the usual 24h threshold.
+func (fs *FileSystem) SweepStaleTempFiles(maxAge time.Duration) {
+	casRoot := filepath.Join(fs.Root, "cas")
+	st, err := os.Stat(casRoot)
+	if err != nil || !st.IsDir() {
+		return
+	}
+	now := time.Now()
+	_ = filepath.WalkDir(casRoot, func(path string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return nil
+		}
+		if !tempNameRe.MatchString(d.Name()) {
+			return nil
+		}
+		info, err := d.Info()
+		if err != nil {
+			return nil
+		}
+		if now.Sub(info.ModTime()) > maxAge {
+			_ = os.Remove(path)
+		}
+		return nil
+	})
 }
 
 // PathFor returns the absolute path for a content hash under this store.

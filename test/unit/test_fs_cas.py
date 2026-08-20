@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import time
 
 import pytest
 
@@ -121,3 +122,58 @@ def test_cas_protocol_runtime_check(store):
 def test_put_creates_sharded_dirs(store):
     h = store.put(os.urandom(32))
     assert (store.root / "cas" / h[:2]).is_dir()
+
+
+def test_sweep_stale_temp_files_only(cas_root):
+    h = content_hash(b"sweep-me")
+    shard = cas_root / "cas" / h[:2]
+    shard.mkdir(parents=True)
+
+    stale = shard / f".{h}.orphaned"
+    stale.write_bytes(b"partial")
+    old = time.time() - 90000
+    os.utime(stale, (old, old))
+
+    fresh_h = content_hash(b"keep-me-fresh")
+    fresh_dir = cas_root / "cas" / fresh_h[:2]
+    fresh_dir.mkdir(parents=True, exist_ok=True)
+    fresh = fresh_dir / f".{fresh_h}.inflight"
+    fresh.write_bytes(b"still writing")
+
+    # Unrelated multi-dot hidden file at root must not be touched.
+    decoy = cas_root / ".env.local"
+    decoy.write_text("SECRET=1", encoding="utf-8")
+    os.utime(decoy, (old, old))
+
+    # Default construct must not sweep (shared-root safe).
+    store = FileSystemCAS(cas_root)
+    assert stale.exists()
+
+    store.sweep_stale_temp_files()
+    kept = store.put(b"real-object")
+
+    assert not stale.exists()
+    assert fresh.exists()
+    assert decoy.exists()
+    assert store.path_for(kept).is_file()
+
+
+def test_constructor_opt_in_sweep(cas_root):
+    h = content_hash(b"opt-in-sweep")
+    shard = cas_root / "cas" / h[:2]
+    shard.mkdir(parents=True)
+    stale = shard / f".{h}.orphaned"
+    stale.write_bytes(b"partial")
+    old = time.time() - 90000
+    os.utime(stale, (old, old))
+
+    FileSystemCAS(cas_root, sweep_stale_temps=True)
+    assert not stale.exists()
+
+
+def test_sweep_noop_when_cas_tree_missing(tmp_path):
+    root = tmp_path / "empty-root"
+    store = FileSystemCAS(root)
+    store.sweep_stale_temp_files()
+    assert store.root.is_dir()
+    assert not (store.root / "cas").exists()
