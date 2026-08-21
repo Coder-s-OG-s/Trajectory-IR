@@ -143,3 +143,45 @@ def test_verify_rejects_oversized_member(tmp_path, monkeypatch):
     monkeypatch.setattr(tirmod, "MAX_TOTAL_UNCOMPRESSED_BYTES", 100)
     with pytest.raises(TirLimitError):
         verify_package(bomb)
+
+
+@pytest.mark.parametrize("body", [b"null", b"42", b"[]", b'"x"'])
+def test_verify_rejects_non_object_signature_json(tmp_path, body):
+    import zipfile
+
+    from trajectory_ir.package.signature import verify_package_from_zip
+
+    path = tmp_path / "bad.tir"
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("manifest.json", b"{}")
+        zf.writestr("SIGNATURE", body)
+    with (
+        zipfile.ZipFile(path, "r") as zf,
+        pytest.raises(TirSignatureError, match="must be an object"),
+    ):
+        verify_package_from_zip(zf)
+
+
+def test_load_verifies_from_open_archive(tmp_path, monkeypatch):
+    """load_tir must verify against the same open zip, not re open the path."""
+    import zipfile
+
+    import trajectory_ir.package.tir as tirmod
+
+    log = NodeLog(tmp_path / "nodes.sqlite")
+    log.append("DECISION", 1, {"plan": {"tool_calls": []}}, "t1", "demo", 1)
+    out = tmp_path / "same.tir"
+    key = _test_only_private_key()
+    export_tir(log, "t1", out, mode="thin", sign_key=key)
+
+    opened: list[zipfile.ZipFile] = []
+    real = tirmod.verify_package_from_zip
+
+    def _track(zf, **kwargs):
+        opened.append(zf)
+        return real(zf, **kwargs)
+
+    monkeypatch.setattr(tirmod, "verify_package_from_zip", _track)
+    pkg = load_tir(out)
+    assert pkg.signature is not None
+    assert len(opened) == 1

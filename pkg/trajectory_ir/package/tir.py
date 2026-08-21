@@ -30,11 +30,10 @@ from pathlib import Path
 from typing import Any, Literal
 
 from trajectory_ir.package.signature import (
-    SIGNATURE_MEMBER,
     SignerMeta,
     TirSignatureError,
     sign_package,
-    verify_package,
+    verify_package_from_zip,
 )
 from trajectory_ir.runtime.log import NodeLog
 from trajectory_ir.runtime.nodes import Node, NodeValidationError, node_id, payload_hash
@@ -451,36 +450,33 @@ def _load_tir_impl(path: str | Path, *, verify: bool) -> TirPackage:
                 if len(artifact_bytes) > MAX_ARTIFACTS:
                     raise TirLimitError(f"too many embedded artifacts: > {MAX_ARTIFACTS}")
 
-        has_signature = SIGNATURE_MEMBER in name_set
+        if verify:
+            if not nodes:
+                raise TirVerificationError("package has no nodes")
+            for n in nodes:
+                _verify_node_record(n)
+            expected_seals = _seals_from_nodes(nodes)
+            by_id = {s["node_id"]: s for s in seals}
+            for exp in expected_seals:
+                got = by_id.get(exp["node_id"])
+                if got is None:
+                    raise TirVerificationError(f"missing seal for decision node {exp['node_id']}")
+                if got.get("content_hash") != exp["content_hash"]:
+                    raise TirVerificationError(f"seal content_hash mismatch for {exp['node_id']}")
+            mode = manifest.get("mode", "thin")
+            if mode == "fat":
+                for entry in artifacts_manifest:
+                    h = entry["content_hash"]
+                    if h not in artifact_bytes:
+                        raise TirVerificationError(f"fat package missing artifact bytes {h}")
+            if mode == "thin" and artifact_bytes:
+                raise TirVerificationError("thin package must not embed artifact bytes")
 
-    if verify:
-        if not nodes:
-            raise TirVerificationError("package has no nodes")
-        for n in nodes:
-            _verify_node_record(n)
-        expected_seals = _seals_from_nodes(nodes)
-        by_id = {s["node_id"]: s for s in seals}
-        for exp in expected_seals:
-            got = by_id.get(exp["node_id"])
-            if got is None:
-                raise TirVerificationError(f"missing seal for decision node {exp['node_id']}")
-            if got.get("content_hash") != exp["content_hash"]:
-                raise TirVerificationError(f"seal content_hash mismatch for {exp['node_id']}")
-        mode = manifest.get("mode", "thin")
-        if mode == "fat":
-            for entry in artifacts_manifest:
-                h = entry["content_hash"]
-                if h not in artifact_bytes:
-                    raise TirVerificationError(f"fat package missing artifact bytes {h}")
-        if mode == "thin" and artifact_bytes:
-            raise TirVerificationError("thin package must not embed artifact bytes")
-
-    # Signature check after hash/seal integrity (README 9.1 order).
-    # Present but invalid SIGNATURE fails even for load_tir_unverified (tamper).
-    sig_info = None
-    if has_signature:
+        # Signature check after hash/seal integrity (README 9.1 order).
+        # Use the already open archive only — never re open path (TOCTOU / CWE-367).
+        # Present but invalid SIGNATURE fails even for load_tir_unverified (tamper).
         try:
-            sig_info = verify_package(path)
+            sig_info = verify_package_from_zip(zf)
         except TirSignatureError as e:
             raise TirVerificationError(str(e)) from e
 

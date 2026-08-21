@@ -98,14 +98,16 @@ def _safe_member_name(name: str) -> None:
 
 
 def _signing_key_from_bytes(key: bytes) -> SigningKey:
-    if len(key) == _PRIVATE_KEY_SIZE:
-        return SigningKey(key[:_SEED_SIZE])
-    if len(key) == _SEED_SIZE:
-        return SigningKey(key)
-    raise TirSignatureError("invalid ed25519 private key size")
+    # Match Go Sign: public API accepts only the full 64 byte private key.
+    if len(key) != _PRIVATE_KEY_SIZE:
+        raise TirSignatureError("invalid ed25519 private key size")
+    return SigningKey(key[:_SEED_SIZE])
 
 
-def _read_zip_members(path: Path) -> tuple[dict[str, bytes], bytes | None]:
+def _collect_zip_members(
+    zf: zipfile.ZipFile,
+) -> tuple[dict[str, bytes], bytes | None]:
+    """Read members from an already open archive with tir.py size budgets."""
     # Local import avoids a cycle: tir.py imports this module at load time.
     from trajectory_ir.package.tir import (
         MAX_TOTAL_UNCOMPRESSED_BYTES,
@@ -116,36 +118,64 @@ def _read_zip_members(path: Path) -> tuple[dict[str, bytes], bytes | None]:
 
     members: dict[str, bytes] = {}
     signature: bytes | None = None
-    with zipfile.ZipFile(path, "r") as zf:
-        infos = [i for i in zf.infolist() if not i.filename.endswith("/")]
-        if len(infos) > MAX_ZIP_ENTRIES:
-            raise TirLimitError(f"too many zip entries: {len(infos)} > {MAX_ZIP_ENTRIES}")
-        budget = MAX_TOTAL_UNCOMPRESSED_BYTES
-        for info in infos:
-            name = info.filename
-            _safe_member_name(name)
-            if info.file_size > MAX_UNCOMPRESSED_ENTRY_BYTES:
-                raise TirLimitError(
-                    f"zip member {name!r} uncompressed size {info.file_size} "
-                    f"exceeds limit {MAX_UNCOMPRESSED_ENTRY_BYTES}"
-                )
-            if info.file_size > budget:
-                raise TirLimitError(
-                    f"zip total uncompressed size would exceed limit {MAX_TOTAL_UNCOMPRESSED_BYTES}"
-                )
-            data = zf.read(name)
-            if len(data) > MAX_UNCOMPRESSED_ENTRY_BYTES:
-                raise TirLimitError(f"zip member {name!r} expanded beyond per-entry limit")
-            budget -= len(data)
-            if name == SIGNATURE_MEMBER:
-                if signature is not None:
-                    raise TirSignatureError("duplicate SIGNATURE member")
-                signature = data
-                continue
-            if name in members:
-                raise TirSignatureError(f"duplicate zip member {name!r}")
-            members[name] = data
+    infos = [i for i in zf.infolist() if not i.filename.endswith("/")]
+    if len(infos) > MAX_ZIP_ENTRIES:
+        raise TirLimitError(f"too many zip entries: {len(infos)} > {MAX_ZIP_ENTRIES}")
+    budget = MAX_TOTAL_UNCOMPRESSED_BYTES
+    for info in infos:
+        name = info.filename
+        _safe_member_name(name)
+        if info.file_size > MAX_UNCOMPRESSED_ENTRY_BYTES:
+            raise TirLimitError(
+                f"zip member {name!r} uncompressed size {info.file_size} "
+                f"exceeds limit {MAX_UNCOMPRESSED_ENTRY_BYTES}"
+            )
+        if info.file_size > budget:
+            raise TirLimitError(
+                f"zip total uncompressed size would exceed limit {MAX_TOTAL_UNCOMPRESSED_BYTES}"
+            )
+        data = zf.read(name)
+        if len(data) > MAX_UNCOMPRESSED_ENTRY_BYTES:
+            raise TirLimitError(f"zip member {name!r} expanded beyond per-entry limit")
+        budget -= len(data)
+        if name == SIGNATURE_MEMBER:
+            if signature is not None:
+                raise TirSignatureError("duplicate SIGNATURE member")
+            signature = data
+            continue
+        if name in members:
+            raise TirSignatureError(f"duplicate zip member {name!r}")
+        members[name] = data
     return members, signature
+
+
+def _read_zip_members(path: Path) -> tuple[dict[str, bytes], bytes | None]:
+    with zipfile.ZipFile(path, "r") as zf:
+        return _collect_zip_members(zf)
+
+
+def verify_package_from_zip(
+    zf: zipfile.ZipFile,
+    *,
+    require_signature: bool = False,
+    trusted_keys: list[bytes] | None = None,
+    trusted_key_ids: list[str] | None = None,
+) -> SignatureInfo | None:
+    """Verify SIGNATURE against members from an already open ZipFile.
+
+    Prefer this from load_tir so the archive is never re opened (TOCTOU).
+    """
+    members, sig_raw = _collect_zip_members(zf)
+    if sig_raw is None:
+        if require_signature:
+            raise TirSignatureError("package is unsigned (SIGNATURE missing)")
+        return None
+    return _verify_signature_bytes(
+        members,
+        sig_raw,
+        trusted_keys=trusted_keys,
+        trusted_key_ids=trusted_key_ids,
+    )
 
 
 def verify_package(
@@ -160,17 +190,13 @@ def verify_package(
     Returns None when unsigned and require_signature is False.
     """
     path = Path(path)
-    members, sig_raw = _read_zip_members(path)
-    if sig_raw is None:
-        if require_signature:
-            raise TirSignatureError("package is unsigned (SIGNATURE missing)")
-        return None
-    return _verify_signature_bytes(
-        members,
-        sig_raw,
-        trusted_keys=trusted_keys,
-        trusted_key_ids=trusted_key_ids,
-    )
+    with zipfile.ZipFile(path, "r") as zf:
+        return verify_package_from_zip(
+            zf,
+            require_signature=require_signature,
+            trusted_keys=trusted_keys,
+            trusted_key_ids=trusted_key_ids,
+        )
 
 
 def _verify_signature_bytes(
@@ -184,6 +210,8 @@ def _verify_signature_bytes(
         doc = json.loads(sig_raw.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as e:
         raise TirSignatureError(f"SIGNATURE JSON: {e}") from e
+    if not isinstance(doc, dict):
+        raise TirSignatureError("SIGNATURE JSON must be an object")
     if doc.get("scheme") != SCHEME_V1:
         raise TirSignatureError(f"unknown scheme {doc.get('scheme')!r}")
     if doc.get("payload_alg") != PAYLOAD_ALG_V1:
@@ -217,6 +245,8 @@ def _verify_signature_bytes(
         raise TirSignatureError("ed25519 verification failed") from e
 
     signer = doc.get("signer") or {}
+    if not isinstance(signer, dict):
+        raise TirSignatureError("signer must be an object")
     kid = str(signer.get("key_id") or "") or key_id(pub_raw)
     if signer.get("key_id") and kid != key_id(pub_raw):
         raise TirSignatureError("signer.key_id does not match public_key")
@@ -241,8 +271,6 @@ def sign_package(
     meta: SignerMeta | None = None,
 ) -> None:
     """Write or replace the SIGNATURE member of an existing .tir package."""
-    if len(private_key) != _PRIVATE_KEY_SIZE and len(private_key) != _SEED_SIZE:
-        raise TirSignatureError("invalid ed25519 private key size")
     # Match Go Sign: require full 64 byte private key for the public API.
     if len(private_key) != _PRIVATE_KEY_SIZE:
         raise TirSignatureError("invalid ed25519 private key size")
