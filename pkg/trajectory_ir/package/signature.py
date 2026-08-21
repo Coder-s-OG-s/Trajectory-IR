@@ -106,15 +106,37 @@ def _signing_key_from_bytes(key: bytes) -> SigningKey:
 
 
 def _read_zip_members(path: Path) -> tuple[dict[str, bytes], bytes | None]:
+    # Local import avoids a cycle: tir.py imports this module at load time.
+    from trajectory_ir.package.tir import (
+        MAX_TOTAL_UNCOMPRESSED_BYTES,
+        MAX_UNCOMPRESSED_ENTRY_BYTES,
+        MAX_ZIP_ENTRIES,
+        TirLimitError,
+    )
+
     members: dict[str, bytes] = {}
     signature: bytes | None = None
     with zipfile.ZipFile(path, "r") as zf:
-        for info in zf.infolist():
+        infos = [i for i in zf.infolist() if not i.filename.endswith("/")]
+        if len(infos) > MAX_ZIP_ENTRIES:
+            raise TirLimitError(f"too many zip entries: {len(infos)} > {MAX_ZIP_ENTRIES}")
+        budget = MAX_TOTAL_UNCOMPRESSED_BYTES
+        for info in infos:
             name = info.filename
-            if name.endswith("/"):
-                continue
             _safe_member_name(name)
+            if info.file_size > MAX_UNCOMPRESSED_ENTRY_BYTES:
+                raise TirLimitError(
+                    f"zip member {name!r} uncompressed size {info.file_size} "
+                    f"exceeds limit {MAX_UNCOMPRESSED_ENTRY_BYTES}"
+                )
+            if info.file_size > budget:
+                raise TirLimitError(
+                    f"zip total uncompressed size would exceed limit {MAX_TOTAL_UNCOMPRESSED_BYTES}"
+                )
             data = zf.read(name)
+            if len(data) > MAX_UNCOMPRESSED_ENTRY_BYTES:
+                raise TirLimitError(f"zip member {name!r} expanded beyond per-entry limit")
+            budget -= len(data)
             if name == SIGNATURE_MEMBER:
                 if signature is not None:
                     raise TirSignatureError("duplicate SIGNATURE member")

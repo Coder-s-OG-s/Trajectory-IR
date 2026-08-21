@@ -124,3 +124,22 @@ def test_tamper_fails_verify(tmp_path):
         zf.writestr("SIGNATURE", sig)
     with pytest.raises(TirSignatureError):
         verify_package(rebuild)
+
+
+def test_verify_rejects_oversized_member(tmp_path, monkeypatch):
+    """Signature path must enforce the same zip budgets as tir.load."""
+    import zipfile
+
+    import trajectory_ir.package.tir as tirmod
+    from trajectory_ir.package.tir import TirLimitError
+
+    bomb = tmp_path / "bomb.tir"
+    with zipfile.ZipFile(bomb, "w", compression=zipfile.ZIP_STORED) as zf:
+        zf.writestr("manifest.json", b"{}")
+        zf.writestr("big.bin", b"x" * 1024)
+
+    # Shrink limits so a tiny fixture trips the same TirLimitError path.
+    monkeypatch.setattr(tirmod, "MAX_UNCOMPRESSED_ENTRY_BYTES", 100)
+    monkeypatch.setattr(tirmod, "MAX_TOTAL_UNCOMPRESSED_BYTES", 100)
+    with pytest.raises(TirLimitError):
+        verify_package(bomb)
