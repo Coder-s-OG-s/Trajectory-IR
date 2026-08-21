@@ -506,12 +506,21 @@ func loadImpl(path string, verify bool) (*Package, error) {
 		return nil, fmt.Errorf("%w: too many zip entries: %d > %d", ErrLimit, len(zr.File), MaxZipEntries)
 	}
 
+	// Reject duplicate member names up front (CWE-436). collectZipMembers also
+	// checks this, but unsigned Load skips that path to avoid a second decompress.
 	byName := make(map[string]*zip.File, len(zr.File))
 	for _, f := range zr.File {
-		if err := safeZipName(f.Name); err != nil {
+		name := f.Name
+		if strings.HasSuffix(name, "/") {
+			continue
+		}
+		if err := safeZipName(name); err != nil {
 			return nil, err
 		}
-		byName[f.Name] = f
+		if _, exists := byName[name]; exists {
+			return nil, fmt.Errorf("%w: duplicate zip member %q", ErrTir, name)
+		}
+		byName[name] = f
 	}
 	for _, req := range requiredMembers {
 		if _, ok := byName[req]; !ok {

@@ -291,6 +291,27 @@ func TestDuplicateSignatureMemberRejected(t *testing.T) {
 	}
 }
 
+func TestLoadRejectsDuplicateMemberWhenUnsigned(t *testing.T) {
+	// Unsigned Load skips verifySignatureFromZipFiles; duplicate names must
+	// still be rejected in loadImpl (CWE-436), not only on the signed path.
+	src := openLog(t, "src.sqlite")
+	seedSample(t, src)
+	out := filepath.Join(t.TempDir(), "dup-manifest.tir")
+	path, err := tir.Export(src, "t-export", out, tir.ExportOptions{Mode: tir.ModeThin})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := appendDuplicateZipMember(path, "manifest.json", []byte(`{"mode":"thin","evil":true}`)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tir.Load(path); !errors.Is(err, tir.ErrTir) {
+		t.Fatalf("Load: want ErrTir for duplicate manifest.json, got %v", err)
+	}
+	if _, err := tir.LoadUnverified(path); !errors.Is(err, tir.ErrTir) {
+		t.Fatalf("LoadUnverified: want ErrTir for duplicate manifest.json, got %v", err)
+	}
+}
+
 func TestSignRejectsInvalidKey(t *testing.T) {
 	src := openLog(t, "src.sqlite")
 	seedSample(t, src)

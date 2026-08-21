@@ -383,10 +383,11 @@ func rewriteZipWithSignature(path string, members map[string][]byte, signatureJS
 	dir := filepath.Dir(path)
 	// Preserve destination mode across CreateTemp (which uses 0600) so signed
 	// exports keep the same permissions as the unsigned zip Export wrote.
-	origMode := os.FileMode(0o644)
-	if st, err := os.Stat(path); err == nil {
-		origMode = st.Mode().Perm()
+	st, err := os.Stat(path)
+	if err != nil {
+		return fmt.Errorf("%w: stat package for mode: %v", ErrSignature, err)
 	}
+	origMode := st.Mode().Perm()
 	tmp, err := os.CreateTemp(dir, "tir-sign-*.tmp")
 	if err != nil {
 		return err
