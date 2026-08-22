@@ -135,37 +135,25 @@ func RunStep(
 			result, err = durable.Tool(ctx, cfg.Backend, cfg.WorkflowID, stepKey, func(context.Context) (any, error) {
 				return gated(args)
 			})
-		} else {
-			fn := tool.Fn
-			result, err = durable.Tool(ctx, cfg.Backend, cfg.WorkflowID, stepKey, func(context.Context) (any, error) {
-				return fn(args)
-			})
-			if err == nil {
-				// Plain tools still need IR history for audit; gate path already logs.
-				if _, err := cfg.Log.Append(
-					"TOOL_CALL",
-					&step,
-					map[string]any{"tool": call.Name, "args": args},
-					cfg.TrajectoryID,
-					cfg.TenantID,
-					seq,
-				); err != nil {
-					return nil, err
-				}
-				if _, err := cfg.Log.Append(
-					"TOOL_RESULT",
-					&step,
-					map[string]any{"result": result},
-					cfg.TrajectoryID,
-					cfg.TenantID,
-					seq+1,
-				); err != nil {
-					return nil, err
-				}
+			if err != nil {
+				return nil, err
 			}
-		}
-		if err != nil {
-			return nil, err
+		} else {
+			plain := MakePlainToolCall(
+				cfg.Log,
+				cfg.TrajectoryID,
+				cfg.TenantID,
+				stepN,
+				seq,
+				call.Name,
+				tool.Fn,
+			)
+			result, err = durable.Tool(ctx, cfg.Backend, cfg.WorkflowID, stepKey, func(context.Context) (any, error) {
+				return plain(args)
+			})
+			if err != nil {
+				return nil, err
+			}
 		}
 		results = append(results, result)
 	}
