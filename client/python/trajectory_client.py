@@ -8,6 +8,19 @@ from trajectory_ir.runtime.log import NodeLog
 from trajectory_ir.runtime.sandbox import RunMode, assert_tool_allowed_in_mode, normalize_run_mode
 from trajectory_ir.runtime.tool import Tool
 
+__all__ = [
+    "Trajectory",
+    "ProjectContext",
+    "Decision",
+    "ToolResult",
+    "open_trajectory",
+    "project",
+    "seal_decision",
+    "exec_tool",
+    "commit_step",
+    "resume",
+]
+
 
 @dataclass
 class Trajectory:
