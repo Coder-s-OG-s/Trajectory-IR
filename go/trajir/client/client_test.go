@@ -2,6 +2,7 @@ package client_test
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -197,5 +198,32 @@ func TestSandboxRejectsNonIdempotent(t *testing.T) {
 	}
 	if _, err := tr.ExecTool(1, 2, tool, nil); err == nil {
 		t.Fatal("expected sandbox reject")
+	}
+}
+
+func TestExecToolLogsToolCallOnError(t *testing.T) {
+	dir := t.TempDir()
+	tr, err := client.OpenTrajectory("demo", "t-err", client.Options{WorkDir: dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tr.Close()
+	boom := errors.New("tool fail")
+	tool := resume.Tool{
+		Name:   "fetch",
+		Effect: effects.READ_ONLY,
+		Fn:     func(args map[string]any) (any, error) { return nil, boom },
+	}
+	_, err = tr.ExecTool(1, 2, tool, map[string]any{"url": "https://example.com"})
+	if !errors.Is(err, boom) {
+		t.Fatalf("err=%v want %v", err, boom)
+	}
+	ok, err := tr.Log().Has("t-err", "demo", 1, "TOOL_CALL", intPtr(2))
+	if err != nil || !ok {
+		t.Fatalf("TOOL_CALL has=%v err=%v", ok, err)
+	}
+	hasResult, err := tr.Log().Has("t-err", "demo", 1, "TOOL_RESULT", intPtr(3))
+	if err != nil || hasResult {
+		t.Fatalf("expected no TOOL_RESULT on error, got %v (err: %v)", hasResult, err)
 	}
 }

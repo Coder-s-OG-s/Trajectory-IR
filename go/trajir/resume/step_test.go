@@ -309,7 +309,7 @@ func TestRunStepSandboxModeBlocksNonIdempotentWrite(t *testing.T) {
 	}
 }
 
-func TestRunStepNonGatedToolErrorNotLogged(t *testing.T) {
+func TestRunStepNonGatedToolErrorLogsToolCall(t *testing.T) {
 	ctx := context.Background()
 	nl, backend := testEnv(t)
 	boom := errors.New("tool boom")
@@ -335,7 +335,120 @@ func TestRunStepNonGatedToolErrorNotLogged(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ok {
-		t.Fatal("TOOL_CALL should not be logged when non-gated tool errors")
+	if !ok {
+		t.Fatal("TOOL_CALL must be logged when non-gated tool errors")
+	}
+	hasResult, err := nl.Has("t1", "demo", 1, "TOOL_RESULT", intPtr(3))
+	if err != nil || hasResult {
+		t.Fatalf("expected no TOOL_RESULT on error, got %v (err: %v)", hasResult, err)
+	}
+}
+
+func TestRunStepReplayDoesNotDuplicateToolNodes(t *testing.T) {
+	ctx := context.Background()
+	nl, backend := testEnv(t)
+	var executions atomic.Int32
+
+	cfg := resume.RunStepConfig{
+		Log:          nl,
+		Backend:      backend,
+		TenantID:     "demo",
+		TrajectoryID: "t1",
+		WorkflowID:   "wf-replay-nodup",
+		Tools: map[string]resume.Tool{
+			"echo": {
+				Name:   "echo",
+				Effect: effects.PURE,
+				Fn: func(args map[string]any) (any, error) {
+					executions.Add(1)
+					return args["msg"], nil
+				},
+			},
+		},
+	}
+	model := func(context.Context, map[string]any) (map[string]any, error) {
+		return map[string]any{
+			"tool_calls": []any{
+				map[string]any{"name": "echo", "args": map[string]any{"msg": "hi"}},
+			},
+		}, nil
+	}
+
+	if _, err := resume.RunStep(ctx, cfg, 1, model, map[string]any{}); err != nil {
+		t.Fatal(err)
+	}
+	if executions.Load() != 1 {
+		t.Fatalf("executions=%d want 1", executions.Load())
+	}
+
+	// Replay the step under the same workflow ID.
+	if _, err := resume.RunStep(ctx, cfg, 1, model, map[string]any{}); err != nil {
+		t.Fatal(err)
+	}
+	if executions.Load() != 1 {
+		t.Fatalf("executions after replay=%d want 1", executions.Load())
+	}
+
+	nodes, err := nl.ListNodes("t1", "demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Expected exactly: PROJECT_CONTEXT, DECISION, TOOL_CALL, TOOL_RESULT, COMMIT_STEP
+	if len(nodes) != 5 {
+		t.Fatalf("expected 5 nodes after replay, got %d", len(nodes))
+	}
+}
+
+func TestRunStepReplayAfterToolFailureDoesNotConflict(t *testing.T) {
+	ctx := context.Background()
+	nl, backend := testEnv(t)
+	var calls atomic.Int32
+	boom1 := errors.New("timeout after 100ms")
+	boom2 := errors.New("timeout after 150ms")
+
+	cfg := resume.RunStepConfig{
+		Log:          nl,
+		Backend:      backend,
+		TenantID:     "demo",
+		TrajectoryID: "t1",
+		WorkflowID:   "wf-fail-replay",
+		Tools: map[string]resume.Tool{
+			"failing": {
+				Name:   "failing",
+				Effect: effects.PURE,
+				Fn: func(map[string]any) (any, error) {
+					c := calls.Add(1)
+					if c == 1 {
+						return nil, boom1
+					}
+					return nil, boom2
+				},
+			},
+		},
+	}
+	model := func(context.Context, map[string]any) (map[string]any, error) {
+		return map[string]any{
+			"tool_calls": []any{
+				map[string]any{"name": "failing", "args": map[string]any{}},
+			},
+		}, nil
+	}
+
+	if _, err := resume.RunStep(ctx, cfg, 1, model, nil); !errors.Is(err, boom1) {
+		t.Fatalf("expected boom1, got %v", err)
+	}
+
+	// Retry with differently-worded error: must surface boom2 without slot conflict.
+	if _, err := resume.RunStep(ctx, cfg, 1, model, nil); !errors.Is(err, boom2) {
+		t.Fatalf("expected boom2 on replay, got %v", err)
+	}
+
+	nodes, err := nl.ListNodes("t1", "demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// PROJECT_CONTEXT, DECISION, TOOL_CALL (no TOOL_RESULT on error)
+	if len(nodes) != 3 {
+		t.Fatalf("expected 3 nodes, got %d", len(nodes))
 	}
 }
