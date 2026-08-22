@@ -32,6 +32,7 @@ def test_local_memo_infer_runs_once():
     wrapped = durable_infer(model)
     with workflow_scope("wf-1"):
         a = wrapped({"v": 1})
+    with workflow_scope("wf-1"):
         b = wrapped({"v": 1})
     assert a == b
     assert calls["n"] == 1
@@ -49,6 +50,7 @@ def test_local_memo_tool_runs_once():
     wrapped = durable_tool(add)
     with workflow_scope("wf-2"):
         assert wrapped(x=1) == 2
+    with workflow_scope("wf-2"):
         assert wrapped(x=1) == 2
     assert calls["n"] == 1
 
@@ -83,6 +85,7 @@ def test_make_run_step_with_restate_local_memo(tmp_path):
 
     with workflow_scope(TRAJECTORY_ID):
         r1 = run_step(step_n=1, model_call=model_call, context={})
+    with workflow_scope(TRAJECTORY_ID):
         r2 = run_step(step_n=1, model_call=model_call, context={})
 
     assert r1 == ["hi"]
