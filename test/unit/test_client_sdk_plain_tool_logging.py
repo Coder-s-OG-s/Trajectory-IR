@@ -1,3 +1,5 @@
+import pytest
+
 from client.python.trajectory_client import exec_tool, open_trajectory
 from trajectory_ir.effects import EffectClass
 from trajectory_ir.runtime.log import NodeLog
@@ -34,3 +36,20 @@ def test_exec_tool_logs_two_plain_tools_same_step_distinct_seq(tmp_path, monkeyp
     assert log.has("plain-2", "demo", 1, "TOOL_RESULT", seq=3)
     assert log.has("plain-2", "demo", 1, "TOOL_CALL", seq=4)
     assert log.has("plain-2", "demo", 1, "TOOL_RESULT", seq=5)
+
+
+def test_exec_tool_logs_tool_call_when_tool_raises(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    db_path = str(tmp_path / "test_plain_tool_err.sqlite")
+    traj = open_trajectory(tenant_id="demo", trajectory_id="plain-err", db_path=db_path)
+
+    def failing_fn(x):
+        raise ValueError("boom")
+
+    tool = Tool(name="fail", fn=failing_fn, effect_class=EffectClass.PURE)
+    with pytest.raises(ValueError, match="boom"):
+        exec_tool(traj, step_n=1, call={"args": {"x": 1}}, tool=tool, seq=2)
+
+    log = NodeLog(db_path)
+    assert log.has("plain-err", "demo", 1, "TOOL_CALL", seq=2)
+    assert not log.has("plain-err", "demo", 1, "TOOL_RESULT", seq=3)
