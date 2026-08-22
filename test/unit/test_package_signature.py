@@ -145,6 +145,44 @@ def test_verify_rejects_oversized_member(tmp_path, monkeypatch):
         verify_package(bomb)
 
 
+def test_collect_zip_members_uses_bounded_read(tmp_path, monkeypatch):
+    """Member bytes must be read with an explicit cap (lying headers cannot OOM)."""
+    import zipfile
+
+    import trajectory_ir.package.tir as tirmod
+    from trajectory_ir.package.signature import _collect_zip_members
+
+    path = tmp_path / "bounded.tir"
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_STORED) as zf:
+        zf.writestr("manifest.json", b"{}")
+        zf.writestr("a.bin", b"abcd")
+
+    monkeypatch.setattr(tirmod, "MAX_UNCOMPRESSED_ENTRY_BYTES", 100)
+    monkeypatch.setattr(tirmod, "MAX_TOTAL_UNCOMPRESSED_BYTES", 10_000)
+
+    read_sizes: list[int] = []
+    real_open = zipfile.ZipFile.open
+
+    def tracking_open(self, name, *args, **kwargs):
+        fp = real_open(self, name, *args, **kwargs)
+        real_read = fp.read
+
+        def capped_read(n=-1):
+            read_sizes.append(n)
+            return real_read(n)
+
+        fp.read = capped_read  # type: ignore[method-assign]
+        return fp
+
+    monkeypatch.setattr(zipfile.ZipFile, "open", tracking_open)
+    with zipfile.ZipFile(path, "r") as zf:
+        members, sig = _collect_zip_members(zf)
+    assert sig is None
+    assert members["a.bin"] == b"abcd"
+    assert read_sizes
+    assert all(n == 101 for n in read_sizes)
+
+
 @pytest.mark.parametrize("body", [b"null", b"42", b"[]", b'"x"'])
 def test_verify_rejects_non_object_signature_json(tmp_path, body):
     import zipfile

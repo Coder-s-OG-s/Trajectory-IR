@@ -125,6 +125,8 @@ def _collect_zip_members(
     for info in infos:
         name = info.filename
         _safe_member_name(name)
+        # Declared size is advisory only: a malicious header can understate
+        # file_size. Cap the read so a lying local header cannot OOM us.
         if info.file_size > MAX_UNCOMPRESSED_ENTRY_BYTES:
             raise TirLimitError(
                 f"zip member {name!r} uncompressed size {info.file_size} "
@@ -134,9 +136,14 @@ def _collect_zip_members(
             raise TirLimitError(
                 f"zip total uncompressed size would exceed limit {MAX_TOTAL_UNCOMPRESSED_BYTES}"
             )
-        data = zf.read(name)
+        with zf.open(name) as fp:
+            data = fp.read(MAX_UNCOMPRESSED_ENTRY_BYTES + 1)
         if len(data) > MAX_UNCOMPRESSED_ENTRY_BYTES:
             raise TirLimitError(f"zip member {name!r} expanded beyond per-entry limit")
+        if len(data) > budget:
+            raise TirLimitError(
+                f"zip total uncompressed size would exceed limit {MAX_TOTAL_UNCOMPRESSED_BYTES}"
+            )
         budget -= len(data)
         if name == SIGNATURE_MEMBER:
             if signature is not None:
