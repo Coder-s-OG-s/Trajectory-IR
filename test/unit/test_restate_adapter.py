@@ -129,3 +129,19 @@ def test_partial_durable_injection_lists_missing_names(tmp_path):
             durable_infer_fn=durable_infer,
             durable_tool_fn=durable_tool,
         )
+
+
+def test_local_memo_tool_sequence_in_same_scope():
+    clear_memo()
+    init_backend()
+    calls = {"n": 0}
+
+    def add(*, x: int) -> int:
+        calls["n"] += 1
+        return x + 1
+
+    wrapped = durable_tool(add)
+    with workflow_scope("wf-3"):
+        assert wrapped(x=1) == 2
+        assert wrapped(x=1) == 2
+    assert calls["n"] == 2
