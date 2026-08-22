@@ -106,6 +106,8 @@ no_implicit_reexport = true
 module = [
     "boto3",
     "botocore.*",
+    "dbos",
+    "psycopg.*",
 ]
 ignore_missing_imports = true
 
