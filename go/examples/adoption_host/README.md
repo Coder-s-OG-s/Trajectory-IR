@@ -16,7 +16,7 @@ Optional filesystem CAS and thin `.tir` export with rehydrate check.
 | Example | Intent |
 |---------|--------|
 | `examples/adoption_host` (this) | Adoption: host loop + optional package |
-| `examples/kill-mid-deploy` | Crash safety / durable resume |
+| `examples/kill_mid_deploy` | Crash safety / durable resume |
 
 ## Run
 

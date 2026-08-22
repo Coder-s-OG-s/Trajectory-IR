@@ -169,7 +169,7 @@ First library-tagged release of the Phase 1A surface: dual-language IR, portable
 - S3 compatible CAS driver (`drivers.s3.S3CAS`) with the same sharded key layout
   and injectable client for tests; optional `boto3` extra (issue #63).
 - PostgreSQL NodeLog driver (`drivers.postgres.PostgresNodeLog`) (issue #64).
-- Phase 1A buildable core (nodes, NodeLog, effects, DBOS adapter, seal/resume gate, client SDK, kill-mid-deploy, R01/R02).
+- Phase 1A buildable core (nodes, NodeLog, effects, DBOS adapter, seal/resume gate, client SDK, kill_mid_deploy, R01/R02).
 - Issue templates, PR template, DCO CI job, Ruff/Mypy in CI alongside unit/e2e/conformance.
 - Maintainer note for branch protection on `main`.
 - Go IR core hashing package under `go/` with shared `testdata/hash_vectors.json` parity tests against Python.
@@ -182,7 +182,7 @@ First library-tagged release of the Phase 1A surface: dual-language IR, portable
 - Go Temporal durable backend adapter under `go/trajir/durable/temporal` (optional cluster).
 - Go client SDK under `go/trajir/client` (open, project, seal, exec, commit, resume, RunStep).
 - Dependabot for Go, pip, and Actions; CI hash golden gates and govulncheck; CONTRIBUTING Go section.
-- Go kill mid deploy demo under `go/examples/kill-mid-deploy` using trajir/client.
+- Go kill mid deploy demo under `go/examples/kill_mid_deploy` using trajir/client.
 - Dependabot DCO exclusion in CI; Actions and modernc.org/sqlite dependency bumps.
 - Python `.tir` thin/fat export and import with node hash verification (R05).
 - Security hardening: `.tir` zip size/path limits, atomic TOOL_CALL claim (Python + Go),

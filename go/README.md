@@ -68,12 +68,12 @@ Human runnable story (seal, kill, resume):
 
 ```bash
 cd go
-go run ./examples/kill-mid-deploy -workdir ./kill-mid-deploy-data -crash-during=tool_call
+go run ./examples/kill_mid_deploy -workdir ./kill_mid_deploy-data -crash-during=tool_call
 # kill when deploy starts, then:
-go run ./examples/kill-mid-deploy -workdir ./kill-mid-deploy-data -resume
+go run ./examples/kill_mid_deploy -workdir ./kill_mid_deploy-data -resume
 ```
 
-See [examples/kill-mid-deploy/README.md](examples/kill-mid-deploy/README.md).
+See [examples/kill_mid_deploy/README.md](examples/kill_mid_deploy/README.md).
 
 | Go | Python |
 |----|--------|

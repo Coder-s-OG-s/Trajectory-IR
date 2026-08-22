@@ -98,7 +98,7 @@ git commit -s -m "build: add project dependencies and packaging config"
 - Create: `pkg/trajectory_ir/__init__.py`, `pkg/trajectory_ir/runtime/__init__.py`, `pkg/trajectory_ir/resume/__init__.py`, `pkg/trajectory_ir/effects/__init__.py`, `pkg/trajectory_ir/package/__init__.py`
 - Create: `drivers/__init__.py`, `drivers/durable_backend/__init__.py`, `drivers/durable_backend/dbos/__init__.py`, `drivers/sqlite/__init__.py`, `drivers/postgres/__init__.py`, `drivers/s3/__init__.py`
 - Create: `client/__init__.py`, `client/python/__init__.py`
-- Create empty directories: `conformance/`, `examples/kill-mid-deploy/`, `test/unit/`, `test/e2e/`, `docs/history/`, `spec/`
+- Create empty directories: `conformance/`, `examples/kill_mid_deploy/`, `test/unit/`, `test/e2e/`, `docs/history/`, `spec/`
 
 **Interfaces:**
 - Produces: the directory/package skeleton every later task writes into.
@@ -108,7 +108,7 @@ git commit -s -m "build: add project dependencies and packaging config"
 ```bash
 mkdir -p spec pkg/trajectory_ir/{runtime,resume,effects,package} \
   drivers/durable_backend/dbos drivers/{sqlite,postgres,s3} \
-  conformance examples/kill-mid-deploy test/unit test/e2e client/python docs/history
+  conformance examples/kill_mid_deploy test/unit test/e2e client/python docs/history
 
 touch pkg/trajectory_ir/__init__.py \
   pkg/trajectory_ir/runtime/__init__.py \
@@ -620,20 +620,20 @@ git commit -s -m "test: verify durable-wrapped workflow executes and returns cor
 
 ---
 
-### Task 7: Seal/resume workflow, block-and-gate, and the kill-mid-deploy fixture agent
+### Task 7: Seal/resume workflow, block-and-gate, and the kill_mid_deploy fixture agent
 
 This is the hardest part of the milestone — where the §1 fix and crash-safety guarantees actually get enforced in code, not just documented. Budget the most time here; don't compress it.
 
 **Files:**
 - Create: `pkg/trajectory_ir/resume/gate.py`
 - Create: `pkg/trajectory_ir/resume/step.py`
-- Create: `examples/kill-mid-deploy/agent.py`
+- Create: `examples/kill_mid_deploy/agent.py`
 - Create: `test/e2e/_util.py`
 - Test: `test/e2e/test_seal_resume_crash.py`
 
 **Interfaces:**
 - Consumes: `NodeLog` (Task 4), `EffectClass`/`Tool` (Task 5), `durable_infer`/`durable_tool`/`durable_workflow` (Task 6).
-- Produces: `BlockedNeedsGate` exception, `make_gated_tool_call(node_log, trajectory_id, tenant_id, step_n, seq, tool_name, tool_fn) -> Callable`, `make_run_step(node_log, tenant_id, trajectory_id, tool_registry, on_decision_sealed=None) -> run_step(step_n, model_call, context) -> list`. `examples/kill-mid-deploy/agent.py` is a CLI reused by Task 9/10's conformance tests and Task 11's demo — build it once here.
+- Produces: `BlockedNeedsGate` exception, `make_gated_tool_call(node_log, trajectory_id, tenant_id, step_n, seq, tool_name, tool_fn) -> Callable`, `make_run_step(node_log, tenant_id, trajectory_id, tool_registry, on_decision_sealed=None) -> run_step(step_n, model_call, context) -> list`. `examples/kill_mid_deploy/agent.py` is a CLI reused by Task 9/10's conformance tests and Task 11's demo — build it once here.
 
 - [ ] **Step 1: Write `pkg/trajectory_ir/resume/gate.py`**
 
@@ -740,11 +740,11 @@ The fixture agent below needs the *same* DBOS workflow id across the initial run
 - [ ] **Step 4: Write the fixture agent**
 
 ```python
-# examples/kill-mid-deploy/agent.py
+# examples/kill_mid_deploy/agent.py
 """Kill-mid-deploy fixture agent.
 
 Runs one durable step: infer a plan, seal the decision, execute a fake
-`deploy_server` tool. Used by test/e2e, conformance/, and the kill-mid-deploy
+`deploy_server` tool. Used by test/e2e, conformance/, and the kill_mid_deploy
 demo -- one script, three consumers, so crash-recovery behavior is only
 implemented once.
 """
@@ -762,7 +762,7 @@ from trajectory_ir.effects import EffectClass
 from trajectory_ir.resume.gate import BlockedNeedsGate
 from trajectory_ir.resume.step import make_run_step
 
-TRAJECTORY_ID = "kill-mid-deploy-demo"
+TRAJECTORY_ID = "kill_mid_deploy-demo"
 TENANT_ID = "demo"
 DB_PATH = "kill_mid_deploy.sqlite"
 MODEL_CALL_COUNT_FILE = "test_model_call_count.txt"
@@ -806,7 +806,7 @@ def main():
             if os.path.exists(marker):
                 os.remove(marker)
 
-    init_backend(app_name="kill-mid-deploy")
+    init_backend(app_name="kill_mid_deploy")
     node_log = NodeLog(DB_PATH)
 
     def deploy_wrapper(version: str) -> dict:
@@ -885,7 +885,7 @@ import subprocess
 
 from test.e2e._util import cleanup, hard_kill, read_counter, wait_for_marker
 
-AGENT = ["python", "examples/kill-mid-deploy/agent.py"]
+AGENT = ["python", "examples/kill_mid_deploy/agent.py"]
 ARTIFACTS = (
     "test_model_call_count.txt", "test_deploy_side_effect_count.txt",
     "decision_sealed.marker", "tool_started.marker", "kill_mid_deploy.sqlite",
@@ -958,8 +958,8 @@ git add pkg/trajectory_ir/resume/gate.py
 git commit -s -m "feat: add block-and-gate for non-idempotent tool crash recovery"
 git add pkg/trajectory_ir/resume/step.py
 git commit -s -m "feat: add durable run_step workflow wiring inference, seal, and gated tools"
-git add examples/kill-mid-deploy/agent.py
-git commit -s -m "feat: add kill-mid-deploy fixture agent shared by e2e, conformance, and demo"
+git add examples/kill_mid_deploy/agent.py
+git commit -s -m "feat: add kill_mid_deploy fixture agent shared by e2e, conformance, and demo"
 git add test/e2e/_util.py test/e2e/test_seal_resume_crash.py
 git commit -s -m "test: verify all three seal/resume crash scenarios via real SIGKILL"
 ```
@@ -1139,7 +1139,7 @@ git commit -s -m "test: verify client SDK calls append expected node kinds"
 - Create: `conformance/r01_seal_resume_test.py`
 
 **Interfaces:**
-- Consumes: `examples/kill-mid-deploy/agent.py` (Task 7), `test/e2e/_util.py` helpers (Task 7) — imported directly since both are already-built shared fixtures; no new production code this task.
+- Consumes: `examples/kill_mid_deploy/agent.py` (Task 7), `test/e2e/_util.py` helpers (Task 7) — imported directly since both are already-built shared fixtures; no new production code this task.
 
 - [ ] **Step 1: Write the test**
 
@@ -1149,7 +1149,7 @@ import subprocess
 
 from test.e2e._util import cleanup, hard_kill, read_counter, wait_for_marker
 
-AGENT = ["python", "examples/kill-mid-deploy/agent.py"]
+AGENT = ["python", "examples/kill_mid_deploy/agent.py"]
 ARTIFACTS = (
     "test_model_call_count.txt", "test_deploy_side_effect_count.txt",
     "decision_sealed.marker", "tool_started.marker", "kill_mid_deploy.sqlite",
@@ -1201,7 +1201,7 @@ import subprocess
 
 from test.e2e._util import cleanup, hard_kill, read_counter, wait_for_marker
 
-AGENT = ["python", "examples/kill-mid-deploy/agent.py"]
+AGENT = ["python", "examples/kill_mid_deploy/agent.py"]
 ARTIFACTS = (
     "test_model_call_count.txt", "test_deploy_side_effect_count.txt",
     "decision_sealed.marker", "tool_started.marker", "kill_mid_deploy.sqlite",
@@ -1246,25 +1246,25 @@ git commit -s -m "test: add R02 conformance test for non-idempotent crash blocki
 
 ---
 
-### Task 11: kill-mid-deploy demo
+### Task 11: kill_mid_deploy demo
 
 **Files:**
-- Create: `examples/kill-mid-deploy/run_demo.py`
-- Create: `examples/kill-mid-deploy/README.md`
+- Create: `examples/kill_mid_deploy/run_demo.py`
+- Create: `examples/kill_mid_deploy/README.md`
 
 **Interfaces:**
-- Consumes: `examples/kill-mid-deploy/agent.py` (Task 7) — no changes to it.
+- Consumes: `examples/kill_mid_deploy/agent.py` (Task 7) — no changes to it.
 
 - [ ] **Step 1: Write `run_demo.py`**
 
 ```python
-# examples/kill-mid-deploy/run_demo.py
-"""Run (or resume) the kill-mid-deploy demo trajectory.
+# examples/kill_mid_deploy/run_demo.py
+"""Run (or resume) the kill_mid_deploy demo trajectory.
 
-    python examples/kill-mid-deploy/run_demo.py
+    python examples/kill_mid_deploy/run_demo.py
     # in another terminal, once you see "TOOL_CALL: deploy_server started":
     kill -9 <pid>
-    python examples/kill-mid-deploy/run_demo.py --resume
+    python examples/kill_mid_deploy/run_demo.py --resume
     # expected output: "Resumed. deploy_server executed exactly once."
 """
 import subprocess
@@ -1272,7 +1272,7 @@ import sys
 
 
 def main():
-    args = ["python", "examples/kill-mid-deploy/agent.py"]
+    args = ["python", "examples/kill_mid_deploy/agent.py"]
     if "--resume" in sys.argv:
         args.append("--resume")
     subprocess.run(args, check=True)
@@ -1285,7 +1285,7 @@ if __name__ == "__main__":
 - [ ] **Step 2: Write `README.md`**
 
 ```markdown
-# kill-mid-deploy demo
+# kill_mid_deploy demo
 
 Demonstrates the milestone's core claim: a crash mid-tool-execution never
 silently re-runs the model or the side effect on resume.
@@ -1293,10 +1293,10 @@ silently re-runs the model or the side effect on resume.
 ## Run it
 
 ​```bash
-python examples/kill-mid-deploy/run_demo.py
+python examples/kill_mid_deploy/run_demo.py
 # in another terminal, once you see "TOOL_CALL: deploy_server started":
 kill -9 <pid>
-python examples/kill-mid-deploy/run_demo.py --resume
+python examples/kill_mid_deploy/run_demo.py --resume
 ​```
 
 Expected final output: `Resumed. deploy_server executed exactly once.`
@@ -1321,8 +1321,8 @@ Run the exact sequence from the README in a real terminal (two terminal windows,
 - [ ] **Step 4: Commit**
 
 ```bash
-git add examples/kill-mid-deploy/run_demo.py examples/kill-mid-deploy/README.md
-git commit -s -m "docs: add kill-mid-deploy demo runner and recording instructions"
+git add examples/kill_mid_deploy/run_demo.py examples/kill_mid_deploy/README.md
+git commit -s -m "docs: add kill_mid_deploy demo runner and recording instructions"
 ```
 
 ---
@@ -1381,9 +1381,9 @@ git clone <repo-url> fresh-clone && cd fresh-clone
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 pytest conformance/ -v
-python examples/kill-mid-deploy/run_demo.py &
+python examples/kill_mid_deploy/run_demo.py &
 sleep 2 && kill -9 %1
-python examples/kill-mid-deploy/run_demo.py --resume
+python examples/kill_mid_deploy/run_demo.py --resume
 ```
 
 Milestone v1.0.1 is done only when all four Definition-of-Done items pass on this fresh clone, DCO-signed commits are in place, and CI is green — not when it's merely documented as done.

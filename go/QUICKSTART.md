@@ -91,13 +91,13 @@ From `go/` (no paid model API):
 go run ./examples/adoption_host
 go run ./examples/adoption_host -sandbox
 go run ./examples/adoption_host -with-package
-go run ./examples/kill-mid-deploy -workdir ./demo-data
+go run ./examples/kill_mid_deploy -workdir ./demo-data
 ```
 
 | Demo | Command | Intent |
 |------|---------|--------|
 | Adoption host | `go run ./examples/adoption_host` | Host seal loop + optional CAS / thin `.tir` |
-| Kill mid deploy | `go run ./examples/kill-mid-deploy -workdir ./demo-data` | Crash safety / sealed plan |
+| Kill mid deploy | `go run ./examples/kill_mid_deploy -workdir ./demo-data` | Crash safety / sealed plan |
 
 ## 4. Durable backends
 
