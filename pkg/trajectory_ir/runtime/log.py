@@ -169,8 +169,19 @@ class NodeLog:
                     self._conn.execute("ROLLBACK")
                 raise
 
-    def has(self, trajectory_id: str, step_n: int, kind: str, seq: int | None = None) -> bool:
-        """Does a node of `kind` exist for this trajectory/step?
+    def has(
+        self,
+        trajectory_id: str,
+        tenant_id: str,
+        step_n: int,
+        kind: str,
+        seq: int | None = None,
+    ) -> bool:
+        """Does a node of `kind` exist for this trajectory/step scoped to `tenant_id`?
+
+        `tenant_id` is required to enforce multi-tenant isolation. Callers that
+        genuinely need cross-tenant existence checks (e.g., administrative or
+        diagnostic tools) must use `has_all_tenants` explicitly instead.
 
         `seq` narrows the question to one exact node slot. Without it, a step
         containing several tool calls cannot distinguish them: one completed
@@ -178,8 +189,38 @@ class NodeLog:
         as None the query is unscoped, which is the right question for
         step-level kinds (DECISION, COMMIT_STEP) that occur at most once.
         """
+        if not tenant_id:
+            raise ValueError("tenant_id must be a non-empty string")
+        return self._has(trajectory_id, tenant_id=tenant_id, step_n=step_n, kind=kind, seq=seq)
+
+    def has_all_tenants(
+        self,
+        trajectory_id: str,
+        step_n: int,
+        kind: str,
+        seq: int | None = None,
+    ) -> bool:
+        """Does a node of `kind` exist for this trajectory/step across any tenant?
+
+        This bypasses tenant isolation and should only be used for administrative
+        diagnostics or debugging tools, not standard execution paths.
+        """
+        return self._has(trajectory_id, tenant_id=None, step_n=step_n, kind=kind, seq=seq)
+
+    def _has(
+        self,
+        trajectory_id: str,
+        *,
+        tenant_id: str | None,
+        step_n: int,
+        kind: str,
+        seq: int | None,
+    ) -> bool:
         sql = "SELECT 1 FROM nodes WHERE trajectory_id = ? AND step_n = ? AND kind = ?"
         params: list[object] = [trajectory_id, step_n, kind]
+        if tenant_id is not None:
+            sql += " AND tenant_id = ?"
+            params.append(tenant_id)
         if seq is not None:
             sql += " AND seq = ?"
             params.append(seq)

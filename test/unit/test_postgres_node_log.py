@@ -128,25 +128,20 @@ class _FakeStore:
             return []
         if s.startswith("select 1 from nodes"):
             # has()
-            if len(params) == 4:
-                trajectory_id, step_n, kind, seq = params
-                for row in self.rows.values():
-                    if (
-                        row["trajectory_id"] == trajectory_id
-                        and row["step_n"] == step_n
-                        and row["kind"] == kind
-                        and row["seq"] == seq
-                    ):
-                        return [(1,)]
-            else:
-                trajectory_id, step_n, kind = params
-                for row in self.rows.values():
-                    if (
-                        row["trajectory_id"] == trajectory_id
-                        and row["step_n"] == step_n
-                        and row["kind"] == kind
-                    ):
-                        return [(1,)]
+            p_iter = iter(params)
+            t_id = next(p_iter)
+            sn = next(p_iter)
+            k = next(p_iter)
+            ten = next(p_iter) if "tenant_id" in s else None
+            sq = next(p_iter) if "seq = %s" in s else None
+            for row in self.rows.values():
+                if row["trajectory_id"] != t_id or row["step_n"] != sn or row["kind"] != k:
+                    continue
+                if ten is not None and row["tenant_id"] != ten:
+                    continue
+                if sq is not None and row["seq"] != sq:
+                    continue
+                return [(1,)]
             return []
         if "select count(*)" in s:
             (node_id,) = params
@@ -210,8 +205,8 @@ def test_append_then_has(log: PostgresNodeLog):
         tenant_id="demo",
         seq=1,
     )
-    assert log.has("t1", 1, "DECISION")
-    assert not log.has("t1", 1, "TOOL_RESULT")
+    assert log.has("t1", "demo", 1, "DECISION")
+    assert not log.has("t1", "demo", 1, "TOOL_RESULT")
 
 
 def test_append_idempotent_by_content(log: PostgresNodeLog):
@@ -236,6 +231,39 @@ def test_list_nodes_tenant_filter(log: PostgresNodeLog):
     assert json.loads(json.dumps(only_a[0]["payload"])) == {"plan": "a"}
 
 
+def test_has_tenant_filter(log: PostgresNodeLog):
+    # Direct leak regression test: tenant-a writes DECISION, tenant-b must not see it.
+    log.append("DECISION", 1, {"plan": "a"}, "t1", "tenant-a", 1)
+    assert not log.has("t1", "tenant-b", 1, "DECISION")
+    assert log.has("t1", "tenant-a", 1, "DECISION")
+
+    # Multi-tenant slot filtering with seq
+    log.append("DECISION", 1, {"plan": "b"}, "t1", "tenant-b", 2)
+    assert log.has("t1", "tenant-a", 1, "DECISION")
+    assert not log.has("t1", "tenant-a", 1, "DECISION", seq=2)
+    assert log.has("t1", "tenant-b", 1, "DECISION", seq=2)
+    assert not log.has("t1", "tenant-c", 1, "DECISION")
+
+
+def test_has_all_tenants(log: PostgresNodeLog):
+    log.append("DECISION", 1, {"plan": "a"}, "t1", "tenant-a", 1)
+    log.append("DECISION", 1, {"plan": "b"}, "t1", "tenant-b", 2)
+
+    # Scoped check for a third tenant is false
+    assert not log.has("t1", "tenant-c", 1, "DECISION")
+
+    # Cross-tenant escape hatch finds nodes from any tenant
+    assert log.has_all_tenants("t1", 1, "DECISION")
+    assert log.has_all_tenants("t1", 1, "DECISION", seq=2)
+    assert not log.has_all_tenants("t1", 1, "DECISION", seq=99)
+    assert not log.has_all_tenants("nonexistent-traj", 1, "DECISION")
+
+
+def test_has_rejects_empty_tenant(log: PostgresNodeLog):
+    with pytest.raises(ValueError, match="tenant_id must be a non-empty string"):
+        log.has("t1", "", 1, "DECISION")
+
+
 def test_claim_tool_call_single_winner(log: PostgresNodeLog):
     wins: list[bool] = []
 
@@ -255,7 +283,7 @@ def test_claim_tool_call_single_winner(log: PostgresNodeLog):
     for t in threads:
         t.join()
     assert sum(1 for w in wins if w) == 1
-    assert log.has("t1", 1, "TOOL_CALL", seq=2)
+    assert log.has("t1", "demo", 1, "TOOL_CALL", seq=2)
 
 
 def test_open_requires_dsn(monkeypatch: pytest.MonkeyPatch):
@@ -274,7 +302,7 @@ def test_live_postgres_roundtrip():
     log = open_postgres_node_log()
     try:
         n = log.append("DECISION", 1, {"plan": "live"}, "live-t", "demo", 1)
-        assert log.has("live-t", 1, "DECISION")
+        assert log.has("live-t", "demo", 1, "DECISION")
         rows = log.list_nodes("live-t", tenant_id="demo")
         assert rows[0]["id"] == n.id
     finally:

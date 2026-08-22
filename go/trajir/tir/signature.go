@@ -381,6 +381,13 @@ func collectZipMembers(files []*zip.File) (members map[string][]byte, signature 
 
 func rewriteZipWithSignature(path string, members map[string][]byte, signatureJSON []byte) error {
 	dir := filepath.Dir(path)
+	// Preserve destination mode across CreateTemp (which uses 0600) so signed
+	// exports keep the same permissions as the unsigned zip Export wrote.
+	st, err := os.Stat(path)
+	if err != nil {
+		return fmt.Errorf("%w: stat package for mode: %v", ErrSignature, err)
+	}
+	origMode := st.Mode().Perm()
 	tmp, err := os.CreateTemp(dir, "tir-sign-*.tmp")
 	if err != nil {
 		return err
@@ -419,18 +426,53 @@ func rewriteZipWithSignature(path string, members map[string][]byte, signatureJS
 	if err := zw.Close(); err != nil {
 		return err
 	}
+	// Match go/trajir/cas Put: durable bytes before rename so a crash after
+	// replaceFile cannot leave a truncated package that reported success.
+	if err := tmp.Sync(); err != nil {
+		return err
+	}
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	if err := os.Rename(tmpName, path); err != nil {
-		// Windows: rename over existing may fail — remove target then rename.
-		if rmErr := os.Remove(path); rmErr != nil {
-			return fmt.Errorf("%w: replace package: %v (also: %v)", ErrSignature, err, rmErr)
-		}
-		if err := os.Rename(tmpName, path); err != nil {
-			return fmt.Errorf("%w: replace package: %v", ErrSignature, err)
-		}
+	if err := os.Chmod(tmpName, origMode); err != nil {
+		return fmt.Errorf("%w: preserve package mode: %v", ErrSignature, err)
+	}
+	if err := replaceFile(tmpName, path); err != nil {
+		return err
 	}
 	success = true
+	return nil
+}
+
+// afterBackupHook is an optional test seam run after the original package is
+// moved aside and before the temp is moved into place. Production leaves it nil.
+var afterBackupHook func(dest string)
+
+// replaceFile installs src at dest without deleting dest until src is in place.
+// On platforms where rename cannot overwrite (Windows), dest is moved to a
+// sibling backup first; if the final rename fails, the backup is restored.
+func replaceFile(src, dest string) error {
+	if err := os.Rename(src, dest); err == nil {
+		return nil
+	}
+	return replaceFileViaBackup(src, dest)
+}
+
+func replaceFileViaBackup(src, dest string) error {
+	bak := dest + ".trajir-replace-bak"
+	_ = os.Remove(bak)
+	if err := os.Rename(dest, bak); err != nil {
+		return fmt.Errorf("%w: replace package (move aside): %v", ErrSignature, err)
+	}
+	if afterBackupHook != nil {
+		afterBackupHook(dest)
+	}
+	if err := os.Rename(src, dest); err != nil {
+		if rbErr := os.Rename(bak, dest); rbErr != nil {
+			return fmt.Errorf("%w: replace package: %v (restore failed: %v)", ErrSignature, err, rbErr)
+		}
+		return fmt.Errorf("%w: replace package: %v", ErrSignature, err)
+	}
+	_ = os.Remove(bak)
 	return nil
 }

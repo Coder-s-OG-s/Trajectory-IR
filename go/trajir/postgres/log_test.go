@@ -51,7 +51,7 @@ func TestLiveAppendHasListIdempotent(t *testing.T) {
 	if n1.ID != n2.ID {
 		t.Fatalf("ids differ %s vs %s", n1.ID, n2.ID)
 	}
-	ok, err := nl.Has(traj, 1, "DECISION", nil)
+	ok, err := nl.Has(traj, "demo", 1, "DECISION", nil)
 	if err != nil || !ok {
 		t.Fatalf("Has=%v err=%v", ok, err)
 	}

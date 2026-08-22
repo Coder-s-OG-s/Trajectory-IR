@@ -22,6 +22,8 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Software Development :: Libraries",
 ]
 dependencies = [
@@ -90,8 +92,8 @@ known-first-party = ["trajectory_ir", "drivers", "client", "test"]
 
 [tool.mypy]
 python_version = "3.11"
-mypy_path = "pkg"
-packages = ["trajectory_ir"]
+mypy_path = "pkg:."
+packages = ["trajectory_ir", "client", "drivers"]
 warn_unused_configs = true
 show_error_codes = true
 warn_return_any = true
@@ -99,3 +101,11 @@ warn_unreachable = true
 strict_equality = true
 warn_redundant_casts = true
 no_implicit_reexport = true
+
+[[tool.mypy.overrides]]
+module = [
+    "boto3",
+    "botocore.*",
+]
+ignore_missing_imports = true
+

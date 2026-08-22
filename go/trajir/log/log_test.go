@@ -1,6 +1,7 @@
 package nodelog_test
 
 import (
+	"errors"
 	"path/filepath"
 	"testing"
 
@@ -33,7 +34,7 @@ func TestAppendThenHas(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ok, err := nl.Has("t1", 1, "DECISION", nil)
+	ok, err := nl.Has("t1", "demo", 1, "DECISION", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,7 +42,7 @@ func TestAppendThenHas(t *testing.T) {
 		t.Fatal("expected DECISION to be present")
 	}
 
-	ok, err = nl.Has("t1", 1, "TOOL_RESULT", nil)
+	ok, err = nl.Has("t1", "demo", 1, "TOOL_RESULT", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +90,7 @@ func TestHasWithSeqDistinguishesSlots(t *testing.T) {
 	}
 
 	seq2 := 2
-	ok, err := nl.Has("t1", 1, "TOOL_CALL", &seq2)
+	ok, err := nl.Has("t1", "demo", 1, "TOOL_CALL", &seq2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +99,7 @@ func TestHasWithSeqDistinguishesSlots(t *testing.T) {
 	}
 
 	seq4 := 4
-	ok, err = nl.Has("t1", 1, "TOOL_CALL", &seq4)
+	ok, err = nl.Has("t1", "demo", 1, "TOOL_CALL", &seq4)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -107,7 +108,7 @@ func TestHasWithSeqDistinguishesSlots(t *testing.T) {
 	}
 
 	// Unscoped has still finds TOOL_CALL somewhere in the step.
-	ok, err = nl.Has("t1", 1, "TOOL_CALL", nil)
+	ok, err = nl.Has("t1", "demo", 1, "TOOL_CALL", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -172,7 +173,7 @@ func TestClaimToolCallSingleWinner(t *testing.T) {
 		t.Fatal("second claim should lose")
 	}
 	seq := 2
-	ok, err := nl.Has("t1", 1, "TOOL_CALL", &seq)
+	ok, err := nl.Has("t1", "demo", 1, "TOOL_CALL", &seq)
 	if err != nil || !ok {
 		t.Fatalf("TOOL_CALL present=%v err=%v", ok, err)
 	}
@@ -211,3 +212,130 @@ func TestPipeInTenantRejected(t *testing.T) {
 		t.Fatal("expected delimiter rejection")
 	}
 }
+
+func TestAppendSlotConflictDifferentPayload(t *testing.T) {
+	nl := openTemp(t)
+	step := 1
+	if _, err := nl.Append("DECISION", &step, map[string]any{"plan": "a"}, "t1", "demo", 1); err != nil {
+		t.Fatal(err)
+	}
+	_, err := nl.Append("DECISION", &step, map[string]any{"plan": "b"}, "t1", "demo", 1)
+	if !errors.Is(err, nodelog.ErrSlotConflict) {
+		t.Fatalf("err=%v want ErrSlotConflict", err)
+	}
+}
+
+func TestAppendSlotConflictPreservesOriginal(t *testing.T) {
+	nl := openTemp(t)
+	step := 1
+	n1, err := nl.Append("TOOL_RESULT", &step, map[string]any{"result": "first"}, "t1", "demo", 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = nl.Append("TOOL_RESULT", &step, map[string]any{"result": "second"}, "t1", "demo", 2)
+	if !errors.Is(err, nodelog.ErrSlotConflict) {
+		t.Fatalf("err=%v want ErrSlotConflict", err)
+	}
+
+	rows, err := nl.ListNodes("t1", "demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("rows=%d want 1", len(rows))
+	}
+	if rows[0]["id"] != n1.ID {
+		t.Fatalf("stored id=%v want %s", rows[0]["id"], n1.ID)
+	}
+}
+
+func TestHasTenantFilter(t *testing.T) {
+	nl := openTemp(t)
+	step := 1
+
+	// Direct leak regression test: tenant-a writes DECISION, tenant-b must not see it.
+	if _, err := nl.Append("DECISION", &step, map[string]any{"plan": "a"}, "t1", "tenant-a", 1); err != nil {
+		t.Fatal(err)
+	}
+
+	ok, err := nl.Has("t1", "tenant-b", 1, "DECISION", nil)
+	if err != nil || ok {
+		t.Fatalf("Has tenant-b=%v err=%v, want false", ok, err)
+	}
+
+	ok, err = nl.Has("t1", "tenant-a", 1, "DECISION", nil)
+	if err != nil || !ok {
+		t.Fatalf("Has tenant-a=%v err=%v, want true", ok, err)
+	}
+
+	// Multi-tenant slot filtering with seq
+	if _, err := nl.Append("DECISION", &step, map[string]any{"plan": "b"}, "t1", "tenant-b", 2); err != nil {
+		t.Fatal(err)
+	}
+
+	seq2 := 2
+	ok, err = nl.Has("t1", "tenant-a", 1, "DECISION", &seq2)
+	if err != nil || ok {
+		t.Fatalf("Has tenant-a seq2=%v err=%v", ok, err)
+	}
+
+	ok, err = nl.Has("t1", "tenant-b", 1, "DECISION", &seq2)
+	if err != nil || !ok {
+		t.Fatalf("Has tenant-b seq2=%v err=%v", ok, err)
+	}
+
+	ok, err = nl.Has("t1", "tenant-c", 1, "DECISION", nil)
+	if err != nil || ok {
+		t.Fatalf("Has tenant-c=%v err=%v", ok, err)
+	}
+}
+
+func TestHasAllTenants(t *testing.T) {
+	nl := openTemp(t)
+	step := 1
+	if _, err := nl.Append("DECISION", &step, map[string]any{"plan": "a"}, "t1", "tenant-a", 1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := nl.Append("DECISION", &step, map[string]any{"plan": "b"}, "t1", "tenant-b", 2); err != nil {
+		t.Fatal(err)
+	}
+
+	// Scoped check for a third tenant is false
+	ok, err := nl.Has("t1", "tenant-c", 1, "DECISION", nil)
+	if err != nil || ok {
+		t.Fatalf("Has tenant-c=%v err=%v, want false", ok, err)
+	}
+
+	// Cross-tenant escape hatch finds nodes from any tenant
+	ok, err = nl.HasAllTenants("t1", 1, "DECISION", nil)
+	if err != nil || !ok {
+		t.Fatalf("HasAllTenants=%v err=%v, want true", ok, err)
+	}
+
+	seq2 := 2
+	ok, err = nl.HasAllTenants("t1", 1, "DECISION", &seq2)
+	if err != nil || !ok {
+		t.Fatalf("HasAllTenants seq2=%v err=%v, want true", ok, err)
+	}
+
+	seq99 := 99
+	ok, err = nl.HasAllTenants("t1", 1, "DECISION", &seq99)
+	if err != nil || ok {
+		t.Fatalf("HasAllTenants seq99=%v err=%v, want false", ok, err)
+	}
+
+	ok, err = nl.HasAllTenants("nonexistent-traj", 1, "DECISION", nil)
+	if err != nil || ok {
+		t.Fatalf("HasAllTenants nonexistent=%v err=%v, want false", ok, err)
+	}
+}
+
+func TestHasRejectsEmptyTenant(t *testing.T) {
+	nl := openTemp(t)
+	_, err := nl.Has("t1", "", 1, "DECISION", nil)
+	if err == nil {
+		t.Fatal("expected error on empty tenantID")
+	}
+}
+
+

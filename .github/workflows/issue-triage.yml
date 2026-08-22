@@ -1,0 +1,34 @@
+name: Issue Triage
+
+permissions:
+  contents: read
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  auto-label:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Auto-label needs triage
+        # Bots (like Dependabot) or automated logins are explicitly excluded
+        # if their author_association is not MEMBER/OWNER/COLLABORATOR, but
+        # to be safe we can also explicitly skip the github-actions bot login.
+        if: >
+          github.event.issue.user.login != 'github-actions[bot]' &&
+          github.event.issue.author_association != 'MEMBER' &&
+          github.event.issue.author_association != 'OWNER' &&
+          github.event.issue.author_association != 'COLLABORATOR'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            return github.rest.issues.addLabels({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: ['needs triage']
+            })
+

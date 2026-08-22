@@ -10,7 +10,7 @@
 | **Status** | `spec-v0.2-draft`. Supersedes the frozen `spec-v0.1` under the version bump process in §14. This revision narrows the project's scope from a standalone execution runtime to a semantics and portability layer over a pluggable, existing durable execution backend, see §3.1. |
 | **Precedence** | This document is authoritative. If any prior document, chat message, or verbal agreement conflicts with this file, this file wins. |
 
-**Project links:** [License (Apache-2.0)](LICENSE) · [Code of Conduct](CODE_OF_CONDUCT.md) · [Contributing (DCO)](CONTRIBUTING.md) · [Security](SECURITY.md) · [Maintainers](MAINTAINERS.md) · [Governance](GOVERNANCE.md) · [Roadmap](docs/ROADMAP.md) · [Adopters](ADOPTERS.md) · [Scope and non-goals](docs/SCOPE_AND_NON_GOALS.md) · [Quickstart (Go first)](go/QUICKSTART.md) · [CNCF Sandbox prep](docs/CNCF_SANDBOX_APPLICATION_OUTLINE.md)
+**Project links:** [License (Apache-2.0)](LICENSE) · [Code of Conduct](CODE_OF_CONDUCT.md) · [Contributing (DCO)](CONTRIBUTING.md) · [AI Usage Policy](AI_POLICY.md) · [Security](SECURITY.md) · [Maintainers](MAINTAINERS.md) · [Governance](GOVERNANCE.md) · [Roadmap](docs/ROADMAP.md) · [Adopters](ADOPTERS.md) · [Third-party licenses](docs/THIRD_PARTY_LICENSES.md) · [Scope and non-goals](docs/SCOPE_AND_NON_GOALS.md) · [Quickstart (Go first)](go/QUICKSTART.md) · [CNCF Sandbox prep](docs/CNCF_SANDBOX_APPLICATION_OUTLINE.md)
 
 ---
 
@@ -140,7 +140,7 @@ The following records what Phase 1A required. It is not a license to prefer Pyth
 - Any Kubernetes provisioning layer (CAMI style claims/classes).
 - Fluid integration of any kind.
 - A second durable execution backend adapter for the Python SDK (Restate or otherwise) before the DBOS adapter is conformant. This does not apply to the Go port's already shipped, language appropriate Temporal backend (§3.1, §12.0).
-- Package signature **implementation** (scheme is defined in §9.1 as `trajir-pkg-sig-v1`; sign/verify APIs remain Future until explicitly scheduled, see [#149](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/149)). Until implementation ships, leave packages unsigned (`SIGNATURE` absent, `manifest.signature` null).
+- Package signature **Python parity and conformance R09–R11** remain Future ([#179](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/179), epic [#149](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/149)). The scheme itself is normative in §9.1. **Go** already ships optional `Sign` / `Verify` and Export `SignKey` under `go/trajir/tir`. Unsigned packages remain the default (`SIGNATURE` absent, `manifest.signature` null) unless a caller opts in.
 - Multi region or multi writer high availability guarantees.
 - Live full duplex media/streaming as a first class node type.
 
@@ -315,7 +315,7 @@ Import verifies node ids and seals against their recorded hashes. Import does no
 
 Package signatures authenticate **who produced a `.tir` export** and detect **tampering of package members** after export. They do **not** replace node identity hashing or decision seals (§6.3, §8). Content hashes prove payload consistency; signatures prove origin of the **bundle**.
 
-This scheme is **normative** for any future implementation. **Shipping sign/verify APIs remains Future deferred product** ([#149](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/149)) until dual-SDK work is explicitly scheduled. Until then, producers **must** leave the package unsigned: no `SIGNATURE` zip member, and `manifest.json` **must** keep `"signature": null` (or omit the key). Implementations **must not** invent alternate schemes.
+This scheme is **normative**. **Go** implements optional `Sign` / `Verify` and Export-time signing via `SignKey` in `go/trajir/tir` (primary SDK). **Python** sign/verify parity and conformance R09–R11 remain Future ([#179](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/179), epic [#149](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/149)). Producers **may** leave packages unsigned: no `SIGNATURE` zip member, and `manifest.json` **must** keep `"signature": null` (or omit the key) whether or not `SIGNATURE` is present. Implementations **must not** invent alternate schemes.
 
 **Distinct from CI release signing:** cosign/SLSA for GitHub release tarballs and binaries (see `docs/CI_HARDENING.md`) is supply-chain signing of *release artifacts*. This section is **in-package** authenticity for `.tir` content exchanged between runtimes and partners.
 
@@ -409,12 +409,12 @@ v1 supports local trust only:
 
 No project-hosted CA or multi-tenant key product is required for conformance to this scheme.
 
-#### Implementation expectations (when Future work is scheduled)
+#### Implementation status
 
-- **Go primary:** optional `Sign` / `Verify` (and optional Export sign key); golden payload vectors checked in.
-- **Python reference:** byte-identical payload construction and verify parity.
-- **Conformance (proposed when coding starts):** R09 sign/verify + mutate fails; R10 unsigned still passes R05, strict mode rejects unsigned; R11 Go-signed verifies in Python and vice versa.
-- **Security-review** required before merge of any sign/verify code. Private keys never in the repository; tests use ephemeral keys.
+- **Go primary (shipped):** optional `Sign` / `Verify`, optional Export `SignKey` (full 64-byte Ed25519 private key; wrong length fails closed), golden payload vectors under `go/trajir/tir/testdata/sig_v1/`. Rewriting a package to add `SIGNATURE` preserves the existing file permission bits (CreateTemp’s 0600 is chmod’d back before replace).
+- **Python reference (Future):** byte-identical payload construction and verify parity ([#179](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/179)).
+- **Conformance (proposed for Phase C):** R09 sign/verify + mutate fails; R10 unsigned still passes R05, strict mode rejects unsigned; R11 Go-signed verifies in Python and vice versa.
+- **Security-review** required for further sign/verify changes. Private keys never in the repository; tests use ephemeral keys.
 
 ---
 

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestContentHashEmpty(t *testing.T) {
@@ -154,6 +155,73 @@ func TestRehydrate(t *testing.T) {
 	}
 	if len(partial) != 1 || !bytes.Equal(partial[h1], []byte("one")) {
 		t.Fatalf("partial=%v", partial)
+	}
+}
+
+func TestSweepStaleTempFiles(t *testing.T) {
+	root := t.TempDir()
+	h := ContentHash([]byte("sweep-me"))
+	shard := filepath.Join(root, "cas", h[:2])
+	if err := os.MkdirAll(shard, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	stale := filepath.Join(shard, "."+h+".orphaned")
+	if err := os.WriteFile(stale, []byte("partial"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-25 * time.Hour)
+	if err := os.Chtimes(stale, old, old); err != nil {
+		t.Fatal(err)
+	}
+
+	freshH := ContentHash([]byte("keep-me-fresh"))
+	freshDir := filepath.Join(root, "cas", freshH[:2])
+	if err := os.MkdirAll(freshDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	fresh := filepath.Join(freshDir, "."+freshH+".inflight")
+	if err := os.WriteFile(fresh, []byte("still writing"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	decoy := filepath.Join(root, ".env.local")
+	if err := os.WriteFile(decoy, []byte("SECRET=1"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(decoy, old, old); err != nil {
+		t.Fatal(err)
+	}
+
+	fs, err := NewFileSystem(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Default NewFileSystem must not sweep (shared-root safe).
+	if _, err := os.Stat(stale); err != nil {
+		t.Fatalf("stale temp should remain until SweepStaleTempFiles: %v", err)
+	}
+
+	fs.SweepStaleTempFiles(DefaultTempMaxAge)
+	kept, err := fs.Put([]byte("real-object"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(stale); !os.IsNotExist(err) {
+		t.Fatalf("stale temp still present: %v", err)
+	}
+	if _, err := os.Stat(fresh); err != nil {
+		t.Fatalf("fresh temp should remain: %v", err)
+	}
+	if _, err := os.Stat(decoy); err != nil {
+		t.Fatalf("root decoy should remain: %v", err)
+	}
+	path, err := fs.PathFor(kept)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("real object missing: %v", err)
 	}
 }
 

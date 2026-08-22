@@ -260,9 +260,50 @@ class PostgresNodeLog:
                 self._conn.rollback()
                 raise
 
-    def has(self, trajectory_id: str, step_n: int, kind: str, seq: int | None = None) -> bool:
+    def has(
+        self,
+        trajectory_id: str,
+        tenant_id: str,
+        step_n: int,
+        kind: str,
+        seq: int | None = None,
+    ) -> bool:
+        """Does a node of `kind` exist for this trajectory/step scoped to `tenant_id`?
+
+        Matches SQLite NodeLog semantics. Callers needing cross-tenant existence
+        checks must use `has_all_tenants` explicitly.
+        """
+        if not tenant_id:
+            raise ValueError("tenant_id must be a non-empty string")
+        return self._has(trajectory_id, tenant_id=tenant_id, step_n=step_n, kind=kind, seq=seq)
+
+    def has_all_tenants(
+        self,
+        trajectory_id: str,
+        step_n: int,
+        kind: str,
+        seq: int | None = None,
+    ) -> bool:
+        """Does a node of `kind` exist for this trajectory/step across any tenant?
+
+        Bypasses tenant isolation for administrative diagnostics and debugging.
+        """
+        return self._has(trajectory_id, tenant_id=None, step_n=step_n, kind=kind, seq=seq)
+
+    def _has(
+        self,
+        trajectory_id: str,
+        *,
+        tenant_id: str | None,
+        step_n: int,
+        kind: str,
+        seq: int | None,
+    ) -> bool:
         sql = "SELECT 1 FROM nodes WHERE trajectory_id = %s AND step_n = %s AND kind = %s"
         params: list[object] = [trajectory_id, step_n, kind]
+        if tenant_id is not None:
+            sql += " AND tenant_id = %s"
+            params.append(tenant_id)
         if seq is not None:
             sql += " AND seq = %s"
             params.append(seq)

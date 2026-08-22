@@ -26,8 +26,8 @@ def test_append_then_has(log):
         tenant_id="demo",
         seq=1,
     )
-    assert log.has("t1", 1, "DECISION")
-    assert not log.has("t1", 1, "TOOL_RESULT")
+    assert log.has("t1", "demo", 1, "DECISION")
+    assert not log.has("t1", "demo", 1, "TOOL_RESULT")
 
 
 def test_append_is_idempotent_by_content(log):
@@ -71,7 +71,7 @@ def test_claim_tool_call_atomic_single_winner(log):
         t.join()
     assert sum(1 for w in wins if w) == 1
     assert sum(1 for w in wins if not w) == 7
-    assert log.has("t1", 1, "TOOL_CALL", seq=2)
+    assert log.has("t1", "demo", 1, "TOOL_CALL", seq=2)
 
 
 def test_list_nodes_tenant_filter(log):
@@ -88,3 +88,36 @@ def test_slot_conflict_different_payload(log):
     log.append("DECISION", 1, {"plan": "a"}, "t1", "demo", 1)
     with pytest.raises(SlotConflictError):
         log.append("DECISION", 1, {"plan": "b"}, "t1", "demo", 1)
+
+
+def test_has_tenant_filter(log):
+    # Direct leak regression test: tenant-a writes DECISION, tenant-b must not see it.
+    log.append("DECISION", 1, {"plan": "a"}, "t1", "tenant-a", 1)
+    assert not log.has("t1", "tenant-b", 1, "DECISION")
+    assert log.has("t1", "tenant-a", 1, "DECISION")
+
+    # Multi-tenant slot filtering with seq
+    log.append("DECISION", 1, {"plan": "b"}, "t1", "tenant-b", 2)
+    assert log.has("t1", "tenant-a", 1, "DECISION")
+    assert not log.has("t1", "tenant-a", 1, "DECISION", seq=2)
+    assert log.has("t1", "tenant-b", 1, "DECISION", seq=2)
+    assert not log.has("t1", "tenant-c", 1, "DECISION")
+
+
+def test_has_all_tenants(log):
+    log.append("DECISION", 1, {"plan": "a"}, "t1", "tenant-a", 1)
+    log.append("DECISION", 1, {"plan": "b"}, "t1", "tenant-b", 2)
+
+    # Scoped check for a third tenant is false
+    assert not log.has("t1", "tenant-c", 1, "DECISION")
+
+    # Cross-tenant escape hatch finds nodes from any tenant
+    assert log.has_all_tenants("t1", 1, "DECISION")
+    assert log.has_all_tenants("t1", 1, "DECISION", seq=2)
+    assert not log.has_all_tenants("t1", 1, "DECISION", seq=99)
+    assert not log.has_all_tenants("nonexistent-traj", 1, "DECISION")
+
+
+def test_has_rejects_empty_tenant(log):
+    with pytest.raises(ValueError, match="tenant_id must be a non-empty string"):
+        log.has("t1", "", 1, "DECISION")
