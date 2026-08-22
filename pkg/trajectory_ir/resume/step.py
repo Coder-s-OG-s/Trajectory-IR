@@ -48,15 +48,18 @@ def _resolve_durable_hooks(
         assert durable_workflow_fn is not None
         return durable_infer_fn, durable_tool_fn, durable_workflow_fn
 
-    from drivers.durable_backend.dbos.adapter import (
-        durable_infer as dbos_infer,
-    )
-    from drivers.durable_backend.dbos.adapter import (
-        durable_tool as dbos_tool,
-    )
-    from drivers.durable_backend.dbos.adapter import (
-        durable_workflow as dbos_workflow,
-    )
+    try:
+        from drivers.durable_backend.dbos.adapter import (
+            durable_infer as dbos_infer,
+        )
+        from drivers.durable_backend.dbos.adapter import (
+            durable_tool as dbos_tool,
+        )
+        from drivers.durable_backend.dbos.adapter import (
+            durable_workflow as dbos_workflow,
+        )
+    except ImportError as e:
+        raise ImportError("DBOS driver is not installed. Run `pip install .[dbos]`") from e
 
     return dbos_infer, dbos_tool, dbos_workflow
 
