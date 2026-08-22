@@ -29,9 +29,10 @@ from typing import Any, TypeVar
 F = TypeVar("F", bound=Callable[..., Any])
 
 _workflow_id: ContextVar[str] = ContextVar("restate_local_workflow_id", default="")
+_step_seq: ContextVar[int] = ContextVar("restate_local_step_seq", default=0)
 _lock = threading.RLock()
-# key: (workflow_id, step_kind, step_name, args_json) -> result
-_memo: dict[tuple[str, str, str, str], Any] = {}
+# key: (workflow_id, seq, step_kind, step_name, args_json) -> result
+_memo: dict[tuple[str, int, str, str, str], Any] = {}
 
 
 def set_workflow_id(workflow_id: str) -> None:
@@ -39,6 +40,7 @@ def set_workflow_id(workflow_id: str) -> None:
     if not workflow_id:
         raise ValueError("workflow_id is required")
     _workflow_id.set(workflow_id)
+    _step_seq.set(0)
 
 
 def get_workflow_id() -> str:
@@ -49,10 +51,12 @@ def get_workflow_id() -> str:
 def workflow_scope(workflow_id: str) -> Iterator[None]:
     """Context manager equivalent of DBOS ``SetWorkflowID``."""
     token = _workflow_id.set(workflow_id)
+    seq_token = _step_seq.set(0)
     try:
         yield
     finally:
         _workflow_id.reset(token)
+        _step_seq.reset(seq_token)
 
 
 def clear_memo() -> None:
@@ -86,7 +90,9 @@ def _memoize(step_kind: str, fn: F) -> F:
                 "restate local_memo: workflow id not set; "
                 "call set_workflow_id() or use workflow_scope() before durable steps"
             )
-        key = (wid, step_kind, step_name, _args_key(args, kwargs))
+        seq = _step_seq.get()
+        _step_seq.set(seq + 1)
+        key = (wid, seq, step_kind, step_name, _args_key(args, kwargs))
         with _lock:
             if key in _memo:
                 return _memo[key]
