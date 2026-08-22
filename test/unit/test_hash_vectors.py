@@ -14,7 +14,7 @@ VECTORS = ROOT / "testdata" / "hash_vectors.json"
 def _load_cases() -> list[dict]:
     data = json.loads(VECTORS.read_text(encoding="utf-8"))
     assert data.get("version") == 1
-    return data["cases"]
+    return data["cases"]  # type: ignore[no-any-return]
 
 
 def test_python_matches_committed_hash_vectors() -> None:

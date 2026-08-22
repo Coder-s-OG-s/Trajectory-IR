@@ -238,7 +238,7 @@ def export_thin_package(
         log.close()
 
     pkg = load_tir(tir_path)
-    rehydrated = rehydrate_artifacts(store, pkg.artifacts_manifest)
+    rehydrated = rehydrate_artifacts(store, pkg.artifacts_manifest)  # type: ignore[arg-type]
     if ref.content_hash not in rehydrated:
         raise RuntimeError(f"rehydrate missed content_hash={ref.content_hash}")
     if rehydrated[ref.content_hash] != payload:
