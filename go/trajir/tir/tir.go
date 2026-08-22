@@ -506,12 +506,21 @@ func loadImpl(path string, verify bool) (*Package, error) {
 		return nil, fmt.Errorf("%w: too many zip entries: %d > %d", ErrLimit, len(zr.File), MaxZipEntries)
 	}
 
+	// Reject duplicate member names up front (CWE-436). collectZipMembers also
+	// checks this, but unsigned Load skips that path to avoid a second decompress.
 	byName := make(map[string]*zip.File, len(zr.File))
 	for _, f := range zr.File {
-		if err := safeZipName(f.Name); err != nil {
+		name := f.Name
+		if strings.HasSuffix(name, "/") {
+			continue
+		}
+		if err := safeZipName(name); err != nil {
 			return nil, err
 		}
-		byName[f.Name] = f
+		if _, exists := byName[name]; exists {
+			return nil, fmt.Errorf("%w: duplicate zip member %q", ErrTir, name)
+		}
+		byName[name] = f
 	}
 	for _, req := range requiredMembers {
 		if _, ok := byName[req]; !ok {
@@ -716,9 +725,13 @@ func loadImpl(path string, verify bool) (*Package, error) {
 	// Signature check after hash/seal integrity (README §9.1 order).
 	// Use the already-open archive only — never re-open path (TOCTOU / CWE-367).
 	// Present-but-invalid SIGNATURE fails even for LoadUnverified (tamper).
-	sigInfo, err := verifySignatureFromZipFiles(zr.File, VerifyOptions{})
-	if err != nil {
-		return nil, err
+	// Unsigned packages skip the second decompress pass (no SIGNATURE member).
+	var sigInfo *SignatureInfo
+	if _, hasSig := byName[SignatureMemberName]; hasSig {
+		sigInfo, err = verifySignatureFromZipFiles(zr.File, VerifyOptions{})
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return &Package{

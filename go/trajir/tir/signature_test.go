@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -290,6 +291,27 @@ func TestDuplicateSignatureMemberRejected(t *testing.T) {
 	}
 }
 
+func TestLoadRejectsDuplicateMemberWhenUnsigned(t *testing.T) {
+	// Unsigned Load skips verifySignatureFromZipFiles; duplicate names must
+	// still be rejected in loadImpl (CWE-436), not only on the signed path.
+	src := openLog(t, "src.sqlite")
+	seedSample(t, src)
+	out := filepath.Join(t.TempDir(), "dup-manifest.tir")
+	path, err := tir.Export(src, "t-export", out, tir.ExportOptions{Mode: tir.ModeThin})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := appendDuplicateZipMember(path, "manifest.json", []byte(`{"mode":"thin","evil":true}`)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tir.Load(path); !errors.Is(err, tir.ErrTir) {
+		t.Fatalf("Load: want ErrTir for duplicate manifest.json, got %v", err)
+	}
+	if _, err := tir.LoadUnverified(path); !errors.Is(err, tir.ErrTir) {
+		t.Fatalf("LoadUnverified: want ErrTir for duplicate manifest.json, got %v", err)
+	}
+}
+
 func TestSignRejectsInvalidKey(t *testing.T) {
 	src := openLog(t, "src.sqlite")
 	seedSample(t, src)
@@ -300,6 +322,37 @@ func TestSignRejectsInvalidKey(t *testing.T) {
 	}
 	if err := tir.Sign(path, ed25519.PrivateKey{1, 2, 3}, tir.SignerMeta{}); !errors.Is(err, tir.ErrSignature) {
 		t.Fatalf("want ErrSignature, got %v", err)
+	}
+}
+
+func TestSignPreservesPackageMode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("permission bit preserve is meaningful on unix mode bits")
+	}
+	src := openLog(t, "src.sqlite")
+	seedSample(t, src)
+	out := filepath.Join(t.TempDir(), "mode.tir")
+	path, err := tir.Export(src, "t-export", out, tir.ExportOptions{Mode: tir.ModeThin})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(path, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	priv := testOnlySeed()
+	if err := tir.Sign(path, priv, tir.SignerMeta{ID: "mode"}); err != nil {
+		t.Fatal(err)
+	}
+	after, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Mode().Perm() != before.Mode().Perm() {
+		t.Fatalf("mode after Sign=%v want %v", after.Mode().Perm(), before.Mode().Perm())
 	}
 }
 
