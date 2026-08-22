@@ -12,7 +12,7 @@ _HOST = os.path.join(_REPO, "examples", "host_loop")
 if _HOST not in sys.path:
     sys.path.insert(0, _HOST)
 
-import run_host  # noqa: E402
+from examples.host_loop import run_host  # noqa: E402
 
 
 def test_live_host_step(tmp_path, monkeypatch):

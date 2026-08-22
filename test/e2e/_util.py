@@ -46,7 +46,7 @@ def start_agent(*args: str, cwd: str, log_path: str) -> subprocess.Popen:
     except Exception:
         log.close()
         raise
-    proc._log_file = log  # keep the handle alive until the process is reaped
+    proc._log_file = log  # type: ignore[attr-defined]  # keep the handle alive until the process is reaped
     return proc
 
 

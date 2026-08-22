@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import zipfile
 from pathlib import Path
+from typing import Generator
 
 import pytest
 
@@ -21,7 +22,7 @@ from trajectory_ir.runtime.nodes import payload_hash
 
 
 @pytest.fixture
-def sample_log(tmp_path: Path) -> NodeLog:
+def sample_log(tmp_path: Path) -> Generator[NodeLog, None, None]:
     log = NodeLog(str(tmp_path / "src.sqlite"))
     log.append(
         "PROJECT_CONTEXT",
