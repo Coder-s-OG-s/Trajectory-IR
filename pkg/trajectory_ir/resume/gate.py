@@ -79,3 +79,36 @@ def make_gated_tool_call(node_log, trajectory_id, tenant_id, step_n, seq, tool_n
         return result
 
     return gated
+
+
+def make_plain_tool_call(node_log, trajectory_id, tenant_id, step_n, seq, tool_name, tool_fn):
+    """Wrap a non-gated tool with audit logging.
+
+    Occupies two seq slots: TOOL_CALL at `seq`, and TOOL_RESULT at `seq + 1`.
+    TOOL_CALL is recorded prior to tool execution so failed attempts are audited.
+    On success, TOOL_RESULT is recorded at seq + 1 with {"result": ...}.
+    """
+
+    def plain(**kwargs):
+        node_log.append(
+            "TOOL_CALL",
+            step_n,
+            {"tool": tool_name, "args": kwargs},
+            trajectory_id,
+            tenant_id,
+            seq=seq,
+        )
+
+        result = tool_fn(**kwargs)
+
+        node_log.append(
+            "TOOL_RESULT",
+            step_n,
+            {"result": result},
+            trajectory_id,
+            tenant_id,
+            seq=seq + 1,
+        )
+        return result
+
+    return plain

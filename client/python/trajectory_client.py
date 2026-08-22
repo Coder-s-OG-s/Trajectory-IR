@@ -3,7 +3,7 @@ from typing import Any
 
 from drivers.durable_backend.dbos.adapter import init_backend
 from trajectory_ir.effects import requires_block_and_gate
-from trajectory_ir.resume.gate import make_gated_tool_call
+from trajectory_ir.resume.gate import make_gated_tool_call, make_plain_tool_call
 from trajectory_ir.runtime.log import NodeLog
 from trajectory_ir.runtime.sandbox import RunMode, assert_tool_allowed_in_mode, normalize_run_mode
 from trajectory_ir.runtime.tool import Tool
@@ -114,25 +114,16 @@ def exec_tool(trajectory: Trajectory, step_n: int, call: dict, tool: Tool, seq: 
         )
         result = fn(**call["args"])
     else:
-        # Not claim-gated, but still needs IR history audit; gate path
-        # already logs its own TOOL_CALL/TOOL_RESULT nodes.
-        result = tool.fn(**call["args"])
-        log.append(
-            "TOOL_CALL",
-            step_n,
-            {"tool": tool.name, "args": call["args"]},
+        fn = make_plain_tool_call(
+            log,
             trajectory.trajectory_id,
             trajectory.tenant_id,
+            step_n,
             seq=seq,
+            tool_name=tool.name,
+            tool_fn=tool.fn,
         )
-        log.append(
-            "TOOL_RESULT",
-            step_n,
-            {"result": result},
-            trajectory.trajectory_id,
-            trajectory.tenant_id,
-            seq=seq + 1,
-        )
+        result = fn(**call["args"])
     return ToolResult(step_n=step_n, result=result)
 
 
