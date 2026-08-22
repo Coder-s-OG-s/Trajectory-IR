@@ -9,16 +9,16 @@ from trajectory_ir.runtime.sandbox import RunMode, assert_tool_allowed_in_mode, 
 from trajectory_ir.runtime.tool import Tool
 
 __all__ = [
-    "Trajectory",
-    "ProjectContext",
     "Decision",
+    "ProjectContext",
     "ToolResult",
+    "Trajectory",
+    "commit_step",
+    "exec_tool",
     "open_trajectory",
     "project",
-    "seal_decision",
-    "exec_tool",
-    "commit_step",
     "resume",
+    "seal_decision",
 ]
 
 
