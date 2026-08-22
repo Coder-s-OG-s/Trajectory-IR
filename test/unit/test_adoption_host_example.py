@@ -14,7 +14,7 @@ _EXAMPLE = os.path.join(_REPO, "examples", "adoption_host")
 if _EXAMPLE not in sys.path:
     sys.path.insert(0, _EXAMPLE)
 
-import run_demo  # noqa: E402
+from examples.adoption_host import run_demo  # noqa: E402
 
 from trajectory_ir.effects import EffectClass  # noqa: E402
 from trajectory_ir.package import load_tir  # noqa: E402
