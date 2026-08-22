@@ -15,7 +15,7 @@ from trajectory_ir.effects import EffectClass, requires_block_and_gate
 from trajectory_ir.resume.gate import BlockedNeedsGate, make_gated_tool_call
 from trajectory_ir.runtime.log import NodeLog
 
-# Module-level callables: DBOS pickles workflow args (same pattern as kill-mid-deploy).
+# Module-level callables: DBOS pickles workflow args (same pattern as kill_mid_deploy).
 _R03_CALLS = {"n": 0}
 
 
