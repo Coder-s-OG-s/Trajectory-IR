@@ -411,7 +411,7 @@ No project-hosted CA or multi-tenant key product is required for conformance to 
 
 #### Implementation status
 
-- **Go primary (shipped):** optional `Sign` / `Verify`, optional Export `SignKey` (full 64-byte Ed25519 private key; wrong length fails closed), golden payload vectors under `go/trajir/tir/testdata/sig_v1/`.
+- **Go primary (shipped):** optional `Sign` / `Verify`, optional Export `SignKey` (full 64-byte Ed25519 private key; wrong length fails closed), golden payload vectors under `go/trajir/tir/testdata/sig_v1/`. Rewriting a package to add `SIGNATURE` preserves the existing file permission bits (CreateTemp’s 0600 is chmod’d back before replace).
 - **Python reference (Future):** byte-identical payload construction and verify parity ([#179](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/179)).
 - **Conformance (proposed for Phase C):** R09 sign/verify + mutate fails; R10 unsigned still passes R05, strict mode rejects unsigned; R11 Go-signed verifies in Python and vice versa.
 - **Security-review** required for further sign/verify changes. Private keys never in the repository; tests use ephemeral keys.
