@@ -119,5 +119,28 @@ def durable_tool(fn: F) -> F:
 
 
 def durable_workflow(fn: F) -> F:
-    """Mark a function as a durable workflow entrypoint (passthrough locally)."""
-    return fn
+    """Mark a function as a durable workflow entrypoint (namespaces by step_n locally)."""
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        step_n_val = kwargs.get("step_n")
+        if step_n_val is None and args and isinstance(args[0], int):
+            step_n_val = args[0]
+
+        old_wid = get_workflow_id()
+        if old_wid and step_n_val is not None:
+            token = _workflow_id.set(f"{old_wid}-step{step_n_val}")
+            seq_token = _step_seq.set(0)
+        else:
+            token = None
+            seq_token = None
+
+        try:
+            return fn(*args, **kwargs)
+        finally:
+            if token is not None:
+                _workflow_id.reset(token)
+            if seq_token is not None:
+                _step_seq.reset(seq_token)
+
+    wrapper.__name__ = getattr(fn, "__name__", "wrapped")
+    wrapper.__qualname__ = getattr(fn, "__qualname__", wrapper.__name__)
+    return wrapper  # type: ignore[return-value]
