@@ -160,15 +160,33 @@ from trajectory_ir.runtime.nodes import Node
 
 
 def test_identical_payload_different_key_order_same_hash():
-    n1 = Node(kind="STATE_SET", trajectory_id="t1", tenant_id="demo", step_n=1, seq=1, payload={"a": 1, "b": 2})
-    n2 = Node(kind="STATE_SET", trajectory_id="t1", tenant_id="demo", step_n=1, seq=1, payload={"b": 2, "a": 1})
+    n1 = Node(
+        kind="STATE_SET",
+        trajectory_id="t1",
+        tenant_id="demo",
+        step_n=1,
+        seq=1,
+        payload={"a": 1, "b": 2},
+    )
+    n2 = Node(
+        kind="STATE_SET",
+        trajectory_id="t1",
+        tenant_id="demo",
+        step_n=1,
+        seq=1,
+        payload={"b": 2, "a": 1},
+    )
     assert n1.id == n2.id  # whole point of JCS
 
 
 def test_ts_never_affects_hash():
-    n1 = Node(kind="STATE_SET", trajectory_id="t1", tenant_id="demo", step_n=1, seq=1, payload={"a": 1})
+    n1 = Node(
+        kind="STATE_SET", trajectory_id="t1", tenant_id="demo", step_n=1, seq=1, payload={"a": 1}
+    )
     time.sleep(1.1)
-    n2 = Node(kind="STATE_SET", trajectory_id="t1", tenant_id="demo", step_n=1, seq=1, payload={"a": 1})
+    n2 = Node(
+        kind="STATE_SET", trajectory_id="t1", tenant_id="demo", step_n=1, seq=1, payload={"a": 1}
+    )
     assert n1.id == n2.id  # ts differs, id must not
 
 
@@ -179,7 +197,14 @@ def test_unknown_kind_rejected():
 
 def test_ts_key_in_payload_rejected():
     with pytest.raises(AssertionError):
-        Node(kind="STATE_SET", trajectory_id="t1", tenant_id="demo", step_n=1, seq=1, payload={"ts": 123})
+        Node(
+            kind="STATE_SET",
+            trajectory_id="t1",
+            tenant_id="demo",
+            step_n=1,
+            seq=1,
+            payload={"ts": 123},
+        )
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -201,11 +226,26 @@ from typing import Optional
 
 import rfc8785
 
-NODE_KINDS = frozenset({
-    "INPUT", "CONSTRAINT", "STATE_SET", "PROJECT_CONTEXT", "THOUGHT",
-    "DECISION", "TOOL_CALL", "TOOL_RESULT", "ARTIFACT_PUT", "ARTIFACT_REF",
-    "LTM_QUERY", "LTM_HIT", "LTM_PROJECT", "COMMIT_STEP", "ABORT", "REDACTION",
-})
+NODE_KINDS = frozenset(
+    {
+        "INPUT",
+        "CONSTRAINT",
+        "STATE_SET",
+        "PROJECT_CONTEXT",
+        "THOUGHT",
+        "DECISION",
+        "TOOL_CALL",
+        "TOOL_RESULT",
+        "ARTIFACT_PUT",
+        "ARTIFACT_REF",
+        "LTM_QUERY",
+        "LTM_HIT",
+        "LTM_PROJECT",
+        "COMMIT_STEP",
+        "ABORT",
+        "REDACTION",
+    }
+)
 
 
 def payload_hash(payload: dict) -> str:
@@ -215,7 +255,9 @@ def payload_hash(payload: dict) -> str:
     return hashlib.sha256(canon).hexdigest()
 
 
-def node_id(tenant_id: str, trajectory_id: str, step_n: Optional[int], seq: int, kind: str, phash: str) -> str:
+def node_id(
+    tenant_id: str, trajectory_id: str, step_n: Optional[int], seq: int, kind: str, phash: str
+) -> str:
     raw = f"{tenant_id}|{trajectory_id}|{step_n}|{seq}|{kind}|{phash}".encode()
     return hashlib.sha256(raw).hexdigest()
 
@@ -290,14 +332,20 @@ def log():
 
 
 def test_append_then_has(log):
-    log.append("DECISION", step_n=1, payload={"plan": "x"}, trajectory_id="t1", tenant_id="demo", seq=1)
+    log.append(
+        "DECISION", step_n=1, payload={"plan": "x"}, trajectory_id="t1", tenant_id="demo", seq=1
+    )
     assert log.has("t1", 1, "DECISION")
     assert not log.has("t1", 1, "TOOL_RESULT")
 
 
 def test_append_is_idempotent_by_content(log):
-    n1 = log.append("DECISION", step_n=1, payload={"plan": "x"}, trajectory_id="t1", tenant_id="demo", seq=1)
-    n2 = log.append("DECISION", step_n=1, payload={"plan": "x"}, trajectory_id="t1", tenant_id="demo", seq=1)
+    n1 = log.append(
+        "DECISION", step_n=1, payload={"plan": "x"}, trajectory_id="t1", tenant_id="demo", seq=1
+    )
+    n2 = log.append(
+        "DECISION", step_n=1, payload={"plan": "x"}, trajectory_id="t1", tenant_id="demo", seq=1
+    )
     assert n1.id == n2.id
     assert log.count(n1.id) == 1
 ```
@@ -349,15 +397,36 @@ class NodeLog:
         )
         self._conn.commit()
 
-    def append(self, kind: str, step_n: Optional[int], payload: dict, trajectory_id: str, tenant_id: str, seq: int) -> Node:
+    def append(
+        self,
+        kind: str,
+        step_n: Optional[int],
+        payload: dict,
+        trajectory_id: str,
+        tenant_id: str,
+        seq: int,
+    ) -> Node:
         node = Node(
-            kind=kind, trajectory_id=trajectory_id, tenant_id=tenant_id,
-            step_n=step_n, seq=seq, payload=payload,
+            kind=kind,
+            trajectory_id=trajectory_id,
+            tenant_id=tenant_id,
+            step_n=step_n,
+            seq=seq,
+            payload=payload,
         )
         self._conn.execute(
             "INSERT OR IGNORE INTO nodes (id, trajectory_id, tenant_id, step_n, seq, kind, payload_json, ts) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (node.id, node.trajectory_id, node.tenant_id, node.step_n, node.seq, node.kind, json.dumps(node.payload), node.ts),
+            (
+                node.id,
+                node.trajectory_id,
+                node.tenant_id,
+                node.step_n,
+                node.seq,
+                node.kind,
+                json.dumps(node.payload),
+                node.ts,
+            ),
         )
         self._conn.commit()
         return node
@@ -531,7 +600,12 @@ Before writing code, check `docs.dbos.dev/python/tutorials/workflow-tutorial` an
 
 ```python
 # test/unit/test_dbos_adapter.py
-from drivers.durable_backend.dbos.adapter import durable_infer, durable_tool, durable_workflow, init_backend
+from drivers.durable_backend.dbos.adapter import (
+    durable_infer,
+    durable_tool,
+    durable_workflow,
+    init_backend,
+)
 
 
 def test_wrapped_workflow_runs_and_returns_result(tmp_path, monkeypatch):
@@ -666,21 +740,35 @@ def make_gated_tool_call(node_log, trajectory_id, tenant_id, step_n, seq, tool_n
     """
 
     def gated(**kwargs):
-        if node_log.has(trajectory_id, step_n, "TOOL_CALL") and not node_log.has(trajectory_id, step_n, "TOOL_RESULT"):
+        if node_log.has(trajectory_id, step_n, "TOOL_CALL") and not node_log.has(
+            trajectory_id, step_n, "TOOL_RESULT"
+        ):
             node_log.append(
-                "ABORT", step_n, {"reason": "BLOCKED_NEEDS_GATE", "tool": tool_name},
-                trajectory_id, tenant_id, seq,
+                "ABORT",
+                step_n,
+                {"reason": "BLOCKED_NEEDS_GATE", "tool": tool_name},
+                trajectory_id,
+                tenant_id,
+                seq,
             )
             raise BlockedNeedsGate(step_n, tool_name)
 
         node_log.append(
-            "TOOL_CALL", step_n, {"tool": tool_name, "args": kwargs},
-            trajectory_id, tenant_id, seq,
+            "TOOL_CALL",
+            step_n,
+            {"tool": tool_name, "args": kwargs},
+            trajectory_id,
+            tenant_id,
+            seq,
         )
         result = tool_fn(**kwargs)
         node_log.append(
-            "TOOL_RESULT", step_n, {"result": result},
-            trajectory_id, tenant_id, seq + 1,
+            "TOOL_RESULT",
+            step_n,
+            {"result": result},
+            trajectory_id,
+            tenant_id,
+            seq + 1,
         )
         return result
 
@@ -727,7 +815,9 @@ def make_run_step(node_log, tenant_id, trajectory_id, tool_registry, on_decision
                 result = durable_tool(tool.fn)(**call["args"])
             results.append(result)
 
-        node_log.append("COMMIT_STEP", step_n, {}, trajectory_id, tenant_id, seq=2 + len(plan["tool_calls"]))
+        node_log.append(
+            "COMMIT_STEP", step_n, {}, trajectory_id, tenant_id, seq=2 + len(plan["tool_calls"])
+        )
         return results
 
     return run_step
@@ -748,6 +838,7 @@ Runs one durable step: infer a plan, seal the decision, execute a fake
 demo -- one script, three consumers, so crash-recovery behavior is only
 implemented once.
 """
+
 import argparse
 import os
 import sys
@@ -813,7 +904,9 @@ def main():
         return deploy_server(version, crash_during=(args.crash_during == "tool_call"))
 
     tool_registry = {
-        "deploy_server": Tool(name="deploy_server", fn=deploy_wrapper, effect_class=EffectClass.NON_IDEMPOTENT_WRITE),
+        "deploy_server": Tool(
+            name="deploy_server", fn=deploy_wrapper, effect_class=EffectClass.NON_IDEMPOTENT_WRITE
+        ),
     }
 
     def seal_marker_hook():
@@ -821,7 +914,9 @@ def main():
             with open(DECISION_SEALED_MARKER, "w") as f:
                 f.write("sealed")
 
-    run_step = make_run_step(node_log, TENANT_ID, TRAJECTORY_ID, tool_registry, on_decision_sealed=seal_marker_hook)
+    run_step = make_run_step(
+        node_log, TENANT_ID, TRAJECTORY_ID, tool_registry, on_decision_sealed=seal_marker_hook
+    )
 
     try:
         with SetWorkflowID(TRAJECTORY_ID):
@@ -887,8 +982,11 @@ from test.e2e._util import cleanup, hard_kill, read_counter, wait_for_marker
 
 AGENT = ["python", "examples/kill-mid-deploy/agent.py"]
 ARTIFACTS = (
-    "test_model_call_count.txt", "test_deploy_side_effect_count.txt",
-    "decision_sealed.marker", "tool_started.marker", "kill_mid_deploy.sqlite",
+    "test_model_call_count.txt",
+    "test_deploy_side_effect_count.txt",
+    "decision_sealed.marker",
+    "tool_started.marker",
+    "kill_mid_deploy.sqlite",
 )
 
 
@@ -917,7 +1015,9 @@ def test_crash_after_seal_before_tool_completes_no_reinfer():
 
     subprocess.run(AGENT + ["--resume"], check=True)
 
-    assert read_counter("test_model_call_count.txt") == 1, "model was invoked more than once across resume"
+    assert read_counter("test_model_call_count.txt") == 1, (
+        "model was invoked more than once across resume"
+    )
 
 
 def test_crash_mid_nonidempotent_tool_blocks_not_retries():
@@ -986,7 +1086,11 @@ import tempfile
 import pytest
 
 from client.python.trajectory_client import (
-    open_trajectory, project, seal_decision, exec_tool, commit_step,
+    open_trajectory,
+    project,
+    seal_decision,
+    exec_tool,
+    commit_step,
 )
 from trajectory_ir.runtime.tool import Tool
 from trajectory_ir.effects import EffectClass
@@ -1071,7 +1175,9 @@ class ToolResult:
     result: Any
 
 
-def open_trajectory(tenant_id: str, trajectory_id: str, db_path: str = "trajectory.sqlite") -> Trajectory:
+def open_trajectory(
+    tenant_id: str, trajectory_id: str, db_path: str = "trajectory.sqlite"
+) -> Trajectory:
     init_backend(app_name=trajectory_id)
     return Trajectory(trajectory_id=trajectory_id, tenant_id=tenant_id, db_path=db_path)
 
@@ -1094,8 +1200,13 @@ def exec_tool(trajectory: Trajectory, step_n: int, call: dict, tool: Tool) -> To
     log = NodeLog(trajectory.db_path)
     if tool.effect_class == EffectClass.NON_IDEMPOTENT_WRITE:
         fn = make_gated_tool_call(
-            log, trajectory.trajectory_id, trajectory.tenant_id, step_n, seq=2,
-            tool_name=tool.name, tool_fn=tool.fn,
+            log,
+            trajectory.trajectory_id,
+            trajectory.tenant_id,
+            step_n,
+            seq=2,
+            tool_name=tool.name,
+            tool_fn=tool.fn,
         )
     else:
         fn = tool.fn
@@ -1109,7 +1220,9 @@ def commit_step(trajectory: Trajectory, step_n: int) -> None:
     )
 
 
-def resume(trajectory_id: str, tenant_id: str = "demo", db_path: str = "trajectory.sqlite") -> Trajectory:
+def resume(
+    trajectory_id: str, tenant_id: str = "demo", db_path: str = "trajectory.sqlite"
+) -> Trajectory:
     init_backend(app_name=trajectory_id)
     return Trajectory(trajectory_id=trajectory_id, tenant_id=tenant_id, db_path=db_path)
 ```
@@ -1151,8 +1264,11 @@ from test.e2e._util import cleanup, hard_kill, read_counter, wait_for_marker
 
 AGENT = ["python", "examples/kill-mid-deploy/agent.py"]
 ARTIFACTS = (
-    "test_model_call_count.txt", "test_deploy_side_effect_count.txt",
-    "decision_sealed.marker", "tool_started.marker", "kill_mid_deploy.sqlite",
+    "test_model_call_count.txt",
+    "test_deploy_side_effect_count.txt",
+    "decision_sealed.marker",
+    "tool_started.marker",
+    "kill_mid_deploy.sqlite",
 )
 
 
@@ -1165,7 +1281,9 @@ def test_r01_no_reinfer_after_seal():
 
     subprocess.run(AGENT + ["--resume"], check=True)
 
-    assert read_counter("test_model_call_count.txt") == 1, "model was invoked more than once across resume"
+    assert read_counter("test_model_call_count.txt") == 1, (
+        "model was invoked more than once across resume"
+    )
 ```
 
 - [ ] **Step 2: Run and verify it passes**
@@ -1203,8 +1321,11 @@ from test.e2e._util import cleanup, hard_kill, read_counter, wait_for_marker
 
 AGENT = ["python", "examples/kill-mid-deploy/agent.py"]
 ARTIFACTS = (
-    "test_model_call_count.txt", "test_deploy_side_effect_count.txt",
-    "decision_sealed.marker", "tool_started.marker", "kill_mid_deploy.sqlite",
+    "test_model_call_count.txt",
+    "test_deploy_side_effect_count.txt",
+    "decision_sealed.marker",
+    "tool_started.marker",
+    "kill_mid_deploy.sqlite",
 )
 
 
@@ -1217,8 +1338,12 @@ def test_r02_crash_mid_tool_blocks_not_retries():
 
     result = subprocess.run(AGENT + ["--resume"], capture_output=True, text=True)
 
-    assert read_counter("test_deploy_side_effect_count.txt") <= 1, "deploy_server side effect ran more than once"
-    assert "BLOCKED_NEEDS_GATE" in result.stdout + result.stderr, "resume did not report BLOCKED_NEEDS_GATE"
+    assert read_counter("test_deploy_side_effect_count.txt") <= 1, (
+        "deploy_server side effect ran more than once"
+    )
+    assert "BLOCKED_NEEDS_GATE" in result.stdout + result.stderr, (
+        "resume did not report BLOCKED_NEEDS_GATE"
+    )
 ```
 
 - [ ] **Step 2: Run and verify it passes**
@@ -1261,12 +1386,13 @@ git commit -s -m "test: add R02 conformance test for non-idempotent crash blocki
 # examples/kill-mid-deploy/run_demo.py
 """Run (or resume) the kill-mid-deploy demo trajectory.
 
-    python examples/kill-mid-deploy/run_demo.py
-    # in another terminal, once you see "TOOL_CALL: deploy_server started":
-    kill -9 <pid>
-    python examples/kill-mid-deploy/run_demo.py --resume
-    # expected output: "Resumed. deploy_server executed exactly once."
+python examples/kill-mid-deploy/run_demo.py
+# in another terminal, once you see "TOOL_CALL: deploy_server started":
+kill -9 <pid>
+python examples/kill-mid-deploy/run_demo.py --resume
+# expected output: "Resumed. deploy_server executed exactly once."
 """
+
 import subprocess
 import sys
 

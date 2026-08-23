@@ -120,6 +120,7 @@ def durable_tool(fn: F) -> F:
 
 def durable_workflow(fn: F) -> F:
     """Mark a function as a durable workflow entrypoint (namespaces by step_n locally)."""
+
     def wrapper(*args: Any, **kwargs: Any) -> Any:
         step_n_val = kwargs.get("step_n")
         if step_n_val is None and args and isinstance(args[0], int):
