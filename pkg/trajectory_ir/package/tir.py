@@ -126,13 +126,16 @@ def _read_zip_member(zf: zipfile.ZipFile, name: str, *, budget: list[int]) -> by
             f"zip member {name!r} uncompressed size {info.file_size} "
             f"exceeds limit {MAX_UNCOMPRESSED_ENTRY_BYTES}"
         )
-    if info.file_size > budget[0]:
+    limit = min(MAX_UNCOMPRESSED_ENTRY_BYTES, budget[0])
+    with zf.open(name) as fp:
+        # Read exactly the active limit + 1 byte to detect overrun
+        data = fp.read(limit + 1)
+    if len(data) > MAX_UNCOMPRESSED_ENTRY_BYTES:
+        raise TirLimitError(f"zip member {name!r} expanded beyond per-entry limit")
+    if len(data) > budget[0]:
         raise TirLimitError(
             f"zip total uncompressed size would exceed limit {MAX_TOTAL_UNCOMPRESSED_BYTES}"
         )
-    data = zf.read(name)
-    if len(data) > MAX_UNCOMPRESSED_ENTRY_BYTES:
-        raise TirLimitError(f"zip member {name!r} expanded beyond per-entry limit")
     budget[0] -= len(data)
     return data
 
