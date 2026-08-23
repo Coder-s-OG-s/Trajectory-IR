@@ -152,7 +152,7 @@ def _verify_node_record(rec: dict[str, Any]) -> None:
             rec["kind"],
             ph,
         )
-    except (NodeValidationError, KeyError, TypeError, ValueError) as e:
+    except (NodeValidationError, KeyError, TypeError, ValueError, RuntimeError) as e:
         raise TirVerificationError(f"node {rec.get('id')}: {e}") from e
     if rec.get("id") != expected:
         raise TirVerificationError(
