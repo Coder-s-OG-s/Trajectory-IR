@@ -3,23 +3,15 @@
 from __future__ import annotations
 
 import json
-import os
-import sys
 from pathlib import Path
 
 import pytest
+from examples.adoption_host import run_demo
 
-_REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-_EXAMPLE = os.path.join(_REPO, "examples", "adoption_host")
-if _EXAMPLE not in sys.path:
-    sys.path.insert(0, _EXAMPLE)
-
-from examples.adoption_host import run_demo  # noqa: E402
-
-from trajectory_ir.effects import EffectClass  # noqa: E402
-from trajectory_ir.package import load_tir  # noqa: E402
-from trajectory_ir.runtime.tool import Tool  # noqa: E402
-from trajectory_ir.storage import FileSystemCAS  # noqa: E402
+from trajectory_ir.effects import EffectClass
+from trajectory_ir.package import load_tir
+from trajectory_ir.runtime.tool import Tool
+from trajectory_ir.storage import FileSystemCAS
 
 
 def test_live_host_step_pure_and_gated(tmp_path, monkeypatch):
