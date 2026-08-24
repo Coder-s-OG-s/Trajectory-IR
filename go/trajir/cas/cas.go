@@ -181,6 +181,13 @@ func (fs *FileSystem) Put(data []byte) (string, error) {
 		return "", err
 	}
 	if err := os.Rename(tmpName, path); err != nil {
+		// On Windows os.Rename fails when the destination already exists.
+		// A concurrent Put for the same hash may have won the race. If the
+		// object is now present we treat this as an idempotent success and
+		// let the deferred cleanup remove our temp file.
+		if fs.Has(h) {
+			return h, nil
+		}
 		return "", err
 	}
 	ok = true
