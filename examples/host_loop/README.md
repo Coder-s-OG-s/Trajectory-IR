@@ -35,4 +35,4 @@ python examples/host_loop/run_host.py --sandbox
    LLM client without changing seal or tool execution.
 2. Tool arguments in the sealed plan are concrete values only (linear known
    args rule from the master README).
-3. Crash safe durable workflow demos remain under `examples/kill-mid-deploy/`.
+3. Crash safe durable workflow demos remain under `examples/kill_mid_deploy/`.

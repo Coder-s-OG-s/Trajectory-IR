@@ -80,11 +80,11 @@ commit_step(traj, step_n=1, seq=4)
 ### Durable step runner (DBOS)
 
 For full seal/resume with DBOS steps, use `make_run_step` as in
-`examples/kill-mid-deploy/agent.py` (used by R01/R02 and e2e tests).
+`examples/kill_mid_deploy/agent.py` (used by R01/R02 and e2e tests).
 
 ```bash
 # From repo root, isolate artifacts in a temp directory:
-# see examples/kill-mid-deploy/README.md
+# see examples/kill_mid_deploy/README.md
 pytest test/e2e conformance/r01_seal_resume_test.py conformance/r02_non_idempotent_test.py -q
 ```
 
@@ -270,7 +270,7 @@ Integration recipes and CI parity commands live in
 |---------|------|
 | `examples/host_loop/` | Minimal public client step |
 | `examples/adoption_host/` | Host loop + optional CAS / thin package (when present on your branch) |
-| `examples/kill-mid-deploy/` | Crash safety / durable resume |
+| `examples/kill_mid_deploy/` | Crash safety / durable resume |
 
 ---
 

@@ -12,7 +12,7 @@ needs a research spike before it can be locked down.
 
 1. `pip install -e .` works from a clean clone.
 2. `pytest conformance/r01_seal_resume_test.py conformance/r02_non_idempotent_test.py` passes.
-3. `python examples/kill-mid-deploy/run_demo.py` + real `kill -9` + restart → exactly
+3. `python examples/kill_mid_deploy/run_demo.py` + real `kill -9` + restart → exactly
    one `deploy_server` execution, zero extra model calls.
 4. Everything committed with DCO sign-off, CI green.
 
@@ -41,7 +41,7 @@ documented.
 | `pkg/trajectory_ir/resume/` | `run_step()` workflow + `block_and_gate()`. Where the §1 fix is enforced in code. |
 | `client/python/` | Exactly 6 calls: `open_trajectory`, `project`, `seal_decision`, `exec_tool`, `commit_step`, `resume`. No 7th call this milestone. |
 | `conformance/` | R01/R02 crash-injection tests — real subprocess + `SIGKILL`, not in-process, since durability across process death is the actual claim under test. |
-| `examples/kill-mid-deploy/` | Narratable version of R02, recorded via asciinema — the launch asset. |
+| `examples/kill_mid_deploy/` | Narratable version of R02, recorded via asciinema — the launch asset. |
 
 ## Data Flow
 
@@ -72,7 +72,7 @@ implementation step, not assumed up front.
   (non-idempotent tool crash → `BLOCKED_NEEDS_GATE`, no auto-retry). Expect
   timing flakiness in the sentinel-file approach — budget for it, it's normal for
   this test shape.
-- **Demo**: `examples/kill-mid-deploy/run_demo.py`, manual `kill -9`, `--resume`,
+- **Demo**: `examples/kill_mid_deploy/run_demo.py`, manual `kill -9`, `--resume`,
   recorded once reliable.
 
 ## Workflow & Commit Strategy
