@@ -4,7 +4,7 @@ import sys
 import time
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-AGENT_SCRIPT = os.path.join(REPO_ROOT, "examples", "kill-mid-deploy", "agent.py")
+AGENT_SCRIPT = os.path.join(REPO_ROOT, "examples", "kill_mid_deploy", "agent.py")
 
 # Every file the fixture agent writes into its working directory, including the
 # DBOS system database (named after the agent's app name). A resume run must see
@@ -17,7 +17,7 @@ ARTIFACTS = (
     "tool_started.marker",
     "inference_started.marker",
     "kill_mid_deploy.sqlite",
-    "kill-mid-deploy.sqlite",
+    "kill_mid_deploy.sqlite",
 )
 
 

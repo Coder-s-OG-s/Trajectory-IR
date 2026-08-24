@@ -1,6 +1,6 @@
 # Go demo: kill mid deploy
 
-Shows honest seal and resume for Trajectory IR in Go (same story as the Python demo under `examples/kill-mid-deploy/`).
+Shows honest seal and resume for Trajectory IR in Go (same story as the Python demo under `examples/kill_mid_deploy/`).
 
 Uses `trajir/client` with LocalSQLite for the IR log and durable step memos.
 
@@ -24,7 +24,7 @@ cd go
 Terminal 1:
 
 ```bash
-go run ./examples/kill-mid-deploy -workdir ./kill-mid-deploy-data -crash-during=tool_call
+go run ./examples/kill_mid_deploy -workdir ./kill_mid_deploy-data -crash-during=tool_call
 ```
 
 When you see `TOOL_CALL: deploy_server started`, kill the process:
@@ -41,7 +41,7 @@ Stop-Process -Id <pid> -Force
 Terminal 1 again (or a new one):
 
 ```bash
-go run ./examples/kill-mid-deploy -workdir ./kill-mid-deploy-data -resume
+go run ./examples/kill_mid_deploy -workdir ./kill_mid_deploy-data -resume
 ```
 
 Expect a `BLOCKED_NEEDS_GATE` line and `deploy_count=0` (effect never completed; gate refuses a blind retry).
@@ -49,9 +49,9 @@ Expect a `BLOCKED_NEEDS_GATE` line and `deploy_count=0` (effect never completed;
 ## Crash after decision seal (R01 style)
 
 ```bash
-go run ./examples/kill-mid-deploy -workdir ./kill-mid-deploy-data2 -crash-after=decision_sealed
+go run ./examples/kill_mid_deploy -workdir ./kill_mid_deploy-data2 -crash-after=decision_sealed
 # kill when you see DECISION sealed
-go run ./examples/kill-mid-deploy -workdir ./kill-mid-deploy-data2 -resume
+go run ./examples/kill_mid_deploy -workdir ./kill_mid_deploy-data2 -resume
 ```
 
 Expect `model_count=1` across both runs and a completed deploy on resume (`deploy_count=1`).
@@ -60,10 +60,10 @@ Expect `model_count=1` across both runs and a completed deploy on resume (`deplo
 
 ```bash
 # Unix
-rm -rf ./kill-mid-deploy-data
+rm -rf ./kill_mid_deploy-data
 
 # PowerShell
-Remove-Item -Recurse -Force .\kill-mid-deploy-data
+Remove-Item -Recurse -Force .\kill_mid_deploy-data
 ```
 
 ## Related

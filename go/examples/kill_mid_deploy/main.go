@@ -1,8 +1,8 @@
-// Command kill-mid-deploy is the human runnable Go demo for honest seal resume.
+// Command kill_mid_deploy is the human runnable Go demo for honest seal resume.
 //
-//	go run ./examples/kill-mid-deploy -workdir ./demo-run -crash-during=tool_call
+//	go run ./examples/kill_mid_deploy -workdir ./demo-run -crash-during=tool_call
 //	# kill the process when you see the tool started line
-//	go run ./examples/kill-mid-deploy -workdir ./demo-run -resume
+//	go run ./examples/kill_mid_deploy -workdir ./demo-run -resume
 package main
 
 import (
@@ -22,13 +22,13 @@ import (
 
 const (
 	tenantID     = "demo"
-	trajectoryID = "go-kill-mid-deploy"
-	workflowID   = "go-kill-mid-deploy-wf"
+	trajectoryID = "go-kill_mid_deploy"
+	workflowID   = "go-kill_mid_deploy-wf"
 	crashWindow  = 45 * time.Second
 )
 
 func main() {
-	workdir := flag.String("workdir", "./kill-mid-deploy-data", "directory for sqlite files and counters")
+	workdir := flag.String("workdir", "./kill_mid_deploy-data", "directory for sqlite files and counters")
 	crashAfter := flag.String("crash-after", "", "decision_sealed: idle after DECISION so you can kill")
 	crashDuring := flag.String("crash-during", "", "tool_call: idle inside deploy so you can kill")
 	resumeMode := flag.Bool("resume", false, "reopen the same workdir and continue")
@@ -94,7 +94,7 @@ func main() {
 	}
 
 	ctx := context.Background()
-	_, err = tr.RunStep(ctx, 1, model, tools, map[string]any{"demo": "kill-mid-deploy"}, client.RunStepOpts{
+	_, err = tr.RunStep(ctx, 1, model, tools, map[string]any{"demo": "kill_mid_deploy"}, client.RunStepOpts{
 		OnDecisionSealed: func() {
 			path := counterPath(*workdir, "decision_sealed.marker")
 			_ = os.WriteFile(path, []byte("sealed"), 0o644)

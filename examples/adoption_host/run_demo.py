@@ -13,7 +13,7 @@ Run from the repository root::
 
 Compared with ``examples/host_loop``: same public client surface, but this
 demo also shows optional ``FileSystemCAS`` + thin ``export_tir`` + rehydrate.
-Crash safe durable workflow demos remain under ``examples/kill-mid-deploy/``.
+Crash safe durable workflow demos remain under ``examples/kill_mid_deploy/``.
 """
 
 from __future__ import annotations
