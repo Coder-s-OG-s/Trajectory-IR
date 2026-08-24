@@ -59,8 +59,10 @@ from client.python.trajectory_client import (
 from trajectory_ir.effects import EffectClass
 from trajectory_ir.runtime.tool import Tool
 
+
 def echo(msg: str) -> str:
     return msg
+
 
 traj = open_trajectory(tenant_id="demo", trajectory_id="qs-1", db_path="qs.sqlite")
 # Optional sandbox (R06): open_trajectory(..., mode="sandbox")  # rejects NON_IDEMPOTENT_WRITE
