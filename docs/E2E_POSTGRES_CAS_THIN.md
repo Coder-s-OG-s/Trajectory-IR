@@ -124,7 +124,9 @@ work = Path("./e2e_work")
 db_path = work / "nodes.sqlite"
 cas_root = work / "cas"
 store = FileSystemCAS(cas_root)
-ref = put_artifact(store, b"report bytes from a tool or host process\n", logical_path="outputs/report.bin")
+ref = put_artifact(
+    store, b"report bytes from a tool or host process\n", logical_path="outputs/report.bin"
+)
 
 log = NodeLog(str(db_path))
 dest = work / "run.tir"
@@ -173,6 +175,7 @@ print("rehydrate ok")
 
 ```python
 """e2e_thin_fs.py — SQLite + FileSystemCAS + thin .tir (no Docker)."""
+
 from pathlib import Path
 
 from trajectory_ir.package import export_tir, load_tir
@@ -262,7 +265,10 @@ export_tir(log, traj, dest, mode="thin", artifacts=[ref], tenant_id=tenant, cas=
 log.close()
 
 pkg = load_tir(dest)
-assert rehydrate_artifacts(store, pkg.artifacts_manifest)[ref.content_hash] == b"from postgres backed run\n"
+assert (
+    rehydrate_artifacts(store, pkg.artifacts_manifest)[ref.content_hash]
+    == b"from postgres backed run\n"
+)
 print("postgres thin export ok", dest)
 ```
 
