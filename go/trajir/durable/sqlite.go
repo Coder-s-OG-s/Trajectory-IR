@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"sync"
 
 	_ "modernc.org/sqlite"
@@ -21,16 +22,16 @@ type LocalSQLite struct {
 
 // OpenLocal opens or creates a SQLite memo database at path.
 func OpenLocal(path string) (*LocalSQLite, error) {
+	if strings.Contains(path, "?") {
+		path += "&_busy_timeout=5000&_journal_mode=WAL"
+	} else {
+		path += "?_busy_timeout=5000&_journal_mode=WAL"
+	}
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
 		return nil, fmt.Errorf("durable sqlite open: %w", err)
 	}
 	db.SetMaxOpenConns(1)
-
-	if _, err := db.Exec(`PRAGMA journal_mode=WAL;`); err != nil {
-		_ = db.Close()
-		return nil, fmt.Errorf("durable sqlite wal: %w", err)
-	}
 
 	schema := `
 CREATE TABLE IF NOT EXISTS step_memos (

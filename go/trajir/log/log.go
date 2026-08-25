@@ -9,6 +9,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/nodes"
@@ -29,17 +30,17 @@ type NodeLog struct {
 
 // Open creates or opens a SQLite database at path and ensures the schema exists.
 func Open(path string) (*NodeLog, error) {
+	if strings.Contains(path, "?") {
+		path += "&_busy_timeout=5000&_journal_mode=WAL"
+	} else {
+		path += "?_busy_timeout=5000&_journal_mode=WAL"
+	}
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
 	}
 	// One connection is enough for the local profile and keeps write order simple.
 	db.SetMaxOpenConns(1)
-
-	if _, err := db.Exec(`PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;`); err != nil {
-		_ = db.Close()
-		return nil, fmt.Errorf("set wal and timeout: %w", err)
-	}
 
 	schema := `
 CREATE TABLE IF NOT EXISTS nodes (

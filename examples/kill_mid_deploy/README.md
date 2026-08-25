@@ -5,6 +5,8 @@ Demonstrates the milestone's core claim: a crash mid-tool-execution never silent
 ## Run it
 
 ```bash
+pip install -e ".[dev]"
+
 python examples/kill_mid_deploy/run_demo.py
 # in another terminal, once you see "TOOL_CALL: deploy_server started":
 kill -9 <pid>

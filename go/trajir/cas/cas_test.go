@@ -3,8 +3,10 @@ package cas
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 )
@@ -228,5 +230,43 @@ func TestSweepStaleTempFiles(t *testing.T) {
 func TestNormalizeHashRejectsBad(t *testing.T) {
 	if _, err := NormalizeHash("nope"); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestPutConcurrentSameContent(t *testing.T) {
+	fs, err := NewFileSystem(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	data := []byte("concurrent put payload")
+	want := ContentHash(data)
+
+	var wg sync.WaitGroup
+	errs := make([]error, 20)
+	for i := range errs {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			h, err := fs.Put(data)
+			if err == nil && h != want {
+				err = fmt.Errorf("hash=%s want %s", h, want)
+			}
+			errs[idx] = err
+		}(i)
+	}
+	wg.Wait()
+
+	for i, err := range errs {
+		if err != nil {
+			t.Errorf("worker %d: %v", i, err)
+		}
+	}
+
+	got, err := fs.Get(want)
+	if err != nil {
+		t.Fatalf("Get after concurrent Put: %v", err)
+	}
+	if !bytes.Equal(got, data) {
+		t.Fatal("stored bytes do not match")
 	}
 }
