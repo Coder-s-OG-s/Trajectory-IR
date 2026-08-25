@@ -1,11 +1,11 @@
 #!/usr/bin/env python
-"""Run (or resume) the kill-mid-deploy demo trajectory.
+"""Run (or resume) the kill_mid_deploy demo trajectory.
 
 Usage:
-    python examples/kill-mid-deploy/run_demo.py
+    python examples/kill_mid_deploy/run_demo.py
     # in another terminal, once you see "TOOL_CALL: deploy_server started":
     kill -9 <pid>
-    python examples/kill-mid-deploy/run_demo.py --resume
+    python examples/kill_mid_deploy/run_demo.py --resume
     # expected output: "Resumed. deploy_server executed exactly once."
 """
 
@@ -14,7 +14,7 @@ import sys
 
 
 def main():
-    args = ["python", "examples/kill-mid-deploy/agent.py"]
+    args = ["python", "examples/kill_mid_deploy/agent.py"]
     if "--resume" in sys.argv:
         args.append("--resume")
     subprocess.run(args, check=True)

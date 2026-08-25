@@ -28,13 +28,13 @@ classifiers = [
 ]
 dependencies = [
     "dbos",
-    "rfc8785",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "pytest-cov", "ruff", "mypy", "pip-audit"]
-postgres = ["psycopg[binary]>=3.1"]
-s3 = ["boto3"]
+dev = ["pytest", "pytest-cov", "ruff", "mypy", "pip-audit", "rfc8785"]
+postgres = ["psycopg[binary]>=3.1", "rfc8785"]
+s3 = ["boto3", "rfc8785"]
+rfc8785 = ["rfc8785"]
 
 [project.urls]
 Homepage = "https://github.com/Coder-s-OG-s/Trajectory-IR"
@@ -83,9 +83,6 @@ select = [
 
 
 [tool.ruff.lint.per-file-ignores]
-# Fixture agent adjusts sys.path before local imports on purpose.
-"examples/kill-mid-deploy/agent.py" = ["E402"]
-"examples/host_loop/run_host.py" = ["E402"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["trajectory_ir", "drivers", "client", "test"]
@@ -101,11 +98,13 @@ warn_unreachable = true
 strict_equality = true
 warn_redundant_casts = true
 no_implicit_reexport = true
+explicit_package_bases = true
 
 [[tool.mypy.overrides]]
 module = [
     "boto3",
     "botocore.*",
+    "rfc8785",
 ]
 ignore_missing_imports = true
 

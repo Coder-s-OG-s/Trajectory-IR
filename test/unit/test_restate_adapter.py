@@ -32,6 +32,7 @@ def test_local_memo_infer_runs_once():
     wrapped = durable_infer(model)
     with workflow_scope("wf-1"):
         a = wrapped({"v": 1})
+    with workflow_scope("wf-1"):
         b = wrapped({"v": 1})
     assert a == b
     assert calls["n"] == 1
@@ -49,6 +50,7 @@ def test_local_memo_tool_runs_once():
     wrapped = durable_tool(add)
     with workflow_scope("wf-2"):
         assert wrapped(x=1) == 2
+    with workflow_scope("wf-2"):
         assert wrapped(x=1) == 2
     assert calls["n"] == 1
 
@@ -83,6 +85,7 @@ def test_make_run_step_with_restate_local_memo(tmp_path):
 
     with workflow_scope(TRAJECTORY_ID):
         r1 = run_step(step_n=1, model_call=model_call, context={})
+    with workflow_scope(TRAJECTORY_ID):
         r2 = run_step(step_n=1, model_call=model_call, context={})
 
     assert r1 == ["hi"]
@@ -126,3 +129,59 @@ def test_partial_durable_injection_lists_missing_names(tmp_path):
             durable_infer_fn=durable_infer,
             durable_tool_fn=durable_tool,
         )
+
+
+def test_local_memo_tool_sequence_in_same_scope():
+    clear_memo()
+    init_backend()
+    calls = {"n": 0}
+
+    def add(*, x: int) -> int:
+        calls["n"] += 1
+        return x + 1
+
+    wrapped = durable_tool(add)
+    with workflow_scope("wf-3"):
+        assert wrapped(x=1) == 2
+        assert wrapped(x=1) == 2
+    assert calls["n"] == 2
+
+
+def test_local_memo_cross_step_isolation(tmp_path):
+    clear_memo()
+    init_backend()
+    model_calls = {"n": 0}
+    tool_calls = {"n": 0}
+
+    def model_call(context: dict) -> dict:
+        model_calls["n"] += 1
+        return {"tool_calls": [{"name": "echo", "args": {"msg": "hi"}}]}
+
+    def echo(*, msg: str) -> str:
+        tool_calls["n"] += 1
+        return msg
+
+    node_log = NodeLog(str(tmp_path / "nodes2.sqlite"))
+    tools = {
+        "echo": Tool(name="echo", fn=echo, effect_class=EffectClass.PURE),
+    }
+    run_step = make_run_step(
+        node_log,
+        TENANT_ID,
+        TRAJECTORY_ID,
+        tools,
+        durable_infer_fn=durable_infer,
+        durable_tool_fn=durable_tool,
+        durable_workflow_fn=durable_workflow,
+    )
+
+    with workflow_scope(TRAJECTORY_ID):
+        r1 = run_step(step_n=1, model_call=model_call, context={})
+    with workflow_scope(TRAJECTORY_ID):
+        r2 = run_step(step_n=2, model_call=model_call, context={})
+
+    assert r1 == ["hi"]
+    assert r2 == ["hi"]
+    # Two different steps should run independently without memo collisions
+    assert model_calls["n"] == 2
+    assert tool_calls["n"] == 2

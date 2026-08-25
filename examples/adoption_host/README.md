@@ -24,7 +24,7 @@ real LLM client without changing seal or tool execution.
 |---------|--------|
 | `examples/adoption_host/` (this) | Adoption: full host loop + optional CAS / thin package |
 | `examples/host_loop/` | Minimal public client step (no packaging) |
-| `examples/kill-mid-deploy/` | Crash safety / durable workflow resume |
+| `examples/kill_mid_deploy/` | Crash safety / durable workflow resume |
 
 ## Run
 

@@ -59,8 +59,10 @@ from client.python.trajectory_client import (
 from trajectory_ir.effects import EffectClass
 from trajectory_ir.runtime.tool import Tool
 
+
 def echo(msg: str) -> str:
     return msg
+
 
 traj = open_trajectory(tenant_id="demo", trajectory_id="qs-1", db_path="qs.sqlite")
 # Optional sandbox (R06): open_trajectory(..., mode="sandbox")  # rejects NON_IDEMPOTENT_WRITE
@@ -78,11 +80,11 @@ commit_step(traj, step_n=1, seq=4)
 ### Durable step runner (DBOS)
 
 For full seal/resume with DBOS steps, use `make_run_step` as in
-`examples/kill-mid-deploy/agent.py` (used by R01/R02 and e2e tests).
+`examples/kill_mid_deploy/agent.py` (used by R01/R02 and e2e tests).
 
 ```bash
 # From repo root, isolate artifacts in a temp directory:
-# see examples/kill-mid-deploy/README.md
+# see examples/kill_mid_deploy/README.md
 pytest test/e2e conformance/r01_seal_resume_test.py conformance/r02_non_idempotent_test.py -q
 ```
 
@@ -268,7 +270,7 @@ Integration recipes and CI parity commands live in
 |---------|------|
 | `examples/host_loop/` | Minimal public client step |
 | `examples/adoption_host/` | Host loop + optional CAS / thin package (when present on your branch) |
-| `examples/kill-mid-deploy/` | Crash safety / durable resume |
+| `examples/kill_mid_deploy/` | Crash safety / durable resume |
 
 ---
 

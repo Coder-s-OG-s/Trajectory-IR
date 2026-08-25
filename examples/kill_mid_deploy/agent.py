@@ -1,14 +1,14 @@
 """Kill-mid-deploy fixture agent.
 
 Runs one durable step: infer a plan, seal the decision, execute a fake
-`deploy_server` tool. Used by test/e2e, conformance/, and the kill-mid-deploy
+`deploy_server` tool. Used by test/e2e, conformance/, and the kill_mid_deploy
 demo -- one script, three consumers, so crash-recovery behavior is only
 implemented once.
 
 Run it twice against the same working directory to exercise crash recovery:
 
-    python examples/kill-mid-deploy/agent.py --crash-during=tool_call   # then kill -9
-    python examples/kill-mid-deploy/agent.py --resume
+    python examples/kill_mid_deploy/agent.py --crash-during=tool_call   # then kill -9
+    python examples/kill_mid_deploy/agent.py --resume
 
 Crash points, each idling at a marker file so a harness can hard-kill there:
 `--crash-during=inference` (before the decision is sealed),
@@ -25,13 +25,6 @@ import os
 import sys
 import time
 
-# Run directly from a checkout (`python examples/kill-mid-deploy/agent.py`)
-# without requiring an installed package or a preset PYTHONPATH.
-_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-for _path in (_REPO_ROOT, os.path.join(_REPO_ROOT, "pkg")):
-    if _path not in sys.path:
-        sys.path.insert(0, _path)
-
 from dbos import SetWorkflowID
 
 from drivers.durable_backend.dbos.adapter import init_backend
@@ -41,7 +34,7 @@ from trajectory_ir.resume.step import make_run_step
 from trajectory_ir.runtime.log import NodeLog
 from trajectory_ir.runtime.tool import Tool
 
-TRAJECTORY_ID = "kill-mid-deploy-demo"
+TRAJECTORY_ID = "kill_mid_deploy-demo"
 TENANT_ID = "demo"
 DB_PATH = "kill_mid_deploy.sqlite"
 MODEL_CALL_COUNT_FILE = "test_model_call_count.txt"
@@ -147,7 +140,7 @@ def main():
         on_decision_sealed=seal_marker_hook,
     )
 
-    init_backend(app_name="kill-mid-deploy")
+    init_backend(app_name="kill_mid_deploy")
 
     try:
         with SetWorkflowID(TRAJECTORY_ID):
