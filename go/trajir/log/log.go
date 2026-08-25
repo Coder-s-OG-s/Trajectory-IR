@@ -36,9 +36,9 @@ func Open(path string) (*NodeLog, error) {
 	// One connection is enough for the local profile and keeps write order simple.
 	db.SetMaxOpenConns(1)
 
-	if _, err := db.Exec(`PRAGMA journal_mode=WAL;`); err != nil {
+	if _, err := db.Exec(`PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;`); err != nil {
 		_ = db.Close()
-		return nil, fmt.Errorf("set wal: %w", err)
+		return nil, fmt.Errorf("set wal and timeout: %w", err)
 	}
 
 	schema := `
