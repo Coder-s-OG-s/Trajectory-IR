@@ -19,7 +19,7 @@ Honest inventory of what is **on `main`** versus what remains **out of scope** o
 | Graft (R07) | `runtime/graft.py`, Go `trajir/graft` |
 | Redaction (R08 + export) | `runtime/redact.py`, Go `trajir/redact` |
 | Go IR stack | `go/trajir/*` — nodes, log, effects, durable, Temporal, resume, client, cas |
-| Demos / host example | `examples/kill-mid-deploy/`, `examples/host_loop/`, `examples/adoption_host/` (when merged), Go kill-mid-deploy |
+| Demos / host example | `examples/kill_mid_deploy/`, `examples/host_loop/`, `examples/adoption_host/` (when merged), Go kill_mid_deploy |
 | E2E storage walkthrough | [E2E_POSTGRES_CAS_THIN.md](E2E_POSTGRES_CAS_THIN.md) — SQLite/Postgres NodeLog + FS/S3 CAS + thin `.tir` |
 | CI | Phase A: DCO, Quality, Package smoke, Security (pip-audit), Go; Phase B: Integration (Postgres), Integration (MinIO) |
 

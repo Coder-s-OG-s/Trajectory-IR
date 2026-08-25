@@ -13,7 +13,7 @@ Run from the repository root::
 
 Compared with ``examples/host_loop``: same public client surface, but this
 demo also shows optional ``FileSystemCAS`` + thin ``export_tir`` + rehydrate.
-Crash safe durable workflow demos remain under ``examples/kill-mid-deploy/``.
+Crash safe durable workflow demos remain under ``examples/kill_mid_deploy/``.
 """
 
 from __future__ import annotations
@@ -29,25 +29,19 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-# Allow ``python examples/adoption_host/run_demo.py`` without a prior editable install.
-_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-for _path in (_REPO_ROOT, os.path.join(_REPO_ROOT, "pkg")):
-    if _path not in sys.path:
-        sys.path.insert(0, _path)
-
-from client.python.trajectory_client import (  # noqa: E402
+from client.python.trajectory_client import (
     commit_step,
     exec_tool,
     open_trajectory,
     project,
     seal_decision,
 )
-from trajectory_ir.effects import EffectClass  # noqa: E402
-from trajectory_ir.package import export_tir, load_tir  # noqa: E402
-from trajectory_ir.runtime.log import NodeLog  # noqa: E402
-from trajectory_ir.runtime.sandbox import SandboxForbidden  # noqa: E402
-from trajectory_ir.runtime.tool import Tool  # noqa: E402
-from trajectory_ir.storage import FileSystemCAS, put_artifact, rehydrate_artifacts  # noqa: E402
+from trajectory_ir.effects import EffectClass
+from trajectory_ir.package import export_tir, load_tir
+from trajectory_ir.runtime.log import NodeLog
+from trajectory_ir.runtime.sandbox import SandboxForbidden
+from trajectory_ir.runtime.tool import Tool
+from trajectory_ir.storage import FileSystemCAS, put_artifact, rehydrate_artifacts
 
 TENANT_ID = "demo"
 TRAJECTORY_ID = "adoption-host-demo"
