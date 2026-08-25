@@ -182,11 +182,25 @@ func (fs *FileSystem) Put(data []byte) (string, error) {
 	}
 	if err := os.Rename(tmpName, path); err != nil {
 		// On Windows os.Rename fails when the destination already exists.
-		// A concurrent Put for the same hash may have won the race. If the
-		// object is now present we treat this as an idempotent success and
-		// let the deferred cleanup remove our temp file.
-		if fs.Has(h) {
-			return h, nil
+		// A concurrent Put for the same hash may have won the race. Read
+		// the file back and verify the hash rather than just checking
+		// existence, so we never silently accept a corrupt object.
+		//
+		// The read itself may also fail transiently on Windows due to
+		// sharing violations while another goroutine's I/O completes,
+		// so retry a few times before giving up.
+		for attempts := 0; attempts < 5; attempts++ {
+			existing, readErr := os.ReadFile(path)
+			if readErr == nil {
+				if ContentHash(existing) == h {
+					return h, nil
+				}
+				return "", fmt.Errorf("%w: corrupt object at %s", ErrIntegrity, path)
+			}
+			if os.IsNotExist(readErr) {
+				break
+			}
+			time.Sleep(10 * time.Millisecond)
 		}
 		return "", err
 	}
