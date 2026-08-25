@@ -83,9 +83,6 @@ select = [
 
 
 [tool.ruff.lint.per-file-ignores]
-# Fixture agent adjusts sys.path before local imports on purpose.
-"examples/kill_mid_deploy/agent.py" = ["E402"]
-"examples/host_loop/run_host.py" = ["E402"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["trajectory_ir", "drivers", "client", "test"]
