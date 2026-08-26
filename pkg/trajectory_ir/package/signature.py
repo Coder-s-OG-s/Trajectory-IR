@@ -89,12 +89,18 @@ def payload_hash_from_members(members: dict[str, bytes]) -> bytes:
 
 
 def _safe_member_name(name: str) -> None:
+    # Match tir._safe_zip_name / Go safeZipName so load and sign agree.
     if not name or name.startswith(("/", "\\")):
         raise TirSignatureError(f"unsafe zip path: {name!r}")
     parts = name.replace("\\", "/").split("/")
-    for p in parts:
-        if p in ("", ".", ".."):
-            raise TirSignatureError(f"unsafe zip path: {name!r}")
+    if parts and parts[0] == "":
+        raise TirSignatureError(f"unsafe zip path: {name!r}")
+    if ".." in parts:
+        raise TirSignatureError(f"unsafe zip path: {name!r}")
+    if name.startswith("artifacts/") and not (
+        name == "artifacts/" or name.startswith("artifacts/cas/")
+    ):
+        raise TirSignatureError(f"unexpected artifact path: {name!r}")
 
 
 def _signing_key_from_bytes(key: bytes) -> SigningKey:
@@ -132,12 +138,9 @@ def _collect_zip_members(
                 f"zip member {name!r} uncompressed size {info.file_size} "
                 f"exceeds limit {MAX_UNCOMPRESSED_ENTRY_BYTES}"
             )
-        if info.file_size > budget:
-            raise TirLimitError(
-                f"zip total uncompressed size would exceed limit {MAX_TOTAL_UNCOMPRESSED_BYTES}"
-            )
+        limit = min(MAX_UNCOMPRESSED_ENTRY_BYTES, budget)
         with zf.open(name) as fp:
-            data = fp.read(MAX_UNCOMPRESSED_ENTRY_BYTES + 1)
+            data = fp.read(limit + 1)
         if len(data) > MAX_UNCOMPRESSED_ENTRY_BYTES:
             raise TirLimitError(f"zip member {name!r} expanded beyond per-entry limit")
         if len(data) > budget:
@@ -293,7 +296,7 @@ def sign_package(
     meta = meta or SignerMeta()
     signed_at = meta.signed_at or datetime.now(UTC)
     if signed_at.tzinfo is None:
-        signed_at = signed_at.replace(tzinfo=UTC)
+        raise TirSignatureError("signed_at must be timezone aware")
     signer: dict[str, str] = {"key_id": key_id(pub)}
     if meta.id:
         signer["id"] = meta.id

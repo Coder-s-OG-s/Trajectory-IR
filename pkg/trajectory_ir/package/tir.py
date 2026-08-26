@@ -30,6 +30,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from trajectory_ir.package.signature import (
+    SIGNATURE_MEMBER,
     SignerMeta,
     TirSignatureError,
     sign_package,
@@ -368,7 +369,9 @@ def export_tir(
     if sign_key is not None:
         try:
             sign_package(dest_path, sign_key, signer_meta)
-        except TirSignatureError:
+        except Exception:
+            # Any failure after the unsigned zip is on disk (crypto, IO, disk full)
+            # must not leave a half signed package behind.
             with contextlib.suppress(OSError):
                 dest_path.unlink()
             raise
@@ -475,10 +478,13 @@ def _load_tir_impl(path: str | Path, *, verify: bool) -> TirPackage:
         # Signature check after hash/seal integrity (README 9.1 order).
         # Use the already open archive only — never re open path (TOCTOU / CWE-367).
         # Present but invalid SIGNATURE fails even for load_tir_unverified (tamper).
-        try:
-            sig_info = verify_package_from_zip(zf)
-        except TirSignatureError as e:
-            raise TirVerificationError(str(e)) from e
+        # Unsigned packages skip the second decompress pass (match Go loadImpl).
+        sig_info = None
+        if SIGNATURE_MEMBER in name_set:
+            try:
+                sig_info = verify_package_from_zip(zf)
+            except TirSignatureError as e:
+                raise TirVerificationError(str(e)) from e
 
     return TirPackage(
         manifest=manifest,

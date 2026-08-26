@@ -223,3 +223,56 @@ def test_load_verifies_from_open_archive(tmp_path, monkeypatch):
     pkg = load_tir(out)
     assert pkg.signature is not None
     assert len(opened) == 1
+
+
+def test_load_unsigned_skips_signature_pass(tmp_path, monkeypatch):
+    """Unsigned packages must not pay for a second decompress (match Go)."""
+    import trajectory_ir.package.tir as tirmod
+
+    log = NodeLog(tmp_path / "nodes.sqlite")
+    log.append("DECISION", 1, {"plan": {"tool_calls": []}}, "t1", "demo", 1)
+    out = tmp_path / "unsigned.tir"
+    export_tir(log, "t1", out, mode="thin")
+
+    calls = {"n": 0}
+    real = tirmod.verify_package_from_zip
+
+    def _count(zf, **kwargs):
+        calls["n"] += 1
+        return real(zf, **kwargs)
+
+    monkeypatch.setattr(tirmod, "verify_package_from_zip", _count)
+    pkg = load_tir(out)
+    assert pkg.signature is None
+    assert calls["n"] == 0
+
+
+def test_sign_rejects_naive_signed_at(tmp_path):
+    from datetime import datetime
+
+    from trajectory_ir.package.signature import SignerMeta
+
+    log = NodeLog(tmp_path / "nodes.sqlite")
+    log.append("DECISION", 1, {"plan": {"tool_calls": []}}, "t1", "demo", 1)
+    out = tmp_path / "naive.tir"
+    export_tir(log, "t1", out, mode="thin")
+    key = _test_only_private_key()
+    with pytest.raises(TirSignatureError, match="timezone aware"):
+        sign_package(out, key, SignerMeta(signed_at=datetime(2026, 1, 1, 12, 0, 0)))
+
+
+def test_export_sign_failure_removes_unsigned_file(tmp_path, monkeypatch):
+    import trajectory_ir.package.tir as tirmod
+
+    log = NodeLog(tmp_path / "nodes.sqlite")
+    log.append("DECISION", 1, {"plan": {"tool_calls": []}}, "t1", "demo", 1)
+    out = tmp_path / "gone.tir"
+    key = _test_only_private_key()
+
+    def _boom(*_a, **_k):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(tirmod, "sign_package", _boom)
+    with pytest.raises(OSError, match="disk full"):
+        export_tir(log, "t1", out, mode="thin", sign_key=key)
+    assert not out.exists()
