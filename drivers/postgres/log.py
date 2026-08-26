@@ -45,7 +45,7 @@ def _require_psycopg():
 
 def _require_psycopg_pool():
     try:
-        from psycopg_pool import ConnectionPool
+        from psycopg_pool import ConnectionPool  # type: ignore[import-not-found,import-untyped]
     except ImportError as exc:
         raise ImportError(
             "psycopg-pool is required for connection pooling; "
@@ -407,7 +407,7 @@ def open_postgres_node_log(dsn: str | None = None, pool_size: int = 0) -> Postgr
         raise ValueError(
             "PostgreSQL DSN required: pass dsn= or set TRAJIR_DATABASE_URL / DATABASE_URL"
         )
-    
+
     if pool_size > 0:
         ConnectionPool = _require_psycopg_pool()
         pool = ConnectionPool(resolved, min_size=1, max_size=pool_size)
