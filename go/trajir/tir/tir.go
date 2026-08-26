@@ -29,6 +29,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/cas"
 	nodelog "github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/log"
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/nodes"
 )
@@ -101,6 +102,7 @@ type ExportOptions struct {
 	TenantID      *string // when set, only that tenant's nodes are exported
 	Artifacts     []ArtifactRef
 	ArtifactBytes map[string][]byte // content_hash -> bytes (required for fat)
+	CAS           cas.Store         // optional CAS for thin pre-validation
 	// SignKey, when set, must be a full ed25519 private key (64 bytes). Export then
 	// writes SIGNATURE after the zip (README §9.1). A non-empty key of the wrong
 	// length fails closed; it does not silently produce an unsigned package.
@@ -334,6 +336,12 @@ func Export(nodeLog *nodelog.NodeLog, trajectoryID, dest string, opts ExportOpti
 		}
 		if len(artifacts) > MaxArtifacts {
 			return "", fmt.Errorf("%w: too many artifacts: %d > %d", ErrLimit, len(artifacts), MaxArtifacts)
+		}
+	} else if mode == ModeThin && opts.CAS != nil {
+		for _, ref := range artifacts {
+			if !opts.CAS.Has(ref.ContentHash) {
+				return "", fmt.Errorf("%w: thin export missing artifact in CAS for content_hash=%s", ErrTir, ref.ContentHash)
+			}
 		}
 	}
 
