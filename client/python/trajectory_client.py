@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from drivers.durable_backend.dbos.adapter import init_backend
@@ -28,6 +28,24 @@ class Trajectory:
     tenant_id: str
     db_path: str
     mode: RunMode = RunMode.LIVE
+    _log: NodeLog = field(init=False, repr=False, compare=False)
+    _closed: bool = field(init=False, repr=False, compare=False, default=False)
+
+    def __post_init__(self):
+        self._log = NodeLog(self.db_path)
+        self._closed = False
+
+    def close(self) -> None:
+        """Close the underlying NodeLog SQLite connection idempotently."""
+        if not self._closed:
+            self._closed = True
+            self._log.close()
+
+    def __enter__(self) -> "Trajectory":
+        return self
+
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        self.close()
 
 
 @dataclass
@@ -72,7 +90,7 @@ def project(trajectory: Trajectory, step_n: int, context: dict) -> ProjectContex
     ``trajectory_ir.runtime.project_context`` first, then pass its
     ``ProjectResult.context`` here.
     """
-    NodeLog(trajectory.db_path).append(
+    trajectory._log.append(
         "PROJECT_CONTEXT",
         step_n,
         context,
@@ -84,7 +102,7 @@ def project(trajectory: Trajectory, step_n: int, context: dict) -> ProjectContex
 
 
 def seal_decision(trajectory: Trajectory, step_n: int, plan: dict) -> Decision:
-    NodeLog(trajectory.db_path).append(
+    trajectory._log.append(
         "DECISION",
         step_n,
         {"plan": plan},
@@ -114,7 +132,7 @@ def exec_tool(trajectory: Trajectory, step_n: int, call: dict, tool: Tool, seq: 
         tool_name=tool.name,
         effect_class=tool.effect_class,
     )
-    log = NodeLog(trajectory.db_path)
+    log = trajectory._log
     if requires_block_and_gate(tool.effect_class):
         fn = make_gated_tool_call(
             log,
@@ -149,7 +167,7 @@ def commit_step(trajectory: Trajectory, step_n: int, seq: int) -> None:
         seq: Sequence number for commit (should be 2 + 2*num_tool_calls to follow
             after all tool calls)
     """
-    NodeLog(trajectory.db_path).append(
+    trajectory._log.append(
         "COMMIT_STEP",
         step_n,
         {},
@@ -182,14 +200,22 @@ def resume(
     rather than silently behave like ``open_trajectory``.
     """
     init_backend(app_name=trajectory_id)
-    if not NodeLog(db_path).list_nodes_all_tenants(trajectory_id):
-        raise ValueError(
-            f"cannot resume trajectory_id={trajectory_id!r}: no existing nodes "
-            f"found in {db_path!r}; use open_trajectory() to start a new one"
-        )
-    return Trajectory(
+    traj = Trajectory(
         trajectory_id=trajectory_id,
         tenant_id=tenant_id,
         db_path=db_path,
         mode=normalize_run_mode(mode),
     )
+    try:
+        nodes = traj._log.list_nodes_all_tenants(trajectory_id)
+    except Exception:
+        traj.close()
+        raise
+
+    if not nodes:
+        traj.close()
+        raise ValueError(
+            f"cannot resume trajectory_id={trajectory_id!r}: no existing nodes "
+            f"found in {db_path!r}; use open_trajectory() to start a new one"
+        )
+    return traj
