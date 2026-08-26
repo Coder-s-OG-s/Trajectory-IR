@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import pytest
 
+pytest.importorskip("dbos")
+
 from client.python.trajectory_client import exec_tool, open_trajectory
 from trajectory_ir.effects import EffectClass
 from trajectory_ir.runtime.sandbox import RunMode, SandboxForbidden
