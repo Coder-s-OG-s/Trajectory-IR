@@ -21,6 +21,7 @@ Logical slot uniqueness: (tenant_id, trajectory_id, coalesce(step_n, -1), seq, k
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import threading
@@ -42,6 +43,17 @@ def _require_psycopg():
     return psycopg, tuple_row
 
 
+def _require_psycopg_pool():
+    try:
+        from psycopg_pool import ConnectionPool
+    except ImportError as exc:
+        raise ImportError(
+            "psycopg-pool is required for connection pooling; "
+            'pip install "psycopg-pool>=3.2" or pip install -e ".[postgres]"'
+        ) from exc
+    return ConnectionPool
+
+
 class PostgresNodeLog:
     """Append only, content addressed node log backed by PostgreSQL.
 
@@ -49,48 +61,60 @@ class PostgresNodeLog:
     callers can swap storage without changing seal or gate code.
     """
 
-    def __init__(self, conn: Any) -> None:
-        """Wrap an open psycopg connection (autocommit disabled)."""
-        self._lock = threading.RLock()
+    def __init__(self, conn: Any = None, pool: Any = None) -> None:
+        """Wrap an open psycopg connection or ConnectionPool."""
+        if (conn is None) == (pool is None):
+            raise ValueError("Provide exactly one of conn or pool")
         self._conn = conn
+        self._pool = pool
+        self._is_pool = pool is not None
+        self._lock = threading.RLock() if not self._is_pool else contextlib.nullcontext()
         self._ensure_schema()
 
+    @contextlib.contextmanager
+    def _cursor(self):
+        if self._is_pool:
+            with self._pool.connection() as conn, conn.cursor() as cur:
+                yield conn, cur
+        else:
+            with self._lock, self._conn.cursor() as cur:
+                yield self._conn, cur
+
     def _ensure_schema(self) -> None:
-        with self._lock:
-            with self._conn.cursor() as cur:
-                cur.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS nodes (
-                        id TEXT PRIMARY KEY,
-                        trajectory_id TEXT NOT NULL,
-                        tenant_id TEXT NOT NULL,
-                        step_n INTEGER,
-                        seq INTEGER NOT NULL,
-                        kind TEXT NOT NULL,
-                        payload_json TEXT NOT NULL,
-                        ts DOUBLE PRECISION NOT NULL
-                    )
-                    """
+        with self._cursor() as (conn, cur):
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS nodes (
+                    id TEXT PRIMARY KEY,
+                    trajectory_id TEXT NOT NULL,
+                    tenant_id TEXT NOT NULL,
+                    step_n INTEGER,
+                    seq INTEGER NOT NULL,
+                    kind TEXT NOT NULL,
+                    payload_json TEXT NOT NULL,
+                    ts DOUBLE PRECISION NOT NULL
                 )
-                cur.execute(
-                    """
-                    CREATE UNIQUE INDEX IF NOT EXISTS idx_nodes_slot
-                    ON nodes (
-                        tenant_id,
-                        trajectory_id,
-                        (COALESCE(step_n, -1)),
-                        seq,
-                        kind
-                    )
-                    """
+                """
+            )
+            cur.execute(
+                """
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_nodes_slot
+                ON nodes (
+                    tenant_id,
+                    trajectory_id,
+                    (COALESCE(step_n, -1)),
+                    seq,
+                    kind
                 )
-                cur.execute(
-                    """
-                    CREATE INDEX IF NOT EXISTS idx_nodes_traj_tenant
-                    ON nodes (trajectory_id, tenant_id)
-                    """
-                )
-            self._conn.commit()
+                """
+            )
+            cur.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_nodes_traj_tenant
+                ON nodes (trajectory_id, tenant_id)
+                """
+            )
+            conn.commit()
 
     def _slot_owner_id(
         self,
@@ -141,48 +165,47 @@ class PostgresNodeLog:
             seq=seq,
             payload=payload,
         )
-        with self._lock:
+        with self._cursor() as (conn, cur):
             try:
-                with self._conn.cursor() as cur:
-                    cur.execute(
-                        """
-                        INSERT INTO nodes
-                        (id, trajectory_id, tenant_id, step_n, seq, kind, payload_json, ts)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                        ON CONFLICT (id) DO NOTHING
-                        """,
-                        (
-                            node.id,
-                            node.trajectory_id,
-                            node.tenant_id,
-                            node.step_n,
-                            node.seq,
-                            node.kind,
-                            json.dumps(node.payload),
-                            node.ts,
-                        ),
+                cur.execute(
+                    """
+                    INSERT INTO nodes
+                    (id, trajectory_id, tenant_id, step_n, seq, kind, payload_json, ts)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (id) DO NOTHING
+                    """,
+                    (
+                        node.id,
+                        node.trajectory_id,
+                        node.tenant_id,
+                        node.step_n,
+                        node.seq,
+                        node.kind,
+                        json.dumps(node.payload),
+                        node.ts,
+                    ),
+                )
+                owner = self._slot_owner_id(
+                    cur,
+                    tenant_id=tenant_id,
+                    trajectory_id=trajectory_id,
+                    step_n=step_n,
+                    seq=seq,
+                    kind=kind,
+                )
+                if owner is not None and owner != node.id:
+                    conn.rollback()
+                    raise SlotConflictError(
+                        f"slot conflict trajectory={trajectory_id!r} step={step_n} "
+                        f"seq={seq} kind={kind!r}: different payload already stored"
                     )
-                    owner = self._slot_owner_id(
-                        cur,
-                        tenant_id=tenant_id,
-                        trajectory_id=trajectory_id,
-                        step_n=step_n,
-                        seq=seq,
-                        kind=kind,
-                    )
-                    if owner is not None and owner != node.id:
-                        self._conn.rollback()
-                        raise SlotConflictError(
-                            f"slot conflict trajectory={trajectory_id!r} step={step_n} "
-                            f"seq={seq} kind={kind!r}: different payload already stored"
-                        )
-                self._conn.commit()
+                conn.commit()
             except UniqueViolation:
                 # Slot unique index fired (different content id, same slot).
-                self._conn.rollback()
-                with self._conn.cursor() as cur:
+                conn.rollback()
+                with self._cursor() as (_conn2, cur2):
                     owner = self._slot_owner_id(
-                        cur,
+                        cur2,
                         tenant_id=tenant_id,
                         trajectory_id=trajectory_id,
                         step_n=step_n,
@@ -217,47 +240,46 @@ class PostgresNodeLog:
             seq=seq,
             payload=payload,
         )
-        with self._lock:
+        with self._cursor() as (conn, cur):
             try:
-                with self._conn.cursor() as cur:
-                    cur.execute(
-                        """
-                        SELECT 1 FROM nodes
-                        WHERE tenant_id = %s AND trajectory_id = %s
-                          AND step_n = %s AND kind = %s AND seq = %s
-                        LIMIT 1
-                        FOR UPDATE
-                        """,
-                        (tenant_id, trajectory_id, step_n, "TOOL_CALL", seq),
-                    )
-                    if cur.fetchone() is not None:
-                        self._conn.commit()
-                        return False
-                    cur.execute(
-                        """
-                        INSERT INTO nodes
-                        (id, trajectory_id, tenant_id, step_n, seq, kind, payload_json, ts)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                        """,
-                        (
-                            node.id,
-                            node.trajectory_id,
-                            node.tenant_id,
-                            node.step_n,
-                            node.seq,
-                            node.kind,
-                            json.dumps(node.payload),
-                            node.ts,
-                        ),
-                    )
-                self._conn.commit()
+                cur.execute(
+                    """
+                    SELECT 1 FROM nodes
+                    WHERE tenant_id = %s AND trajectory_id = %s
+                      AND step_n = %s AND kind = %s AND seq = %s
+                    LIMIT 1
+                    FOR UPDATE
+                    """,
+                    (tenant_id, trajectory_id, step_n, "TOOL_CALL", seq),
+                )
+                if cur.fetchone() is not None:
+                    conn.commit()
+                    return False
+                cur.execute(
+                    """
+                    INSERT INTO nodes
+                    (id, trajectory_id, tenant_id, step_n, seq, kind, payload_json, ts)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        node.id,
+                        node.trajectory_id,
+                        node.tenant_id,
+                        node.step_n,
+                        node.seq,
+                        node.kind,
+                        json.dumps(node.payload),
+                        node.ts,
+                    ),
+                )
+                conn.commit()
                 return True
             except UniqueViolation:
-                self._conn.rollback()
+                conn.rollback()
                 # Another writer won the slot between our SELECT and INSERT.
                 return False
             except Exception:
-                self._conn.rollback()
+                conn.rollback()
                 raise
 
     def has(
@@ -308,12 +330,12 @@ class PostgresNodeLog:
             sql += " AND seq = %s"
             params.append(seq)
         sql += " LIMIT 1"
-        with self._lock, self._conn.cursor() as cur:
+        with self._cursor() as (_conn, cur):
             cur.execute(sql, params)
             return cur.fetchone() is not None
 
     def count(self, node_id: str) -> int:
-        with self._lock, self._conn.cursor() as cur:
+        with self._cursor() as (_conn, cur):
             cur.execute("SELECT COUNT(*) FROM nodes WHERE id = %s", (node_id,))
             row = cur.fetchone()
             return int(row[0]) if row else 0
@@ -345,7 +367,7 @@ class PostgresNodeLog:
             sql += " AND tenant_id = %s"
             params.append(tenant_id)
         sql += " ORDER BY COALESCE(step_n, -1), seq"
-        with self._lock, self._conn.cursor() as cur:
+        with self._cursor() as (_conn, cur):
             cur.execute(sql, params)
             rows: list[dict[str, Any]] = []
             for row in cur.fetchall():
@@ -365,10 +387,13 @@ class PostgresNodeLog:
 
     def close(self) -> None:
         with self._lock:
-            self._conn.close()
+            if self._is_pool:
+                self._pool.close()
+            else:
+                self._conn.close()
 
 
-def open_postgres_node_log(dsn: str | None = None) -> PostgresNodeLog:
+def open_postgres_node_log(dsn: str | None = None, pool_size: int = 0) -> PostgresNodeLog:
     """Open a :class:`PostgresNodeLog` from a DSN or environment.
 
     Resolution order:
@@ -382,5 +407,10 @@ def open_postgres_node_log(dsn: str | None = None) -> PostgresNodeLog:
         raise ValueError(
             "PostgreSQL DSN required: pass dsn= or set TRAJIR_DATABASE_URL / DATABASE_URL"
         )
+    
+    if pool_size > 0:
+        ConnectionPool = _require_psycopg_pool()
+        pool = ConnectionPool(resolved, min_size=1, max_size=pool_size)
+        return PostgresNodeLog(pool=pool)
     conn = psycopg.connect(resolved)
-    return PostgresNodeLog(conn)
+    return PostgresNodeLog(conn=conn)

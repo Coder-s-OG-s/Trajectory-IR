@@ -75,3 +75,61 @@ def test_live_claim_tool_call_single_winner(log):
         t.join()
     assert sum(1 for w in wins if w) == 1
     assert log.has(traj, "demo", 1, "TOOL_CALL", seq=2)
+
+@pytest.fixture
+def pool_log():
+    node_log = open_postgres_node_log(pool_size=5)
+    yield node_log
+    node_log.close()
+
+
+def test_live_pool_concurrency(pool_log):
+    traj = f"live-pool-{uuid.uuid4().hex[:12]}"
+    
+    # We will spawn 10 threads. Each thread tries to claim the same TOOL_CALL slot,
+    # and then appends a unique node. We expect exactly one thread to successfully
+    # claim the tool call, and all threads to successfully append their unique nodes.
+    
+    success_claims = []
+    append_ids = []
+    errors = []
+    
+    def worker(i: int):
+        try:
+            # Concurrent claims
+            claimed = pool_log.claim_tool_call(
+                step_n=1,
+                payload={"tool": "test"},
+                trajectory_id=traj,
+                tenant_id="demo",
+                seq=1
+            )
+            if claimed:
+                success_claims.append(i)
+                
+            # Concurrent unique appends (different seq)
+            node = pool_log.append(
+                kind="TOOL_OUTPUT",
+                step_n=1,
+                payload={"result": i},
+                trajectory_id=traj,
+                tenant_id="demo",
+                seq=10 + i
+            )
+            append_ids.append(node.id)
+        except Exception as e:
+            errors.append(e)
+
+    threads = [threading.Thread(target=worker, args=(i,)) for i in range(10)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert not errors, f"Concurrent workers hit exceptions: {errors}"
+    assert len(success_claims) == 1, "Exactly one thread should win the claim_tool_call"
+    
+    rows = pool_log.list_nodes(traj, tenant_id="demo")
+    
+    # 1 claim + 10 appends = 11 nodes total
+    assert len(rows) == 11
