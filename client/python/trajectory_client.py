@@ -1,3 +1,4 @@
+import contextlib
 from dataclasses import dataclass
 from typing import Any
 
@@ -72,26 +73,28 @@ def project(trajectory: Trajectory, step_n: int, context: dict) -> ProjectContex
     ``trajectory_ir.runtime.project_context`` first, then pass its
     ``ProjectResult.context`` here.
     """
-    NodeLog(trajectory.db_path).append(
-        "PROJECT_CONTEXT",
-        step_n,
-        context,
-        trajectory.trajectory_id,
-        trajectory.tenant_id,
-        seq=0,
-    )
+    with contextlib.closing(NodeLog(trajectory.db_path)) as log:
+        log.append(
+            "PROJECT_CONTEXT",
+            step_n,
+            context,
+            trajectory.trajectory_id,
+            trajectory.tenant_id,
+            seq=0,
+        )
     return ProjectContext(step_n=step_n, context=context)
 
 
 def seal_decision(trajectory: Trajectory, step_n: int, plan: dict) -> Decision:
-    NodeLog(trajectory.db_path).append(
-        "DECISION",
-        step_n,
-        {"plan": plan},
-        trajectory.trajectory_id,
-        trajectory.tenant_id,
-        seq=1,
-    )
+    with contextlib.closing(NodeLog(trajectory.db_path)) as log:
+        log.append(
+            "DECISION",
+            step_n,
+            {"plan": plan},
+            trajectory.trajectory_id,
+            trajectory.tenant_id,
+            seq=1,
+        )
     return Decision(step_n=step_n, plan=plan)
 
 
@@ -114,29 +117,29 @@ def exec_tool(trajectory: Trajectory, step_n: int, call: dict, tool: Tool, seq: 
         tool_name=tool.name,
         effect_class=tool.effect_class,
     )
-    log = NodeLog(trajectory.db_path)
-    if requires_block_and_gate(tool.effect_class):
-        fn = make_gated_tool_call(
-            log,
-            trajectory.trajectory_id,
-            trajectory.tenant_id,
-            step_n,
-            seq=seq,
-            tool_name=tool.name,
-            tool_fn=tool.fn,
-        )
-        result = fn(**call["args"])
-    else:
-        fn = make_plain_tool_call(
-            log,
-            trajectory.trajectory_id,
-            trajectory.tenant_id,
-            step_n,
-            seq=seq,
-            tool_name=tool.name,
-            tool_fn=tool.fn,
-        )
-        result = fn(**call["args"])
+    with contextlib.closing(NodeLog(trajectory.db_path)) as log:
+        if requires_block_and_gate(tool.effect_class):
+            fn = make_gated_tool_call(
+                log,
+                trajectory.trajectory_id,
+                trajectory.tenant_id,
+                step_n,
+                seq=seq,
+                tool_name=tool.name,
+                tool_fn=tool.fn,
+            )
+            result = fn(**call["args"])
+        else:
+            fn = make_plain_tool_call(
+                log,
+                trajectory.trajectory_id,
+                trajectory.tenant_id,
+                step_n,
+                seq=seq,
+                tool_name=tool.name,
+                tool_fn=tool.fn,
+            )
+            result = fn(**call["args"])
     return ToolResult(step_n=step_n, result=result)
 
 
@@ -149,14 +152,15 @@ def commit_step(trajectory: Trajectory, step_n: int, seq: int) -> None:
         seq: Sequence number for commit (should be 2 + 2*num_tool_calls to follow
             after all tool calls)
     """
-    NodeLog(trajectory.db_path).append(
-        "COMMIT_STEP",
-        step_n,
-        {},
-        trajectory.trajectory_id,
-        trajectory.tenant_id,
-        seq=seq,
-    )
+    with contextlib.closing(NodeLog(trajectory.db_path)) as log:
+        log.append(
+            "COMMIT_STEP",
+            step_n,
+            {},
+            trajectory.trajectory_id,
+            trajectory.tenant_id,
+            seq=seq,
+        )
 
 
 def resume(
@@ -182,11 +186,12 @@ def resume(
     rather than silently behave like ``open_trajectory``.
     """
     init_backend(app_name=trajectory_id)
-    if not NodeLog(db_path).list_nodes_all_tenants(trajectory_id):
-        raise ValueError(
-            f"cannot resume trajectory_id={trajectory_id!r}: no existing nodes "
-            f"found in {db_path!r}; use open_trajectory() to start a new one"
-        )
+    with contextlib.closing(NodeLog(db_path)) as log:
+        if not log.list_nodes_all_tenants(trajectory_id):
+            raise ValueError(
+                f"cannot resume trajectory_id={trajectory_id!r}: no existing nodes "
+                f"found in {db_path!r}; use open_trajectory() to start a new one"
+            )
     return Trajectory(
         trajectory_id=trajectory_id,
         tenant_id=tenant_id,
