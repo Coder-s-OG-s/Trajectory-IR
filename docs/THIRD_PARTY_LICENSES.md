@@ -24,10 +24,10 @@ Clean-venv install of `pip install .[postgres,s3]` (the real runtime deps:
 
 | Package | License |
 |---|---|
-| `psycopg`, `psycopg-binary` | **LGPL-3.0-only** — documented exception, see below |
+| `psycopg`, `psycopg-binary`, `psycopg-pool` | **LGPL-3.0-only** — documented exception, see below |
 | everything else (`dbos`, `rfc8785`, `boto3`, `botocore`, `s3transfer`, `jmespath`, `python-dateutil`, `click`, `PyYAML`, `SQLAlchemy`, `greenlet`, `typing_extensions`, `tzdata`, `urllib3`, `six`, `colorama`, `websockets`) | Apache-2.0 / MIT / BSD / PSF-2.0 |
 
-**`psycopg`/`psycopg-binary` exception:** LGPL-3.0-only. `postgres` is an
+**`psycopg`/`psycopg-binary`/`psycopg-pool` exception:** LGPL-3.0-only. `postgres` is an
 optional extra, not a core dependency; it's imported as an unmodified
 library, never statically linked into a single binary. This is the standard
 basis on which CNCF/ASF-style policy treats LGPL as acceptable. Explicitly

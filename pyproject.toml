@@ -32,7 +32,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest", "pytest-cov", "ruff", "mypy", "pip-audit", "rfc8785"]
-postgres = ["psycopg[binary]>=3.1", "rfc8785"]
+postgres = ["psycopg[binary]>=3.1", "psycopg-pool", "rfc8785"]
 s3 = ["boto3", "rfc8785"]
 rfc8785 = ["rfc8785"]
 

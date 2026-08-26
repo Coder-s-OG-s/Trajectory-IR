@@ -98,7 +98,7 @@ jobs:
       - name: Install runtime dependencies
         run: pip install --upgrade pip pip-licenses ".[postgres,s3]"
 
-      # CNCF allowlist: permissive licenses only. psycopg/psycopg-binary are
+      # CNCF allowlist: permissive licenses only. psycopg/psycopg-binary/psycopg-pool are
       # LGPL-3.0-only -- an optional extra, imported as an unmodified library
       # (never statically linked), which is the standard basis on which
       # CNCF/ASF-style policy treats LGPL as acceptable. Documented exception,
@@ -108,7 +108,7 @@ jobs:
         run: |
           pip-licenses \
             --allow-only="Apache Software License;Apache-2.0;MIT License;MIT;MIT AND PSF-2.0;BSD License;BSD-3-Clause;BSD-2-Clause;ISC License (ISCL);ISC;Python Software Foundation License;PSF-2.0;Apache Software License; BSD License" \
-            --ignore-packages psycopg psycopg-binary
+            --ignore-packages psycopg psycopg-binary psycopg-pool
 
   license-scan-go:
     name: Dependency license scan (Go)
