@@ -1,0 +1,7 @@
+Trajectory IR Go demo: kill mid deploy
+workdir: ./kill_mid_deploy-data
+mode: first run
+INFERENCE: model produced a deploy plan
+DECISION sealed (plan frozen; resume must not re-ask the model for this step)
+TOOL_CALL: deploy_server started
+>>> Kill this process now (Ctrl+C or kill -9 / taskkill), then re-run with -resume
