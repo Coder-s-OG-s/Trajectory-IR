@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/cas"
 	nodelog "github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/log"
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/tir"
 )
@@ -612,4 +613,74 @@ func splitNonEmpty(data []byte) [][]byte {
 		lines = append(lines, append([]byte(nil), data[start:]...))
 	}
 	return lines
+}
+
+func TestExportThinRejectsMissingCASArtifact(t *testing.T) {
+	src := openLog(t, "src.sqlite")
+	seedSample(t, src)
+
+	store, err := cas.NewFileSystem(filepath.Join(t.TempDir(), "cas"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	h := "aa" + "00000000000000000000000000000000000000000000000000000000000000"[:62]
+	_, err = tir.Export(src, "t-export", filepath.Join(t.TempDir(), "x.tir"), tir.ExportOptions{
+		Mode:      tir.ModeThin,
+		CAS:       store,
+		Artifacts: []tir.ArtifactRef{{LogicalPath: "missing.bin", ContentHash: h}},
+	})
+	if err == nil {
+		t.Fatal("expected error for missing CAS artifact")
+	}
+	if !errors.Is(err, cas.ErrNotFound) {
+		t.Fatalf("err=%v want cas.ErrNotFound", err)
+	}
+}
+
+func TestExportThinSucceedsWithCASArtifactPresent(t *testing.T) {
+	src := openLog(t, "src.sqlite")
+	seedSample(t, src)
+
+	store, err := cas.NewFileSystem(filepath.Join(t.TempDir(), "cas"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	blob := []byte("artifact content for thin export")
+	h, err := store.Put(blob)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	out := filepath.Join(t.TempDir(), "thin_cas.tir")
+	path, err := tir.Export(src, "t-export", out, tir.ExportOptions{
+		Mode:      tir.ModeThin,
+		CAS:       store,
+		Artifacts: []tir.ArtifactRef{{LogicalPath: "present.bin", ContentHash: h}},
+	})
+	if err != nil {
+		t.Fatalf("export should succeed when CAS has the artifact: %v", err)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestExportThinWithoutCASSkipsValidation(t *testing.T) {
+	src := openLog(t, "src.sqlite")
+	seedSample(t, src)
+
+	h := "bb" + "00000000000000000000000000000000000000000000000000000000000000"[:62]
+	out := filepath.Join(t.TempDir(), "no_cas.tir")
+	path, err := tir.Export(src, "t-export", out, tir.ExportOptions{
+		Mode:      tir.ModeThin,
+		Artifacts: []tir.ArtifactRef{{LogicalPath: "whatever.bin", ContentHash: h}},
+	})
+	if err != nil {
+		t.Fatalf("export without CAS should not validate: %v", err)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatal(err)
+	}
 }

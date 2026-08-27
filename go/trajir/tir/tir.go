@@ -29,6 +29,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/cas"
 	nodelog "github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/log"
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/nodes"
 )
@@ -101,6 +102,7 @@ type ExportOptions struct {
 	TenantID      *string // when set, only that tenant's nodes are exported
 	Artifacts     []ArtifactRef
 	ArtifactBytes map[string][]byte // content_hash -> bytes (required for fat)
+	CAS           cas.Store
 	// SignKey, when set, must be a full ed25519 private key (64 bytes). Export then
 	// writes SIGNATURE after the zip (README §9.1). A non-empty key of the wrong
 	// length fails closed; it does not silently produce an unsigned package.
@@ -269,6 +271,23 @@ func sealsFromNodes(nodeList []map[string]any) ([]map[string]any, error) {
 	return seals, nil
 }
 
+func ensureArtifactsInCAS(store cas.Store, artifacts []ArtifactRef) error {
+	var missing []string
+	for _, a := range artifacts {
+		h, err := cas.NormalizeHash(a.ContentHash)
+		if err != nil {
+			return fmt.Errorf("%w: artifact content_hash invalid: %v", ErrTir, err)
+		}
+		if !store.Has(h) {
+			missing = append(missing, h)
+		}
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("%w: CAS missing content hashes required by package: %s", cas.ErrNotFound, strings.Join(missing, ", "))
+	}
+	return nil
+}
+
 // Export writes a .tir zip for trajectoryID from nodeLog.
 func Export(nodeLog *nodelog.NodeLog, trajectoryID, dest string, opts ExportOptions) (string, error) {
 	if nodeLog == nil {
@@ -317,6 +336,11 @@ func Export(nodeLog *nodelog.NodeLog, trajectoryID, dest string, opts ExportOpti
 	artifacts := opts.Artifacts
 	if artifacts == nil {
 		artifacts = []ArtifactRef{}
+	}
+	if opts.CAS != nil && mode == ModeThin && len(artifacts) > 0 {
+		if err := ensureArtifactsInCAS(opts.CAS, artifacts); err != nil {
+			return "", err
+		}
 	}
 	if mode == ModeFat {
 		for _, ref := range artifacts {
