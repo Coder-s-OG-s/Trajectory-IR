@@ -42,7 +42,7 @@ Based on the [Infrastructure Blueprint](infrastructure.md) and [Master Spec](REA
 - **Sensitive Data Leakage**: Flaws where secret-like fields or thoughts leak during a `redacted` `.tir` package export.
 - **Package resource exhaustion**: Zip bombs / oversized members must be rejected by load limits (`TirLimitError`).
 - **Unverified import**: `import_tir` always verifies; `load_tir(verify=False)` is disabled. Inspection without verification requires explicit `load_tir_unverified()` and must never write to a durable NodeLog.
-- **Integrity vs provenance**: Node hash verification proves content integrity, not publisher authenticity. Package signatures remain reserved / unimplemented until a cryptography-focused design lands.
+- **Integrity vs provenance**: Node hash verification proves content integrity, not publisher authenticity. Optional package signatures (`trajir-pkg-sig-v1`, Ed25519) prove publisher authenticity when a `SIGNATURE` member is present; unsigned packages remain valid by default.
 
 ### D. Execution concurrency
 - **Block-and-gate races**: Claiming a `TOOL_CALL` slot must be atomic so concurrent workers cannot double-run a `NON_IDEMPOTENT_WRITE` tool (R02).
@@ -54,7 +54,7 @@ Based on the [Infrastructure Blueprint](infrastructure.md) and [Master Spec](REA
 | Atomic TOOL_CALL claim (gate) | Implemented |
 | `.tir` size / path safety limits | Implemented |
 | Redacted export (secret-like keys/values + thoughts) | Implemented (basic, keyword/pattern heuristic — not a secret scanner; still review before external sharing) |
-| Package digital signatures | Not implemented (reserved) |
+| Package digital signatures (`trajir-pkg-sig-v1`) | Implemented (optional; verify on load when present) |
 | Full multi-tenant SaaS isolation | Not a product surface yet; tenant_id filter on list/export exists |
 | Fluid / k8s cache poisoning controls | Design only (future profile) |
 
