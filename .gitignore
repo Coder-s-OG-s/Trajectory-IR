@@ -88,3 +88,10 @@ go/.tmp/
 go/.bin/
 *.test
 *.test.exe
+
+# MkDocs demo site build output
+website/site/
+
+# Local demo capture workdirs
+go/_demo_capture*/
+

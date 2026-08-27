@@ -1,0 +1,81 @@
+site_name: Trajectory IR
+site_description: Portable, hash-verifiable intermediate representation for agent execution trajectories
+site_url: https://coder-s-og-s.github.io/Trajectory-IR/
+repo_url: https://github.com/Coder-s-OG-s/Trajectory-IR
+repo_name: Coder-s-OG-s/Trajectory-IR
+edit_uri: edit/main/website/docs/
+copyright: Apache 2.0 · Trajectory IR maintainers
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.instant
+    - content.code.copy
+    - content.tabs.link
+    - search.suggest
+    - toc.follow
+  icon:
+    repo: fontawesome/brands/github
+
+plugins:
+  - search
+  - tags
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets:
+      base_path:
+        - fixtures
+        - docs
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/Coder-s-OG-s/Trajectory-IR
+
+nav:
+  - Home: index.md
+  - Demos:
+      - Overview: demos/index.md
+      - Kill mid deploy: demos/kill-mid-deploy.md
+      - Adoption host + .tir: demos/adoption-host.md
+      - Sandbox mode: demos/sandbox.md
+  - Getting started: getting-started.md
+  - Architecture: architecture.md
+  - Talk:
+      - Speaker runbook: talk/speaker-runbook.md
+      - Conference pitch: talk/pitch.md

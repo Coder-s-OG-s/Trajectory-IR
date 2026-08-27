@@ -1,0 +1,1 @@
+sandbox correctly rejected non idempotent tool: SANDBOX_REJECTS_NON_IDEMPOTENT_WRITE: tool "ship_release" effect=NON_IDEMPOTENT_WRITE is forbidden in sandbox mode
