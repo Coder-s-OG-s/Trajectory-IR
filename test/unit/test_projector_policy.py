@@ -63,6 +63,7 @@ def test_bad_metric_fails() -> None:
 
 
 def test_project_uses_policy_kinds() -> None:
+    pytest.importorskip("rfc8785")
     nodes = [
         _node("d1", "DECISION", {"plan": {}}, seq=0),
         _node("t1", "THOUGHT", {"text": "x" * 20}, seq=1),
@@ -73,6 +74,7 @@ def test_project_uses_policy_kinds() -> None:
 
 
 def test_budget_from_policy_when_arg_omitted() -> None:
+    pytest.importorskip("rfc8785")
     nodes = [_node("c1", "CONSTRAINT", {"rule": "a"}, seq=0)]
     pol = ProjectorPolicy(default_budget=50_000)
     result = project_context(nodes, policy=pol)

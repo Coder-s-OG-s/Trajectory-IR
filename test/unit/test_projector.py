@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import pytest
 
+pytest.importorskip("rfc8785")
+
 from trajectory_ir.runtime.projector import (
     BudgetImpossible,
     node_size_units,

@@ -5,6 +5,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
+pytest.importorskip("rfc8785")
+
 from trajectory_ir.runtime.projector import SIZE_METRIC, node_size_units
 
 _ROOT = Path(__file__).resolve().parents[2]
