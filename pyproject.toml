@@ -28,6 +28,9 @@ classifiers = [
 ]
 dependencies = [
     "dbos",
+    "pynacl",
+    # cffi 2.1+ reports MIT-0, which the license allowlist does not list yet.
+    "cffi>=1.14,<2.1",
 ]
 
 [project.optional-dependencies]
