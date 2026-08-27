@@ -29,6 +29,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
+from trajectory_ir.package.errors import TirError
 from trajectory_ir.package.signature import (
     SIGNATURE_MEMBER,
     SignerMeta,
@@ -68,10 +69,6 @@ _REQUIRED_MEMBERS = frozenset(
 )
 
 # Redaction patterns live in runtime.redact (shared with R08 projection).
-
-
-class TirError(Exception):
-    """Base error for package operations."""
 
 
 class TirVerificationError(TirError):

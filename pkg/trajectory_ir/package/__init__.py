@@ -1,5 +1,6 @@
 """Portable `.tir` package export and import."""
 
+from trajectory_ir.package.errors import TirError
 from trajectory_ir.package.signature import (
     SignatureInfo,
     SignerMeta,
@@ -11,7 +12,6 @@ from trajectory_ir.package.tir import (
     COMPAT,
     PACKAGE_FORMAT_VERSION,
     ArtifactRef,
-    TirError,
     TirLimitError,
     TirPackage,
     TirVerificationError,

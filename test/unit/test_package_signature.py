@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 from nacl.signing import SigningKey, VerifyKey
 
+from trajectory_ir.package.errors import TirError
 from trajectory_ir.package.signature import (
     TirSignatureError,
     domain_separated_message,
@@ -20,6 +21,17 @@ from trajectory_ir.package.signature import (
 )
 from trajectory_ir.package.tir import export_tir, load_tir
 from trajectory_ir.runtime.log import NodeLog
+
+
+def test_tir_signature_error_is_tir_error():
+    assert issubclass(TirSignatureError, TirError)
+    caught = False
+    try:
+        raise TirSignatureError("boom")
+    except TirError:
+        caught = True
+    assert caught
+
 
 _GOLDEN = (
     Path(__file__).resolve().parents[2]

@@ -23,6 +23,8 @@ from typing import Any
 from nacl.exceptions import BadSignatureError
 from nacl.signing import SigningKey, VerifyKey
 
+from trajectory_ir.package.errors import TirError
+
 SIGNATURE_MEMBER = "SIGNATURE"
 SCHEME_V1 = "trajir-pkg-sig-v1"
 PAYLOAD_ALG_V1 = "trajir-pkg-payload-v1"
@@ -34,7 +36,7 @@ _SEED_SIZE = 32
 _PUBLIC_KEY_SIZE = 32
 
 
-class TirSignatureError(Exception):
+class TirSignatureError(TirError):
     """Package signature failure (missing when required, tamper, unknown scheme)."""
 
 
