@@ -34,6 +34,39 @@ def test_resume_raises_on_trajectory_with_no_history(tmp_path):
         resume("brand-new-trajectory", db_path=db_path)
 
 
+def test_resume_raises_on_empty_history_and_closes_connection(tmp_path, monkeypatch):
+    import sqlite3
+
+    from client.python.trajectory_client import Trajectory
+
+    db_path = str(tmp_path / "trajectory.sqlite")
+    closed_conns = []
+
+    orig_close = Trajectory.close
+
+    def spy_close(self):
+        closed_conns.append(self._log._conn)
+        orig_close(self)
+
+    monkeypatch.setattr(Trajectory, "close", spy_close)
+
+    with pytest.raises(ValueError, match="no existing nodes"):
+        resume("brand-new-trajectory", db_path=db_path)
+
+    assert len(closed_conns) == 1
+    with pytest.raises(sqlite3.ProgrammingError):
+        closed_conns[0].execute("SELECT 1")
+
+
+def test_trajectory_close_is_idempotent(tmp_path):
+    db_path = str(tmp_path / "trajectory.sqlite")
+    traj = open_trajectory("demo", "t1", db_path=db_path)
+    traj.close()
+    # Calling close again must be a safe no-op
+    traj.close()
+    assert traj._closed is True
+
+
 def test_resume_reattaches_after_history_exists(tmp_path):
     db_path = str(tmp_path / "trajectory.sqlite")
     trajectory = open_trajectory("demo", "t1", db_path=db_path)

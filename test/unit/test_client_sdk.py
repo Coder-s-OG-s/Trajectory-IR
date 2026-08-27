@@ -61,3 +61,28 @@ def test_exec_tool_two_non_idempotent_writes_same_step_distinct_seq(db_path):
     # Both should be logged without either being falsely blocked
     assert NodeLog(db_path).has("test-t5", "demo", 1, "TOOL_CALL", seq=2)
     assert NodeLog(db_path).has("test-t5", "demo", 1, "TOOL_CALL", seq=4)
+
+
+def test_trajectory_reuses_single_nodelog_connection(db_path, monkeypatch):
+    traj = open_trajectory(tenant_id="demo", trajectory_id="test-reuse", db_path=db_path)
+    initial_log = traj._log
+
+    project(traj, step_n=1, context={"initial": True})
+    seal_decision(traj, step_n=1, plan={"plan": "reuse"})
+    tool = Tool(name="echo", fn=lambda x: x, effect_class=EffectClass.READ_ONLY)
+    exec_tool(traj, step_n=1, call={"args": {"x": 10}}, tool=tool, seq=2)
+    commit_step(traj, step_n=1, seq=4)
+
+    assert traj._log is initial_log
+
+
+def test_trajectory_context_manager_and_close(db_path):
+    import sqlite3
+
+    with open_trajectory(tenant_id="demo", trajectory_id="test-cm", db_path=db_path) as traj:
+        project(traj, step_n=1, context={"data": 123})
+        conn = traj._log._conn
+
+    # Once context manager exits, the connection should be closed
+    with pytest.raises(sqlite3.ProgrammingError):
+        conn.execute("SELECT 1")
