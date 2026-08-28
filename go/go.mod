@@ -15,7 +15,7 @@ require (
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/modelcontextprotocol/go-sdk v1.7.0
 	go.temporal.io/api v1.63.5
-	go.temporal.io/sdk v1.47.0
+	go.temporal.io/sdk v1.48.0
 	modernc.org/sqlite v1.56.0
 )
 
@@ -48,7 +48,7 @@ require (
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/nexus-rpc/nexus-proto-annotations v0.1.0 // indirect
-	github.com/nexus-rpc/sdk-go v0.6.0 // indirect
+	github.com/nexus-rpc/sdk-go v0.7.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/robfig/cron v1.2.0 // indirect
