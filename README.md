@@ -140,7 +140,7 @@ The following records what Phase 1A required. It is not a license to prefer Pyth
 - Any Kubernetes provisioning layer (CAMI style claims/classes).
 - Fluid integration of any kind.
 - A second durable execution backend adapter for the Python SDK (Restate or otherwise) before the DBOS adapter is conformant. This does not apply to the Go port's already shipped, language appropriate Temporal backend (§3.1, §12.0).
-- Package signature **Python parity and conformance R09–R11** remain Future ([#179](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/179), epic [#149](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/149)). The scheme itself is normative in §9.1. **Go** already ships optional `Sign` / `Verify` and Export `SignKey` under `go/trajir/tir`. Unsigned packages remain the default (`SIGNATURE` absent, `manifest.signature` null) unless a caller opts in.
+- Optional Sigstore / `sigstore-bundle` for `.tir` (Phase D of [#149](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/149)). Ed25519 `trajir-pkg-sig-v1` is already shipped in Go and Python. Unsigned packages remain the default.
 - Multi region or multi writer high availability guarantees.
 - Live full duplex media/streaming as a first class node type.
 
@@ -315,7 +315,7 @@ Import verifies node ids and seals against their recorded hashes. Import does no
 
 Package signatures authenticate **who produced a `.tir` export** and detect **tampering of package members** after export. They do **not** replace node identity hashing or decision seals (§6.3, §8). Content hashes prove payload consistency; signatures prove origin of the **bundle**.
 
-This scheme is **normative**. **Go** implements optional `Sign` / `Verify` and Export-time signing via `SignKey` in `go/trajir/tir` (primary SDK). **Python** sign/verify parity and conformance R09–R11 remain Future ([#179](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/179), epic [#149](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/149)). Producers **may** leave packages unsigned: no `SIGNATURE` zip member, and `manifest.json` **must** keep `"signature": null` (or omit the key) whether or not `SIGNATURE` is present. Implementations **must not** invent alternate schemes.
+This scheme is **normative**. **Go** implements optional `Sign` / `Verify` and Export-time signing via `SignKey` in `go/trajir/tir`. **Python** implements `sign_package` / `verify_package` and optional `export_tir(..., sign_key=)`. Conformance R09–R11 are runnable. Producers **may** leave packages unsigned: no `SIGNATURE` zip member, and `manifest.json` **must** keep `"signature": null` (or omit the key) whether or not `SIGNATURE` is present. Implementations **must not** invent alternate schemes.
 
 **Distinct from CI release signing:** cosign/SLSA for GitHub release tarballs and binaries (see `docs/CI_HARDENING.md`) is supply-chain signing of *release artifacts*. This section is **in-package** authenticity for `.tir` content exchanged between runtimes and partners.
 
@@ -412,9 +412,10 @@ No project-hosted CA or multi-tenant key product is required for conformance to 
 #### Implementation status
 
 - **Go primary (shipped):** optional `Sign` / `Verify`, optional Export `SignKey` (full 64-byte Ed25519 private key; wrong length fails closed), golden payload vectors under `go/trajir/tir/testdata/sig_v1/`. Rewriting a package to add `SIGNATURE` preserves the existing file permission bits (CreateTemp’s 0600 is chmod’d back before replace).
-- **Python reference (Future):** byte-identical payload construction and verify parity ([#179](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/179)).
-- **Conformance (proposed for Phase C):** R09 sign/verify + mutate fails; R10 unsigned still passes R05, strict mode rejects unsigned; R11 Go-signed verifies in Python and vice versa.
-- **Security-review** required for further sign/verify changes. Private keys never in the repository; tests use ephemeral keys.
+- **Python reference (shipped):** `sign_package` / `verify_package`, optional `export_tir(..., sign_key=)`, load verifies a present `SIGNATURE`. Same goldens as Go.
+- **Conformance:** R09 sign/verify + mutate fails; R10 unsigned still loads, strict `require_signature` rejects unsigned; R11 Go golden verifies in Python, Python-signed fixture verifies in Go.
+- **Still Future (Phase D):** Sigstore / `sigstore-bundle` ([#149](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/149)).
+- **Security-review** required for further sign/verify changes. Private keys never in the repository; tests use the documented test-only seed.
 
 ---
 
@@ -432,9 +433,9 @@ These are runnable tests, not descriptions of intent. R01 and R02 are the hard g
 | R06 | A sandbox/what if branch rejects any real `NON_IDEMPOTENT_WRITE` execution. Runnable: `conformance/r06_sandbox_test.py`. |
 | R07 | Grafting an artifact between agents transfers only the artifact reference, never private `THOUGHT` nodes. Runnable: `conformance/r07_graft_test.py`. |
 | R08 | Redaction removes secrets/flagged content from what gets projected into context. Runnable: `conformance/r08_projection_redaction_test.py`. |
-| R09 | (Proposed; Future) Sign a thin package; verify succeeds; mutate one byte of `nodes.ndjson`; verify fails. Blocked on §9.1 implementation ([#149](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/149)). |
-| R10 | (Proposed; Future) Unsigned package still passes R05; strict `require_signature` rejects unsigned. |
-| R11 | (Proposed; Future) Go-signed package verifies in Python and vice versa (cross-language payload parity). |
+| R09 | Sign a thin package; verify succeeds; mutate one byte of `nodes.ndjson`; verify fails. Runnable: `conformance/r09_tir_signature_test.py`. |
+| R10 | Unsigned package still loads (R05 path); strict `require_signature` rejects unsigned. Runnable: `conformance/r10_tir_unsigned_strict_test.py`. |
+| R11 | Go-signed golden verifies in Python; Python-signed `testdata/sample_signed.tir` verifies in Go. Runnable: `conformance/r11_cross_language_sig_test.py` and `go test ./trajir/tir -run TestVerifyPythonSignedFixture`. |
 
 **Phase 1A completion bar:** DBOS backend adapter wired in, SQLite (or file backed) IR log, Python SDK, R01 and R02 passing against the adapter, and a recorded kill_mid_deploy demonstration. R03–R08 are tracked but not blocking for this milestone.
 
@@ -696,6 +697,7 @@ Trajectory IR deliberately does not attempt to:
 | 1.2 | 2026-08-07 | Reconciles §3, §3.1, §5, and §12.0 with the Go port's already shipped Temporal adapter (`go/trajir/durable/temporal`, issues #16, #24). Formally recognizes Temporal as the production durable execution backend for Go, alongside DBOS (Python Phase 1A default) and Restate (optional additional adapter for either language), and adds rationale in §3.1 for why Go diverges from the DBOS-first posture. Clarifies that §5's "one backend adapter" Phase 1A gate and its "no second adapter" out-of-scope item apply to the Python/DBOS conformance track only, and do not restrict the Go port's own language appropriate backend. Updates §17 glossary and §18 references accordingly. Resolves #67. |
 | 1.3 | 2026-08-07 | Declares **Phase 1B**: Go is the primary SDK and default onboarding language; Python is the reference/parity port. Updates §5 (phase structure), §12.1 languages, and §12.2 local onboarding guidance. Tracks work under epic #113. Resolves #114. |
 | 1.4 | 2026-08-13 | Defines package signature scheme **`trajir-pkg-sig-v1`** in new §9.1 (payload over zip members excluding `SIGNATURE`, domain-separated Ed25519, file-only document, unsigned default). Implementation remains Future ([#149](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/149)). Updates §5 out-of-scope wording and lists proposed conformance R09–R11. |
+| 1.5 | 2026-08-28 | Records shipped Go and Python `trajir-pkg-sig-v1` APIs and marks conformance R09–R11 runnable. Sigstore / `sigstore-bundle` stays Future (Phase D of [#149](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/149)). |
 
 ---
 

@@ -23,7 +23,8 @@ root [README.md](../README.md).
 | LTM recall quality product | Out (optional node shapes only) |
 | Multi-tenant SaaS control plane | Future / not active |
 | Fluid productization | Future / not active |
-| Package signature **implementation** (scheme `trajir-pkg-sig-v1` is defined in README §9.1) | Future [#149](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/149) |
+| Package signatures (`trajir-pkg-sig-v1` Ed25519) | Shipped (Go + Python, R09–R11) |
+| Sigstore / `sigstore-bundle` for `.tir` | Future [#149](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/149) Phase D |
 
 ## One-line pitch
 
