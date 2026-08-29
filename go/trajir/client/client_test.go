@@ -227,3 +227,25 @@ func TestExecToolLogsToolCallOnError(t *testing.T) {
 		t.Fatalf("expected no TOOL_RESULT on error, got %v (err: %v)", hasResult, err)
 	}
 }
+
+func TestResumeTenantIsolation(t *testing.T) {
+	dir := t.TempDir()
+	opts := client.Options{WorkDir: dir}
+
+	trA, err := client.OpenTrajectory("tenant-A", "shared-traj", opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := trA.Project(1, map[string]any{"goal": "x"}); err != nil {
+		t.Fatal(err)
+	}
+	_ = trA.Close()
+
+	_, err = client.Resume("tenant-B", "shared-traj", opts)
+	if err == nil {
+		t.Fatal("expected Resume to fail for a different tenant, but it succeeded")
+	}
+	if !strings.Contains(err.Error(), "no existing nodes") {
+		t.Fatalf("expected 'no existing nodes' error, got: %v", err)
+	}
+}
