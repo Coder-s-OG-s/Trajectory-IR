@@ -88,6 +88,9 @@ func NodeID(tenantID, trajectoryID string, stepN *int, seq int, kind, phash stri
 	if err := ValidateIDComponent("trajectory_id", trajectoryID); err != nil {
 		return "", err
 	}
+	if err := ValidateIDComponent("kind", kind); err != nil {
+		return "", err
+	}
 	step := "None"
 	if stepN != nil {
 		step = strconv.Itoa(*stepN)

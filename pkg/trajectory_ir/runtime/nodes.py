@@ -38,7 +38,7 @@ class NodeValidationError(ValueError):
 
 
 def validate_id_component(name: str, value: str) -> str:
-    """Validate a tenant_id or trajectory_id for safe node_id composition."""
+    """Validate a node_id preimage field (tenant, trajectory, or kind)."""
     if not isinstance(value, str) or not value:
         raise NodeValidationError(f"{name} must be a non-empty string")
     if any(ch in value for ch in _FORBIDDEN_ID_CHARS):
@@ -72,6 +72,7 @@ def node_id(
 ) -> str:
     validate_id_component("tenant_id", tenant_id)
     validate_id_component("trajectory_id", trajectory_id)
+    validate_id_component("kind", kind)
     raw = f"{tenant_id}|{trajectory_id}|{step_n}|{seq}|{kind}|{phash}".encode()
     return hashlib.sha256(raw).hexdigest()
 

@@ -207,7 +207,7 @@ def resume(
         mode=normalize_run_mode(mode),
     )
     try:
-        nodes = traj._log.list_nodes_all_tenants(trajectory_id)
+        nodes = traj._log.list_nodes(trajectory_id, tenant_id=tenant_id)
     except Exception:
         traj.close()
         raise
