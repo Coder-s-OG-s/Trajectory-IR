@@ -246,6 +246,8 @@ class NodeLog:
         tenants (e.g. ``export_tir``'s own mixed-tenant check) must use
         ``list_nodes_all_tenants`` explicitly instead.
         """
+        if not tenant_id:
+            raise ValueError("tenant_id must be a non-empty string")
         return self._list_nodes(trajectory_id, tenant_id=tenant_id)
 
     def list_nodes_all_tenants(self, trajectory_id: str) -> list[dict[str, Any]]:

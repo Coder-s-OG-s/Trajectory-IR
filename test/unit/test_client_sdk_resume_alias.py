@@ -79,6 +79,19 @@ def test_resume_reattaches_after_history_exists(tmp_path):
     assert resumed.db_path == db_path
 
 
+def test_resume_rejects_other_tenant_on_same_trajectory_id(tmp_path):
+    db_path = str(tmp_path / "trajectory.sqlite")
+    trajectory = open_trajectory("tenant-A", "shared-traj", db_path=db_path)
+    seal_decision(trajectory, step_n=1, plan={"tool_calls": []})
+
+    with pytest.raises(ValueError, match="no existing nodes"):
+        resume("shared-traj", tenant_id="tenant-B", db_path=db_path)
+
+    resumed = resume("shared-traj", tenant_id="tenant-A", db_path=db_path)
+    assert resumed.tenant_id == "tenant-A"
+    assert resumed.trajectory_id == "shared-traj"
+
+
 def test_resume_does_not_replay_already_claimed_gated_tool_call(tmp_path):
     """Simulates a crash/restart mid-step: resume() reattaches, and re-driving
     the same exec_tool call for a NON_IDEMPOTENT_WRITE tool blocks instead of
