@@ -2,7 +2,7 @@ import time
 
 import pytest
 
-from trajectory_ir.runtime.nodes import Node, NodeValidationError
+from trajectory_ir.runtime.nodes import Node, NodeValidationError, node_id
 
 
 def test_identical_payload_different_key_order_same_hash():
@@ -92,3 +92,8 @@ def test_pipe_in_trajectory_id_rejected():
             seq=1,
             payload={"a": 1},
         )
+
+
+def test_pipe_in_kind_rejected_by_node_id():
+    with pytest.raises(NodeValidationError, match="delimiter"):
+        node_id("demo", "t1", 1, 0, "TOOL|CALL", "ab" * 32)

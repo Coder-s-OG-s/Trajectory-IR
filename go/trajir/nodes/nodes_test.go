@@ -153,6 +153,9 @@ func TestNodeIDRejectsInvalidComponents(t *testing.T) {
 	if _, err := nodes.NodeID("demo", "", nil, 0, "INPUT", "h"); err == nil {
 		t.Fatal("expected error for empty trajectory_id")
 	}
+	if _, err := nodes.NodeID("demo", "t1", nil, 0, "TOOL|CALL", "h"); err == nil {
+		t.Fatal("expected error for pipe in kind")
+	}
 }
 
 func TestNewNodeRejectsInvalidComponents(t *testing.T) {
