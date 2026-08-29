@@ -12,7 +12,7 @@ root [README.md](../README.md).
 - Portable `.tir` packages (thin / fat; redacted export heuristics)
 - Dual SDK: **Go primary**, Python reference/parity
 - Pluggable durable backends (Temporal for Go production; DBOS for Python reference)
-- Conformance tests (R01–R08) and CAS / NodeLog storage drivers
+- Conformance tests (R01–R11) and CAS / NodeLog storage drivers
 
 ## Out of scope (explicit)
 

@@ -115,7 +115,7 @@ Tracked under epic #113.
 - Go first QUICKSTART and adoption host demo so a newcomer can succeed without installing Python.
 - CONTRIBUTING process: implement new Phase 1B work in Go first, or dual language in one PR.
 
-**Still out of scope (same as Phase 1A product non goals):** package signatures, Fluid/k8s-fluid productization, multi tenant SaaS control plane, custom crash engines, plan DAGs.
+**Still out of scope (same as Phase 1A product non goals):** Fluid/k8s-fluid productization, multi tenant SaaS control plane, custom crash engines, plan DAGs.
 
 ### 5.2 Phase 1A historical in scope list
 
@@ -519,7 +519,7 @@ This section is binding for implementation choices. Do not introduce alternative
 
 ### 12.4 CI/CD
 
-- GitHub Actions runs on every pull request: linting, unit tests, and the conformance suite (R01–R08, with R01/R02 required to pass; later checks may be marked informational until they are fully implemented).
+- GitHub Actions runs on every pull request: linting, unit tests, and the conformance suite (R01–R11, with R01/R02 required to pass; later checks may be marked informational until they are fully implemented).
 - Every commit must carry a DCO sign off (`Signed-off-by:` trailer); PRs without it are rejected by CI, not by manual review.
 - No PR merges with a failing R01 or R02 once those tests exist in the repository.
 
@@ -627,9 +627,9 @@ Treat every numbered rule below as an immutable constraint, not a suggestion:
 5. **Respect the linear known args rule (§8.1).** Do not implement, suggest, or work around it with symbolic argument references, speculative execution, or a hidden dependency graph. If a task seems to require it, stop and raise it as an issue rather than solving it locally.
 6. **Effect classification defaults to fail closed (§7.2).** Never write code that defaults an unclassified or ambiguous tool to anything other than `NON_IDEMPOTENT_WRITE`.
 7. **Never make correctness depend on a cache.** Any code path touching Fluid, or any other caching layer, must have a working fallback to the durable source of truth with hash verification, per §11.3. Code review (automated or human) should treat a cache dependent correctness path as a blocking defect.
-8. **Stay inside declared scope (§5).** Do not implement anything listed under "out of scope for this phase," even if it seems like a natural extension, without an approved issue first. This includes package signatures, Kubernetes provisioning, plan DAGs, a second backend adapter, and Fluid integration outside of the `k8s-fluid` profile.
+8. **Stay inside declared scope (§5).** Do not implement anything listed under "out of scope for this phase," even if it seems like a natural extension, without an approved issue first. This includes Kubernetes provisioning, plan DAGs, a second backend adapter, and Fluid integration outside of the `k8s-fluid` profile.
 9. **One module, one clear owner in the code, even without a manually assigned task.** Before modifying a directory under `pkg/`, `drivers/`, or `conformance/`, check whether existing code in that directory implies an established pattern (naming, error handling, data structures) and follow it exactly rather than introducing a second convention. If two implementations of the same responsibility already exist, that is a defect to be reported, not a choice to pick one arbitrarily.
-10. **No feature merges without its conformance test.** If an agent implements behavior covered by R01–R08, it must also implement or update the corresponding test, and that test must pass before the change is considered complete.
+10. **No feature merges without its conformance test.** If an agent implements behavior covered by R01–R11, it must also implement or update the corresponding test, and that test must pass before the change is considered complete.
 11. **When in doubt, prefer doing less over doing something not specified here.** An incomplete implementation that matches this document exactly is preferable to a complete one that deviates from it.
 
 ---
