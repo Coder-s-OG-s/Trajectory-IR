@@ -433,6 +433,32 @@ func TestImportPythonGoldenFixture(t *testing.T) {
 	}
 }
 
+func TestVerifyPythonSignedFixture(t *testing.T) {
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("caller")
+	}
+	root := filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", ".."))
+	golden := filepath.Join(root, "testdata", "sample_signed.tir")
+	if _, err := os.Stat(golden); err != nil {
+		t.Fatalf("signed fixture missing (generate with scripts/gen_tir_fixture.py): %v", err)
+	}
+	info, err := tir.Verify(golden, tir.VerifyOptions{})
+	if err != nil {
+		t.Fatalf("verify python signed fixture: %v", err)
+	}
+	if info == nil {
+		t.Fatal("expected SIGNATURE on sample_signed.tir")
+	}
+	pkg, err := tir.Load(golden)
+	if err != nil {
+		t.Fatalf("load python signed fixture: %v", err)
+	}
+	if pkg.Signature == nil {
+		t.Fatal("Load should attach Signature")
+	}
+}
+
 func rewriteNodes(src, dst string, mut func([][]byte) [][]byte) error {
 	r, err := zip.OpenReader(src)
 	if err != nil {

@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
-"""Generate testdata/sample_thin.tir for Go cross-language import tests."""
+"""Generate testdata/sample_thin.tir and testdata/sample_signed.tir."""
 
 from __future__ import annotations
 
+import hashlib
 import sys
 from pathlib import Path
+
+from nacl.signing import SigningKey
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "pkg"))
@@ -65,6 +68,13 @@ def main() -> None:
         dest = out_dir / "sample_thin.tir"
         export_tir(log, "t-export", dest, mode="thin")
         print(f"wrote {dest}")
+
+        seed = hashlib.sha256(b"trajir-pkg-sig-v1-test-vector-seed").digest()
+        sk = SigningKey(seed)
+        key = seed + bytes(sk.verify_key)
+        signed = out_dir / "sample_signed.tir"
+        export_tir(log, "t-export", signed, mode="thin", sign_key=key)
+        print(f"wrote {signed}")
     finally:
         log.close()
         if db.exists():

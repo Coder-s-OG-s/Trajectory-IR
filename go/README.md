@@ -113,9 +113,9 @@ pkg, err = tir.Load(path)
 | `tir.LoadUnverified` | `load_tir_unverified` |
 
 Fat mode uses the same CAS layout: `artifacts/cas/<2-char-shard>/<sha256>`.
-Package signatures stay null/unimplemented. Redacted export is Python-only for now.
+Optional package signatures: `tir.Sign` / `tir.Verify` and Export `SignKey` (`trajir-pkg-sig-v1`). Unsigned remains the default. Redacted export is Python-only for now.
 
-Cross-language fixture: `testdata/sample_thin.tir` (regenerate with `python scripts/gen_tir_fixture.py`).
+Cross-language fixtures: `testdata/sample_thin.tir` and `testdata/sample_signed.tir` (regenerate with `python scripts/gen_tir_fixture.py`).
 
 ## Test
 
@@ -124,7 +124,7 @@ cd go
 go test ./...
 ```
 
-Crash resume conformance (R01/R02 style) lives under `conformance/`.
+Crash resume conformance (R01/R02 style) lives under `conformance/`. Package signatures: R09–R11.
 
 1. In-process tests always run (panic after seal, TOOL_CALL pre-seed for gate).
 2. Subprocess tests build `cmd/crashagent`, hard-kill at markers, then resume.

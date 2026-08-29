@@ -46,7 +46,7 @@ Aligned with root README §5 / Future milestone:
 - Competing on LTM recall quality (Mem0/Zep)
 - Multi-tenant SaaS control plane
 - Fluid/k8s-fluid productization as a core requirement
-- Package signature **implementation** until dual-SDK work is scheduled (scheme `trajir-pkg-sig-v1` is defined in README §9.1; see Future [#149](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/149))
+- Sigstore / `sigstore-bundle` for `.tir` until Phase D of [#149](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/149) is scheduled. Ed25519 `trajir-pkg-sig-v1` is already shipped.
 
 ## Business / product separation
 

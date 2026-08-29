@@ -84,7 +84,7 @@ Deep gate:
 
 | Check | What it does |
 |-------|----------------|
-| **Conformance & E2E** | e2e crash/resume plus full `conformance/` R01-R08 (Python 3.11 and 3.12) |
+| **Conformance & E2E** | e2e crash/resume plus full `conformance/` R01-R11 (Python 3.11 and 3.12) |
 | **Integration (Postgres)** | Live `PostgresNodeLog` against a Postgres 16 service (`test/integration/test_postgres_live.py`) |
 | **Integration (MinIO)** | Live `S3CAS` against MinIO (`test/integration/test_s3_minio_live.py`) |
 
