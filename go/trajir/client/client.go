@@ -291,6 +291,11 @@ func (t *Trajectory) Log() *nodelog.NodeLog { return t.log }
 // Backend exposes the durable backend for advanced tests.
 func (t *Trajectory) Backend() durable.Backend { return t.backend }
 
+// History returns this trajectory's logged nodes in order without changing state.
+func (t *Trajectory) History() ([]map[string]any, error) {
+	return t.log.ListNodes(t.TrajectoryID, t.TenantID)
+}
+
 func resolvePaths(opts Options) (nodesPath, memoPath string) {
 	base := opts.WorkDir
 	nodesPath = opts.NodesPath

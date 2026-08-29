@@ -15,6 +15,7 @@ __all__ = [
     "Trajectory",
     "commit_step",
     "exec_tool",
+    "history",
     "open_trajectory",
     "project",
     "resume",
@@ -219,3 +220,8 @@ def resume(
             f"found in {db_path!r}; use open_trajectory() to start a new one"
         )
     return traj
+
+
+def history(trajectory: Trajectory) -> list[dict[str, Any]]:
+    """Return this trajectory's logged nodes in order without changing state."""
+    return trajectory._log.list_nodes(trajectory.trajectory_id, tenant_id=trajectory.tenant_id)

@@ -227,3 +227,30 @@ func TestExecToolLogsToolCallOnError(t *testing.T) {
 		t.Fatalf("expected no TOOL_RESULT on error, got %v (err: %v)", hasResult, err)
 	}
 }
+
+func TestTrajectoryHistory(t *testing.T) {
+	dir := t.TempDir()
+	tr, err := client.OpenTrajectory("demo", "t-hist", client.Options{WorkDir: dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tr.Close()
+
+	if _, err := tr.Project(1, map[string]any{"goal": "history"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tr.SealDecision(1, map[string]any{"plan": "test"}); err != nil {
+		t.Fatal(err)
+	}
+
+	history, err := tr.History()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(history) != 2 {
+		t.Fatalf("expected 2 nodes in history, got %d", len(history))
+	}
+	if history[0]["kind"] != "PROJECT_CONTEXT" || history[1]["kind"] != "DECISION" {
+		t.Fatalf("unexpected node kinds in history: %v", history)
+	}
+}

@@ -3,6 +3,7 @@ import pytest
 from client.python.trajectory_client import (
     commit_step,
     exec_tool,
+    history,
     open_trajectory,
     project,
     seal_decision,
@@ -86,3 +87,15 @@ def test_trajectory_context_manager_and_close(db_path):
     # Once context manager exits, the connection should be closed
     with pytest.raises(sqlite3.ProgrammingError):
         conn.execute("SELECT 1")
+
+
+def test_trajectory_history(db_path):
+    traj = open_trajectory(tenant_id="demo", trajectory_id="test-hist", db_path=db_path)
+    project(traj, step_n=1, context={"initial": True})
+    seal_decision(traj, step_n=1, plan={"plan": "reuse"})
+
+    nodes = history(traj)
+    assert len(nodes) == 2
+    assert nodes[0]["kind"] == "PROJECT_CONTEXT"
+    assert nodes[1]["kind"] == "DECISION"
+    assert nodes[0]["payload"] == {"initial": True}
