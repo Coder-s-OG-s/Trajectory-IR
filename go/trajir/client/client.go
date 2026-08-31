@@ -128,7 +128,7 @@ func Resume(tenantID, trajectoryID string, opts Options) (*Trajectory, error) {
 	if err != nil {
 		return nil, err
 	}
-	rows, err := tr.log.ListNodesAllTenants(trajectoryID)
+	rows, err := tr.log.ListNodes(trajectoryID, tenantID)
 	if err != nil {
 		_ = tr.Close()
 		return nil, err
