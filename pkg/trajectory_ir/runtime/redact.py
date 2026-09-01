@@ -14,7 +14,8 @@ from typing import Any
 # Keys whose values are redacted (case-insensitive substring match).
 SECRET_KEY_RE = re.compile(
     r"(password|passwd|pass[_-]?phrase|secret|token|api[_-]?key|access[_-]?key"
-    r"|authorization|auth|credential|private[_-]?key)",
+    r"|authorization|auth|credential|private[_-]?key"
+    r"|database[_-]?url|connection[_-]?string|db[_-]?url|dsn)",
     re.IGNORECASE,
 )
 
@@ -24,9 +25,13 @@ SECRET_VALUE_RE = re.compile(
     r"|[Bb]earer\s+[A-Za-z0-9\-_.=]{10,}"  # bearer token
     r"|gh[pousr]_[A-Za-z0-9]{20,}"  # GitHub token
     r"|sk-[A-Za-z0-9]{20,}"  # OpenAI-style secret key
+    r"|[sr]k_live_[A-Za-z0-9]{8,}"  # Stripe live secret/restricted key
+    r"|[sr]k_test_[A-Za-z0-9]{8,}"  # Stripe test secret/restricted key
     r"|xox[baprs]-[A-Za-z0-9-]{10,}"  # Slack token
+    r"|AIza[0-9A-Za-z\-_]{35}"  # GCP API key
     r"|-----BEGIN[ A-Z]*PRIVATE KEY-----"  # PEM private key block
-    r"|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})"  # JWT
+    r"|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}"  # JWT
+    r"|[a-zA-Z][a-zA-Z0-9+.-]*://[^:@\s]+:[^@\s]+@)"  # credential URI (scheme://user:pass@)
 )
 
 REDACTED = "[REDACTED]"

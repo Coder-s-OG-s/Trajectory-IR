@@ -63,3 +63,33 @@ def test_redact_projection_context_free_form():
     out = redact_projection_context({"password": "x", "goal": "ship"})
     assert out["password"] == REDACTED
     assert out["goal"] == "ship"
+
+
+def test_redact_value_credential_uri():
+    assert redact_value("config", "postgres://user:s3cret@host/db") == REDACTED
+    assert redact_value("config", "mongodb+srv://admin:password@cluster") == REDACTED
+    assert redact_value("config", "redis://default:hunter2@cache.internal:6379") == REDACTED
+    assert redact_value("config", "amqp://guest:guest@rabbitmq:5672") == REDACTED
+
+
+def test_redact_value_credential_uri_no_password():
+    assert redact_value("url", "https://example.com/path") == "https://example.com/path"
+    assert redact_value("url", "ssh://git@github.com/repo") == "ssh://git@github.com/repo"
+    assert redact_value("url", "https://api.example.com") == "https://api.example.com"
+
+
+def test_redact_value_stripe_key():
+    assert redact_value("key", "sk_live_abc123def456ghi789") == REDACTED
+    assert redact_value("key", "rk_live_abc123def456ghi789") == REDACTED
+    assert redact_value("key", "sk_test_abc123def456ghi789") == REDACTED
+
+
+def test_redact_value_gcp_api_key():
+    assert redact_value("key", "AIzaSyD-" + "a" * 31) == REDACTED
+
+
+def test_redact_value_connection_key_names():
+    assert redact_value("db_url", "postgres://user:s3cret@host/db") == REDACTED
+    assert redact_value("database_url", "mysql://root:pass@localhost/app") == REDACTED
+    assert redact_value("connection_string", "Server=host;Password=x") == REDACTED
+    assert redact_value("dsn", "host=db user=app password=secret") == REDACTED
