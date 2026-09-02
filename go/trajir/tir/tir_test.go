@@ -252,6 +252,7 @@ func TestRejectsPathTraversalMember(t *testing.T) {
 }
 
 func TestLoadUnverifiedAPIExists(t *testing.T) {
+	t.Setenv("TRAJIR_ALLOW_UNVERIFIED", "1")
 	src := openLog(t, "src.sqlite")
 	seedSample(t, src)
 	out := filepath.Join(t.TempDir(), "run.tir")
@@ -264,6 +265,20 @@ func TestLoadUnverifiedAPIExists(t *testing.T) {
 	}
 	if len(pkg.Nodes) != 5 {
 		t.Fatalf("nodes=%d", len(pkg.Nodes))
+	}
+}
+
+func TestLoadUnverifiedBlockedWithoutEnv(t *testing.T) {
+	t.Setenv("TRAJIR_ALLOW_UNVERIFIED", "")
+	src := openLog(t, "src.sqlite")
+	seedSample(t, src)
+	out := filepath.Join(t.TempDir(), "run.tir")
+	if _, err := tir.Export(src, "t-export", out, tir.ExportOptions{Mode: tir.ModeThin}); err != nil {
+		t.Fatal(err)
+	}
+	_, err := tir.LoadUnverified(out)
+	if !errors.Is(err, tir.ErrTir) {
+		t.Fatalf("expected ErrTir, got %v", err)
 	}
 }
 

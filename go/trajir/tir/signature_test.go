@@ -292,6 +292,7 @@ func TestDuplicateSignatureMemberRejected(t *testing.T) {
 }
 
 func TestLoadRejectsDuplicateMemberWhenUnsigned(t *testing.T) {
+	t.Setenv("TRAJIR_ALLOW_UNVERIFIED", "1")
 	// Unsigned Load skips verifySignatureFromZipFiles; duplicate names must
 	// still be rejected in loadImpl (CWE-436), not only on the signed path.
 	src := openLog(t, "src.sqlite")

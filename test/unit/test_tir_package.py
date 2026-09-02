@@ -168,7 +168,7 @@ def test_thin_rejects_embedded_bytes(sample_log: NodeLog, tmp_path: Path) -> Non
 def test_load_tir_rejects_verify_false(sample_log: NodeLog, tmp_path: Path) -> None:
     out = tmp_path / "run.tir"
     export_tir(sample_log, "t-export", out, mode="thin")
-    with pytest.raises(TirError, match="load_tir_unverified"):
+    with pytest.raises(TirError, match=r"load_tir_unverified.*TRAJIR_ALLOW_UNVERIFIED"):
         load_tir(out, verify=False)
 
 
@@ -279,3 +279,32 @@ def test_export_tenant_scope(sample_log: NodeLog, tmp_path: Path) -> None:
         assert pkg.nodes[0]["tenant_id"] == "tenant-a"
     finally:
         other.close()
+
+
+def test_load_tir_unverified_blocked_without_env(
+    sample_log: NodeLog, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("TRAJIR_ALLOW_UNVERIFIED", raising=False)
+    out = tmp_path / "run.tir"
+    export_tir(sample_log, "t-export", out, mode="thin")
+    with pytest.raises(TirError, match="TRAJIR_ALLOW_UNVERIFIED"):
+        from trajectory_ir.package import load_tir_unverified
+
+        load_tir_unverified(out)
+
+
+def test_load_tir_unverified_allowed_with_env(
+    sample_log: NodeLog, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("TRAJIR_ALLOW_UNVERIFIED", "1")
+    out = tmp_path / "run.tir"
+    export_tir(sample_log, "t-export", out, mode="thin")
+    import warnings as _w
+
+    from trajectory_ir.package import load_tir_unverified
+
+    with _w.catch_warnings(record=True) as caught:
+        _w.simplefilter("always")
+        pkg = load_tir_unverified(out)
+    assert len(pkg.nodes) == 5
+    assert any("load_tir_unverified" in str(w.message) for w in caught)

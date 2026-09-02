@@ -110,7 +110,7 @@ pkg, err = tir.Load(path)
 | `tir.Export` | `export_tir` |
 | `tir.Import` | `import_tir` |
 | `tir.Load` | `load_tir` |
-| `tir.LoadUnverified` | `load_tir_unverified` |
+| `tir.LoadUnverified` | `load_tir_unverified` (both gated behind `TRAJIR_ALLOW_UNVERIFIED=1`) |
 
 Fat mode uses the same CAS layout: `artifacts/cas/<2-char-shard>/<sha256>`.
 Optional package signatures: `tir.Sign` / `tir.Verify` and Export `SignKey` (`trajir-pkg-sig-v1`). Unsigned remains the default. Redacted export is Python-only for now.
