@@ -5,6 +5,10 @@ Vacant local stack for **Postgres NodeLog**, **MinIO S3 CAS**, and **Temporal**
 
 Compose file (repo root): [`docker-compose.live.yml`](../docker-compose.live.yml)
 
+All published ports are bound strictly to `127.0.0.1` (loopback) to avoid exposing
+development services to external networks. Credentials can be customized by copying
+[`.env.example`](../.env.example) to `.env` in the repository root.
+
 Tracked under Phase 1C: [#154](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/154),
 smoke automation [#160](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/160).
 
@@ -74,8 +78,12 @@ python -c "from drivers.s3.cas import build_s3_client_from_env; c=build_s3_clien
 Temporal may take longer on first pull. Frontend: `localhost:7233`.
 
 ## Environment
-
-Export these for live tests (Unix shell):
+ 
+Default values for local execution are shown below. To customize credentials, copy
+[`.env.example`](../.env.example) to `.env` in the repository root. The smoke scripts
+load `.env` automatically if present.
+ 
+Export these for manual live tests (Unix shell):
 
 ```bash
 export TRAJIR_DATABASE_URL=postgresql://trajir:trajir@127.0.0.1:5432/trajir

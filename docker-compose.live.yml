@@ -1,3 +1,9 @@
+# WARNING: FOR ISOLATED LOCAL DEVELOPMENT AND TESTING ONLY.
+# Published ports are bound strictly to 127.0.0.1 (loopback) to prevent
+# exposure to external networks.
+# Never expose this stack to untrusted networks or use these default
+# credentials in staging or production environments.
+#
 # Vacant live-integration sandbox for Trajectory IR maintainers.
 # Hosts Postgres (NodeLog), MinIO (S3 CAS), and Temporal (Go durable).
 #
@@ -12,13 +18,13 @@ services:
     image: postgres:16.6
     container_name: trajir-live-postgres
     environment:
-      POSTGRES_USER: trajir
-      POSTGRES_PASSWORD: trajir
-      POSTGRES_DB: trajir
+      POSTGRES_USER: ${POSTGRES_USER:-trajir}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-trajir}
+      POSTGRES_DB: ${POSTGRES_DB:-trajir}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U trajir -d trajir"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-trajir} -d ${POSTGRES_DB:-trajir}"]
       interval: 3s
       timeout: 5s
       retries: 30
@@ -28,11 +34,11 @@ services:
     image: postgres:16.6
     container_name: trajir-live-temporal-pg
     environment:
-      POSTGRES_USER: temporal
-      POSTGRES_PASSWORD: temporal
-      POSTGRES_DB: temporal
+      POSTGRES_USER: ${TEMPORAL_POSTGRES_USER:-temporal}
+      POSTGRES_PASSWORD: ${TEMPORAL_POSTGRES_PASSWORD:-temporal}
+      POSTGRES_DB: ${TEMPORAL_POSTGRES_DB:-temporal}
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U temporal -d temporal"]
+      test: ["CMD-SHELL", "pg_isready -U ${TEMPORAL_POSTGRES_USER:-temporal} -d ${TEMPORAL_POSTGRES_DB:-temporal}"]
       interval: 3s
       timeout: 5s
       retries: 30
@@ -42,11 +48,11 @@ services:
     container_name: trajir-live-minio
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
     healthcheck:
       # Official MinIO image ships curl; live endpoint is the supported probe.
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
@@ -64,8 +70,8 @@ services:
     environment:
       DB: postgres12
       DB_PORT: 5432
-      POSTGRES_USER: temporal
-      POSTGRES_PWD: temporal
+      POSTGRES_USER: ${TEMPORAL_POSTGRES_USER:-temporal}
+      POSTGRES_PWD: ${TEMPORAL_POSTGRES_PASSWORD:-temporal}
       POSTGRES_SEEDS: temporal-postgres
     ports:
-      - "7233:7233"
+      - "127.0.0.1:7233:7233"

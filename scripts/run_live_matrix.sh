@@ -28,13 +28,41 @@ for arg in "$@"; do
   esac
 done
 
-export TRAJIR_DATABASE_URL="${TRAJIR_DATABASE_URL:-postgresql://trajir:trajir@127.0.0.1:5432/trajir}"
+if [[ -f .env ]]; then
+  # shellcheck disable=SC1091
+  set -a
+  source .env
+  set +a
+fi
+
+POSTGRES_USER="${POSTGRES_USER:-trajir}"
+POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-trajir}"
+POSTGRES_DB="${POSTGRES_DB:-trajir}"
+MINIO_ROOT_USER="${MINIO_ROOT_USER:-minioadmin}"
+MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD:-minioadmin}"
+
+export TRAJIR_DATABASE_URL="${TRAJIR_DATABASE_URL:-postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:5432/${POSTGRES_DB}}"
 export TRAJIR_S3_ENDPOINT_URL="${TRAJIR_S3_ENDPOINT_URL:-http://127.0.0.1:9000}"
 export TRAJIR_S3_BUCKET="${TRAJIR_S3_BUCKET:-trajir}"
-export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-minioadmin}"
-export AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:-minioadmin}"
+export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-$MINIO_ROOT_USER}"
+export AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:-$MINIO_ROOT_PASSWORD}"
 export AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-us-east-1}"
 export TEMPORAL_HOSTPORT="${TEMPORAL_HOSTPORT:-localhost:7233}"
+
+is_loopback() {
+  local target="$1"
+  if [[ "$target" == *127.0.0.1* || "$target" == *localhost* || "$target" == *::1* ]]; then
+    return 0
+  fi
+  return 1
+}
+
+if [[ "$POSTGRES_PASSWORD" == "trajir" ]] || [[ "$AWS_SECRET_ACCESS_KEY" == "minioadmin" ]]; then
+  if ! is_loopback "$TRAJIR_DATABASE_URL" || ! is_loopback "$TRAJIR_S3_ENDPOINT_URL"; then
+    echo "WARNING: default development credentials detected on non-loopback endpoint." >&2
+    echo "Do not use default credentials on public or untrusted networks." >&2
+  fi
+fi
 
 if [[ "$SKIP_UP" -eq 0 ]]; then
   echo "==> docker compose up (postgres + minio$( [[ $WITH_TEMPORAL -eq 1 ]] && echo ' + temporal' ))"
@@ -46,7 +74,7 @@ if [[ "$SKIP_UP" -eq 0 ]]; then
 
   echo "==> wait postgres healthy"
   for i in $(seq 1 60); do
-    if docker exec trajir-live-postgres pg_isready -U trajir -d trajir >/dev/null 2>&1; then
+    if docker exec trajir-live-postgres pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null 2>&1; then
       break
     fi
     sleep 2
@@ -57,8 +85,9 @@ if [[ "$SKIP_UP" -eq 0 ]]; then
   done
 
   echo "==> wait minio healthy"
+  minio_live_url="${TRAJIR_S3_ENDPOINT_URL%/}/minio/health/live"
   for i in $(seq 1 60); do
-    if curl -sf "http://127.0.0.1:9000/minio/health/live" >/dev/null; then
+    if curl -sf "$minio_live_url" >/dev/null; then
       break
     fi
     sleep 2
