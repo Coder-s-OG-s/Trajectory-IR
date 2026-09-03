@@ -1,0 +1,9 @@
+adoption host step complete
+  tool results: [map[release:1.0.0 service:api status:ready] map[shipped:api:1.0.0]]
+  node kinds:   [PROJECT_CONTEXT DECISION TOOL_CALL TOOL_RESULT TOOL_CALL TOOL_RESULT COMMIT_STEP]
+thin package path complete
+  tir:          /tmp/adoption-run.tir
+  content_hash: c0c9a85f4abae44deba0e0dc11691be93629e66a7110a4dda28758483f2814f0
+  logical_path: outputs/release-report.json
+  node_count:   7
+  rehydrate:    369 bytes ok

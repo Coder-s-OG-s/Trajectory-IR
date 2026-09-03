@@ -1,0 +1,7 @@
+Trajectory IR Go demo: kill mid deploy
+workdir: ./kill_mid_deploy-data
+mode: resume
+DECISION sealed (plan frozen; resume must not re-ask the model for this step)
+BLOCKED_NEEDS_GATE: step 1: 'deploy_server' BLOCKED_NEEDS_GATE (crashed mid-execution, not retried)
+Honest resume: non idempotent deploy was not silently re-run.
+model_count=1 deploy_count=0

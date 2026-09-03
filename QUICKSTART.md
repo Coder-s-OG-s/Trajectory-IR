@@ -279,6 +279,7 @@ Integration recipes and CI parity commands live in
 | Doc | Purpose |
 |-----|---------|
 | [go/QUICKSTART.md](go/QUICKSTART.md) | Phase 1B primary Go onboarding |
+| [website/README.md](website/README.md) | Demo / docs site (MkDocs) for talks and public showcase |
 | [docs/E2E_POSTGRES_CAS_THIN.md](docs/E2E_POSTGRES_CAS_THIN.md) | Full Postgres + CAS + thin package walkthrough |
 | [docs/PHASE_1A_STATUS.md](docs/PHASE_1A_STATUS.md) | What shipped in Phase 1A |
 | [docs/PHASE_1B_STATUS.md](docs/PHASE_1B_STATUS.md) | Go primary program (when present on branch) |
