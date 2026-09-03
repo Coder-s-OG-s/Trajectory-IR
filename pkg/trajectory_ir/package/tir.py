@@ -22,8 +22,10 @@ from __future__ import annotations
 import contextlib
 import hashlib
 import json
+import logging
 import os
 import tempfile
+import warnings
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -40,6 +42,8 @@ from trajectory_ir.package.signature import (
 from trajectory_ir.runtime.log import NodeLog
 from trajectory_ir.runtime.nodes import Node, NodeValidationError, node_id, payload_hash
 from trajectory_ir.runtime.redact import redact_payload
+
+_logger = logging.getLogger("trajectory_ir.package.tir")
 
 PackageMode = Literal["thin", "fat"]
 
@@ -381,18 +385,36 @@ def load_tir(path: str | Path, *, verify: bool = True) -> TirPackage:
 
     Verification is required for untrusted packages. To intentionally skip
     verification (tests / recovery tools only), call
-    :func:`load_tir_unverified`.
+    :func:`load_tir_unverified` (requires ``TRAJIR_ALLOW_UNVERIFIED=1``).
     """
     if not verify:
         raise TirError(
             "load_tir(verify=False) is disabled for safety; "
-            "use load_tir_unverified() if you explicitly accept an unverified package"
+            "use load_tir_unverified() (requires TRAJIR_ALLOW_UNVERIFIED=1) "
+            "if you explicitly accept an unverified package"
         )
     return _load_tir_impl(path, verify=True)
 
 
 def load_tir_unverified(path: str | Path) -> TirPackage:
-    """Load a package without hash verification. UNSAFE for untrusted input."""
+    """Load a package without hash verification. UNSAFE for untrusted input.
+
+    Requires ``TRAJIR_ALLOW_UNVERIFIED=1`` in the environment. Without this,
+    the call raises :class:`TirError` to prevent accidental use in locked-down
+    deployments. When allowed, a runtime warning is emitted and the call is
+    logged at WARNING level for audit.
+    """
+    if os.environ.get("TRAJIR_ALLOW_UNVERIFIED") != "1":
+        raise TirError(
+            "load_tir_unverified() is blocked by default; "
+            "set TRAJIR_ALLOW_UNVERIFIED=1 to allow unverified package loading"
+        )
+    warnings.warn(
+        "load_tir_unverified() skips integrity verification; do not use on untrusted packages",
+        UserWarning,
+        stacklevel=2,
+    )
+    _logger.warning("load_tir_unverified called: path=%s", path)
     return _load_tir_impl(path, verify=False)
 
 

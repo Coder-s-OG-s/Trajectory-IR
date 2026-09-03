@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -510,7 +511,19 @@ func Load(path string) (*Package, error) {
 }
 
 // LoadUnverified loads without hash verification. UNSAFE for untrusted input.
+//
+// Requires TRAJIR_ALLOW_UNVERIFIED=1 in the environment. Without this the call
+// returns ErrTir to prevent accidental use in locked-down deployments. When
+// allowed, a warning is logged for audit.
 func LoadUnverified(path string) (*Package, error) {
+	if os.Getenv("TRAJIR_ALLOW_UNVERIFIED") != "1" {
+		return nil, fmt.Errorf(
+			"%w: LoadUnverified() is blocked by default; "+
+				"set TRAJIR_ALLOW_UNVERIFIED=1 to allow unverified package loading",
+			ErrTir,
+		)
+	}
+	log.Printf("WARNING: LoadUnverified called: path=%s", path)
 	return loadImpl(path, false)
 }
 
