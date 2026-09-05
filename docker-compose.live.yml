@@ -73,5 +73,7 @@ services:
       POSTGRES_USER: ${TEMPORAL_POSTGRES_USER:-temporal}
       POSTGRES_PWD: ${TEMPORAL_POSTGRES_PASSWORD:-temporal}
       POSTGRES_SEEDS: temporal-postgres
+      DBNAME: ${TEMPORAL_POSTGRES_DB:-temporal}
+      POSTGRES_DB: ${TEMPORAL_POSTGRES_DB:-temporal}
     ports:
       - "127.0.0.1:7233:7233"

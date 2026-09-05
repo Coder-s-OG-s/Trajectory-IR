@@ -29,10 +29,27 @@ for arg in "$@"; do
 done
 
 if [[ -f .env ]]; then
-  # shellcheck disable=SC1091
-  set -a
-  source .env
-  set +a
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line#"${line%%[![:space:]]*}"}"
+    line="${line%"${line##*[![:space:]]}"}"
+    [[ -z "$line" || "$line" == \#* ]] && continue
+    if [[ "$line" == *"="* ]]; then
+      key="${line%%=*}"
+      val="${line#*=}"
+      key="${key#"${key%%[![:space:]]*}"}"
+      key="${key%"${key##*[![:space:]]}"}"
+      val="${val#"${val%%[![:space:]]*}"}"
+      val="${val%"${val##*[![:space:]]}"}"
+      if [[ ("$val" == \"*\" && "$val" == *\" && ${#val} -ge 2) || ("$val" == \'*\' && "$val" == *\' && ${#val} -ge 2) ]]; then
+        val="${val:1:-1}"
+      fi
+      if [[ "$key" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]]; then
+        if [[ -z "${!key+x}" ]]; then
+          export "$key"="$val"
+        fi
+      fi
+    fi
+  done < .env
 fi
 
 POSTGRES_USER="${POSTGRES_USER:-trajir}"
@@ -51,7 +68,8 @@ export TEMPORAL_HOSTPORT="${TEMPORAL_HOSTPORT:-localhost:7233}"
 
 is_loopback() {
   local target="$1"
-  if [[ "$target" == *127.0.0.1* || "$target" == *localhost* || "$target" == *::1* ]]; then
+  local pattern='^([a-zA-Z][a-zA-Z0-9+.-]*://)?([^@/]*@)?(127(\.[0-9]+){3}|localhost|\[::1\]|::1)(:[0-9]+)?(/.*)?$'
+  if [[ "$target" =~ $pattern ]]; then
     return 0
   fi
   return 1
