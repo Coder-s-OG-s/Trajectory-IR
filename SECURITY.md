@@ -41,7 +41,7 @@ Based on the [Infrastructure Blueprint](infrastructure.md) and [Master Spec](REA
 ### C. Data & Export Plane (`.tir` Packages)
 - **Sensitive Data Leakage**: Flaws where secret-like fields or thoughts leak during a `redacted` `.tir` package export.
 - **Package resource exhaustion**: Zip bombs / oversized members must be rejected by load limits (`TirLimitError`).
-- **Unverified import**: `import_tir` always verifies; `load_tir(verify=False)` is disabled. Inspection without verification requires explicit `load_tir_unverified()` and must never write to a durable NodeLog.
+- **Unverified import**: `import_tir` always verifies; `load_tir(verify=False)` is disabled. Inspection without verification requires explicit `load_tir_unverified()` (Python) or `LoadUnverified()` (Go), gated behind `TRAJIR_ALLOW_UNVERIFIED=1`. When allowed, a runtime warning is emitted and the call is logged at WARNING level. Unverified loads must never write to a durable NodeLog.
 - **Integrity vs provenance**: Node hash verification proves content integrity, not publisher authenticity. Optional package signatures (`trajir-pkg-sig-v1`, Ed25519) prove publisher authenticity when a `SIGNATURE` member is present; unsigned packages remain valid by default.
 
 ### D. Execution concurrency
