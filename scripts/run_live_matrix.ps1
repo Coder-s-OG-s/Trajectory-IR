@@ -42,7 +42,8 @@ $env:AWS_DEFAULT_REGION = if ($env:AWS_DEFAULT_REGION) { $env:AWS_DEFAULT_REGION
 $env:TEMPORAL_HOSTPORT = if ($env:TEMPORAL_HOSTPORT) { $env:TEMPORAL_HOSTPORT } else { "localhost:7233" }
 
 function Test-IsLoopback($target) {
-    return ($target -match "127\.0\.0\.1|localhost|\[::1\]")
+    if (-not $target) { return $false }
+    return ($target -match '^(?:[a-zA-Z][a-zA-Z0-9+.-]*://)?(?:[^@/]*@)?(127(?:\.[0-9]+){3}|localhost|\[::1\]|::1)(?::[0-9]+)?(?:/.*)?$')
 }
 
 if (($postgresPassword -eq "trajir" -or $env:AWS_SECRET_ACCESS_KEY -eq "minioadmin") -and
