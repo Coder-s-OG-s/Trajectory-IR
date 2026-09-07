@@ -58,7 +58,39 @@ POSTGRES_DB="${POSTGRES_DB:-trajir}"
 MINIO_ROOT_USER="${MINIO_ROOT_USER:-minioadmin}"
 MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD:-minioadmin}"
 
-export TRAJIR_DATABASE_URL="${TRAJIR_DATABASE_URL:-postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:5432/${POSTGRES_DB}}"
+urlencode() {
+  local string="${1:-}"
+  if command -v python3 >/dev/null 2>&1; then
+    python3 -c 'import sys, urllib.parse; sys.stdout.write(urllib.parse.quote(sys.argv[1], safe=""))' "$string"
+  elif command -v python >/dev/null 2>&1; then
+    python -c 'import sys
+try:
+    import urllib.parse as up; sys.stdout.write(up.quote(sys.argv[1], safe=""))
+except Exception:
+    import urllib as up; sys.stdout.write(up.quote(sys.argv[1], safe=""))' "$string"
+  else
+    local strlen=${#string}
+    local encoded=""
+    local c
+    for (( pos=0 ; pos<strlen ; pos++ )); do
+      c="${string:$pos:1}"
+      case "$c" in
+        [-_.~a-zA-Z0-9] ) encoded+="$c" ;;
+        * ) printf -v hex '%%%02X' "'$c"; encoded+="$hex" ;;
+      esac
+    done
+    printf '%s' "$encoded"
+  fi
+}
+
+if [[ -z "${TRAJIR_DATABASE_URL:-}" ]]; then
+  enc_user="$(urlencode "$POSTGRES_USER")"
+  enc_pass="$(urlencode "$POSTGRES_PASSWORD")"
+  enc_db="$(urlencode "$POSTGRES_DB")"
+  export TRAJIR_DATABASE_URL="postgresql://${enc_user}:${enc_pass}@127.0.0.1:5432/${enc_db}"
+else
+  export TRAJIR_DATABASE_URL
+fi
 export TRAJIR_S3_ENDPOINT_URL="${TRAJIR_S3_ENDPOINT_URL:-http://127.0.0.1:9000}"
 export TRAJIR_S3_BUCKET="${TRAJIR_S3_BUCKET:-trajir}"
 export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-$MINIO_ROOT_USER}"
@@ -103,7 +135,7 @@ if [[ "$SKIP_UP" -eq 0 ]]; then
   done
 
   echo "==> wait minio healthy"
-  minio_live_url="${TRAJIR_S3_ENDPOINT_URL%/}/minio/health/live"
+  minio_live_url="http://127.0.0.1:9000/minio/health/live"
   for i in $(seq 1 60); do
     if curl -sf "$minio_live_url" >/dev/null; then
       break

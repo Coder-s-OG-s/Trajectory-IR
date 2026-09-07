@@ -19,12 +19,23 @@ if (Test-Path ".env") {
         if ($line -and -not $line.StartsWith("#") -and $line.Contains("=")) {
             $parts = $line.Split("=", 2)
             $name = $parts[0].Trim()
-            $val = $parts[1].Trim().Trim('"').Trim("'")
-            if (-not [System.Environment]::GetEnvironmentVariable($name)) {
-                [System.Environment]::SetEnvironmentVariable($name, $val)
+            $val = $parts[1].Trim()
+            if (($val.StartsWith('"') -and $val.EndsWith('"') -and $val.Length -ge 2) -or
+                ($val.StartsWith("'") -and $val.EndsWith("'") -and $val.Length -ge 2)) {
+                $val = $val.Substring(1, $val.Length - 2)
+            }
+            if ($name -match '^[a-zA-Z_][a-zA-Z0-9_]*$') {
+                if (-not [System.Environment]::GetEnvironmentVariable($name)) {
+                    [System.Environment]::SetEnvironmentVariable($name, $val)
+                }
             }
         }
     }
+}
+
+function Format-UrlEncoded([string]$val) {
+    if ([string]::IsNullOrEmpty($val)) { return "" }
+    return [System.Uri]::EscapeDataString($val)
 }
 
 $postgresUser = if ($env:POSTGRES_USER) { $env:POSTGRES_USER } else { "trajir" }
@@ -33,7 +44,11 @@ $postgresDb = if ($env:POSTGRES_DB) { $env:POSTGRES_DB } else { "trajir" }
 $minioUser = if ($env:MINIO_ROOT_USER) { $env:MINIO_ROOT_USER } else { "minioadmin" }
 $minioPassword = if ($env:MINIO_ROOT_PASSWORD) { $env:MINIO_ROOT_PASSWORD } else { "minioadmin" }
 
-$env:TRAJIR_DATABASE_URL = if ($env:TRAJIR_DATABASE_URL) { $env:TRAJIR_DATABASE_URL } else { "postgresql://${postgresUser}:${postgresPassword}@127.0.0.1:5432/${postgresDb}" }
+$encUser = Format-UrlEncoded $postgresUser
+$encPassword = Format-UrlEncoded $postgresPassword
+$encDb = Format-UrlEncoded $postgresDb
+
+$env:TRAJIR_DATABASE_URL = if ($env:TRAJIR_DATABASE_URL) { $env:TRAJIR_DATABASE_URL } else { "postgresql://${encUser}:${encPassword}@127.0.0.1:5432/${encDb}" }
 $env:TRAJIR_S3_ENDPOINT_URL = if ($env:TRAJIR_S3_ENDPOINT_URL) { $env:TRAJIR_S3_ENDPOINT_URL } else { "http://127.0.0.1:9000" }
 $env:TRAJIR_S3_BUCKET = if ($env:TRAJIR_S3_BUCKET) { $env:TRAJIR_S3_BUCKET } else { "trajir" }
 $env:AWS_ACCESS_KEY_ID = if ($env:AWS_ACCESS_KEY_ID) { $env:AWS_ACCESS_KEY_ID } else { $minioUser }
@@ -72,7 +87,7 @@ if (-not $SkipUp) {
 
     Write-Host "==> wait minio healthy"
     $ok = $false
-    $minioLiveUrl = "$($env:TRAJIR_S3_ENDPOINT_URL.TrimEnd('/'))/minio/health/live"
+    $minioLiveUrl = "http://127.0.0.1:9000/minio/health/live"
     for ($i = 1; $i -le 60; $i++) {
         try {
             $r = Invoke-WebRequest -Uri $minioLiveUrl -UseBasicParsing -TimeoutSec 2

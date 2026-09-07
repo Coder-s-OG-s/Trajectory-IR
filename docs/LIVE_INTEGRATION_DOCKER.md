@@ -82,7 +82,13 @@ Temporal may take longer on first pull. Frontend: `localhost:7233`.
 Default values for local execution are shown below. To customize credentials, copy
 [`.env.example`](../.env.example) to `.env` in the repository root. The smoke scripts
 load `.env` automatically if present.
- 
+
+### Credential Consistency and Synchronization
+
+When customizing container credentials via `.env` or the environment:
+- **MinIO & S3 credentials**: The client S3 credentials (`AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`) must match the container root credentials (`MINIO_ROOT_USER` and `MINIO_ROOT_PASSWORD`). In `.env.example`, the `AWS_*` credentials are intentionally commented out so the smoke scripts default them directly from `MINIO_ROOT_*`, preventing client authentication desynchronization.
+- **Database connection string**: `TRAJIR_DATABASE_URL` is derived by the smoke scripts from `POSTGRES_USER`, `POSTGRES_PASSWORD`, and `POSTGRES_DB` (`postgresql://<user>:<password>@127.0.0.1:5432/<db>`). The scripts automatically URL-encode user, password, and database components so passwords containing reserved characters (such as `@`, `:`, `/`, `#`, `?`, `%`, etc.) do not corrupt connection string URI parsing. If manually constructing `TRAJIR_DATABASE_URL`, ensure reserved characters in credentials are percent-encoded.
+
 Export these for manual live tests (Unix shell):
 
 ```bash
