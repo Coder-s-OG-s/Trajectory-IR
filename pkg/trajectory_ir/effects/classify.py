@@ -22,6 +22,14 @@ def requires_block_and_gate(effect: EffectClass) -> bool:
     return effect is EffectClass.NON_IDEMPOTENT_WRITE
 
 
+def is_forbidden_in_sandbox(effect: EffectClass) -> bool:
+    return effect in (
+        EffectClass.NON_IDEMPOTENT_WRITE,
+        EffectClass.AGENT_SPAWN,
+        EffectClass.SENSITIVE,
+    )
+
+
 def classify_from_mcp(annotations: Any) -> EffectClass:
     """Fail-closed per spec §7.2. Any missing or ambiguous annotation -> NON_IDEMPOTENT_WRITE.
 

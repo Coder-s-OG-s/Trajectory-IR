@@ -24,7 +24,7 @@ type Forbidden struct {
 
 func (e *Forbidden) Error() string {
 	return fmt.Sprintf(
-		"SANDBOX_REJECTS_NON_IDEMPOTENT_WRITE: tool %q effect=%s is forbidden in sandbox mode",
+		"SANDBOX_FORBIDDEN: tool %q effect=%s is forbidden in sandbox mode",
 		e.ToolName,
 		e.Effect,
 	)
@@ -44,7 +44,7 @@ func NormalizeMode(mode string) (Mode, error) {
 
 // AssertToolAllowed raises Forbidden in sandbox for gated effects.
 func AssertToolAllowed(mode Mode, toolName string, effect effects.EffectClass) error {
-	if mode == ModeSandbox && effects.RequiresBlockAndGate(effect) {
+	if mode == ModeSandbox && effects.IsForbiddenInSandbox(effect) {
 		return &Forbidden{ToolName: toolName, Effect: effect}
 	}
 	return nil
