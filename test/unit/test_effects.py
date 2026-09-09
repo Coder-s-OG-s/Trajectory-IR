@@ -1,4 +1,4 @@
-from trajectory_ir.effects import EffectClass, classify_from_mcp, requires_block_and_gate
+from trajectory_ir.effects import EffectClass, classify_from_mcp, is_forbidden_in_sandbox, requires_block_and_gate
 
 
 def test_missing_annotations_fail_closed():
@@ -57,3 +57,12 @@ def test_requires_block_and_gate_only_non_idempotent():
     assert requires_block_and_gate(EffectClass.IDEMPOTENT_WRITE) is False
     assert requires_block_and_gate(EffectClass.AGENT_SPAWN) is False
     assert requires_block_and_gate(EffectClass.SENSITIVE) is False
+
+
+def test_is_forbidden_in_sandbox():
+    assert is_forbidden_in_sandbox(EffectClass.NON_IDEMPOTENT_WRITE) is True
+    assert is_forbidden_in_sandbox(EffectClass.AGENT_SPAWN) is True
+    assert is_forbidden_in_sandbox(EffectClass.SENSITIVE) is True
+    assert is_forbidden_in_sandbox(EffectClass.PURE) is False
+    assert is_forbidden_in_sandbox(EffectClass.READ_ONLY) is False
+    assert is_forbidden_in_sandbox(EffectClass.IDEMPOTENT_WRITE) is False
