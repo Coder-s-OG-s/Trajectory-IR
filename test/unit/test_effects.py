@@ -1,4 +1,9 @@
-from trajectory_ir.effects import EffectClass, classify_from_mcp, is_forbidden_in_sandbox, requires_block_and_gate
+from trajectory_ir.effects import (
+    EffectClass,
+    classify_from_mcp,
+    is_forbidden_in_sandbox,
+    requires_block_and_gate,
+)
 
 
 def test_missing_annotations_fail_closed():

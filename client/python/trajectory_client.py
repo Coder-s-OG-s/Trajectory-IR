@@ -73,7 +73,11 @@ def open_trajectory(
     *,
     mode: RunMode | str = RunMode.LIVE,
 ) -> Trajectory:
-    """Open a trajectory. ``mode="sandbox"`` rejects NON_IDEMPOTENT_WRITE, AGENT_SPAWN, and SENSITIVE tools (R06)."""
+    """Open a trajectory.
+
+    ``mode="sandbox"`` rejects NON_IDEMPOTENT_WRITE, AGENT_SPAWN,
+    and SENSITIVE tools (R06).
+    """
     init_backend(app_name=trajectory_id)
     return Trajectory(
         trajectory_id=trajectory_id,
