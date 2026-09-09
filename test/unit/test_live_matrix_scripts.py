@@ -182,3 +182,27 @@ class TestDecoupledMinioProbe:
         content = PS1_SCRIPT.read_text(encoding="utf-8")
         assert '$minioLiveUrl = "http://127.0.0.1:9000/minio/health/live"' in content
         assert '$minioLiveUrl = "$($env:TRAJIR_S3_ENDPOINT_URL' not in content
+
+
+class TestTemporalComposeConfiguration:
+    """Verify Temporal service configuration in docker-compose.live.yml."""
+
+    def test_temporal_service_env(self):
+        compose_content = yaml.safe_load(COMPOSE_FILE.read_text(encoding="utf-8"))
+        services = compose_content.get("services", {})
+        temporal_svc = services.get("temporal", {})
+        env = temporal_svc.get("environment", {})
+
+        # Ensure unused POSTGRES_DB is removed from temporal service
+        assert "POSTGRES_DB" not in env, (
+            "POSTGRES_DB is unused by temporalio/auto-setup and should not be set"
+        )
+        # Ensure DBNAME and VISIBILITY_DBNAME are parameterized
+        assert "DBNAME" in env, "DBNAME should be defined for Temporal persistence DB"
+        assert "VISIBILITY_DBNAME" in env, (
+            "VISIBILITY_DBNAME should be parameterized for Temporal visibility DB"
+        )
+        assert "TEMPORAL_POSTGRES_DB" in str(env["DBNAME"])
+        assert "VISIBILITY_DBNAME" in str(env["VISIBILITY_DBNAME"]) or "temporal_visibility" in str(
+            env["VISIBILITY_DBNAME"]
+        )
