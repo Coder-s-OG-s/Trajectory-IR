@@ -10,7 +10,7 @@ import (
 )
 
 func main() {
-	sandboxFlag := flag.Bool("sandbox", false, "reject NON_IDEMPOTENT_WRITE tools")
+	sandboxFlag := flag.Bool("sandbox", false, "reject NON_IDEMPOTENT_WRITE, AGENT_SPAWN, and SENSITIVE tools")
 	withPackage := flag.Bool("with-package", false, "after live step, CAS put + thin .tir + rehydrate")
 	workDir := flag.String("workdir", "", "directory for sqlite files (default: temp)")
 	casRoot := flag.String("cas-root", "", "CAS root when using -with-package (default: temp)")

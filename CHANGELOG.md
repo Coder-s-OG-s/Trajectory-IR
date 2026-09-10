@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Sandbox error string renamed from `SANDBOX_REJECTS_NON_IDEMPOTENT_WRITE` to
+  `SANDBOX_FORBIDDEN` (#347). Callers matching the old substring should update.
+- Sandbox mode rejects `AGENT_SPAWN` and `SENSITIVE` effects in addition to
+  `NON_IDEMPOTENT_WRITE` (#347).
+
 ## [0.2.2] - 2026-09-07
 
 ### Added
@@ -50,8 +57,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `go/trajir/mcp` into a new `go/trajir/workdir` package. `trajir-mcp`'s
   CWE-73 root-confinement policy is unchanged and now calls the extracted
   package; no external behavior change.
-- Sandbox error string renamed from `SANDBOX_REJECTS_NON_IDEMPOTENT_WRITE` to
-  `SANDBOX_FORBIDDEN` (#347). Callers matching the old substring should update.
 
 ### Fixed
 
