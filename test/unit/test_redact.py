@@ -70,6 +70,7 @@ def test_redact_value_credential_uri():
     assert redact_value("config", "mongodb+srv://admin:password@cluster") == REDACTED
     assert redact_value("config", "redis://default:hunter2@cache.internal:6379") == REDACTED
     assert redact_value("config", "amqp://guest:guest@rabbitmq:5672") == REDACTED
+    assert redact_value("config", "redis://:hunter2@cache.internal:6379") == REDACTED
 
 
 def test_redact_value_credential_uri_no_password():
