@@ -41,7 +41,7 @@ if [[ -f .env ]]; then
       val="${val#"${val%%[![:space:]]*}"}"
       val="${val%"${val##*[![:space:]]}"}"
       if [[ ("$val" == \"*\" && "$val" == *\" && ${#val} -ge 2) || ("$val" == \'*\' && "$val" == *\' && ${#val} -ge 2) ]]; then
-        val="${val:1:-1}"
+        val="${val:1}"; val="${val%?}"
       fi
       if [[ "$key" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]]; then
         if [[ -z "${!key+x}" ]]; then
