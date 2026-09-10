@@ -243,7 +243,7 @@ jobs:
       - name: govulncheck
         working-directory: go
         run: |
-          go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
+          go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
           govulncheck ./...
 
   # ---- Deep gate: required, allowed to run slower ----

@@ -28,13 +28,91 @@ for arg in "$@"; do
   esac
 done
 
-export TRAJIR_DATABASE_URL="${TRAJIR_DATABASE_URL:-postgresql://trajir:trajir@127.0.0.1:5432/trajir}"
+if [[ -f .env ]]; then
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line#"${line%%[![:space:]]*}"}"
+    line="${line%"${line##*[![:space:]]}"}"
+    [[ -z "$line" || "$line" == \#* ]] && continue
+    if [[ "$line" == *"="* ]]; then
+      key="${line%%=*}"
+      val="${line#*=}"
+      key="${key#"${key%%[![:space:]]*}"}"
+      key="${key%"${key##*[![:space:]]}"}"
+      val="${val#"${val%%[![:space:]]*}"}"
+      val="${val%"${val##*[![:space:]]}"}"
+      if [[ ("$val" == \"*\" && "$val" == *\" && ${#val} -ge 2) || ("$val" == \'*\' && "$val" == *\' && ${#val} -ge 2) ]]; then
+        val="${val:1}"; val="${val%?}"
+      fi
+      if [[ "$key" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]]; then
+        if [[ -z "${!key+x}" ]]; then
+          export "$key"="$val"
+        fi
+      fi
+    fi
+  done < .env
+fi
+
+POSTGRES_USER="${POSTGRES_USER:-trajir}"
+POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-trajir}"
+POSTGRES_DB="${POSTGRES_DB:-trajir}"
+MINIO_ROOT_USER="${MINIO_ROOT_USER:-minioadmin}"
+MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD:-minioadmin}"
+
+urlencode() {
+  local string="${1:-}"
+  if command -v python3 >/dev/null 2>&1; then
+    python3 -c 'import sys, urllib.parse; sys.stdout.write(urllib.parse.quote(sys.argv[1], safe=""))' "$string"
+  elif command -v python >/dev/null 2>&1; then
+    python -c 'import sys
+try:
+    import urllib.parse as up; sys.stdout.write(up.quote(sys.argv[1], safe=""))
+except Exception:
+    import urllib as up; sys.stdout.write(up.quote(sys.argv[1], safe=""))' "$string"
+  else
+    local strlen=${#string}
+    local encoded=""
+    local c
+    for (( pos=0 ; pos<strlen ; pos++ )); do
+      c="${string:$pos:1}"
+      case "$c" in
+        [-_.~a-zA-Z0-9] ) encoded+="$c" ;;
+        * ) printf -v hex '%%%02X' "'$c"; encoded+="$hex" ;;
+      esac
+    done
+    printf '%s' "$encoded"
+  fi
+}
+
+if [[ -z "${TRAJIR_DATABASE_URL:-}" ]]; then
+  enc_user="$(urlencode "$POSTGRES_USER")"
+  enc_pass="$(urlencode "$POSTGRES_PASSWORD")"
+  enc_db="$(urlencode "$POSTGRES_DB")"
+  export TRAJIR_DATABASE_URL="postgresql://${enc_user}:${enc_pass}@127.0.0.1:5432/${enc_db}"
+else
+  export TRAJIR_DATABASE_URL
+fi
 export TRAJIR_S3_ENDPOINT_URL="${TRAJIR_S3_ENDPOINT_URL:-http://127.0.0.1:9000}"
 export TRAJIR_S3_BUCKET="${TRAJIR_S3_BUCKET:-trajir}"
-export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-minioadmin}"
-export AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:-minioadmin}"
+export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-$MINIO_ROOT_USER}"
+export AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:-$MINIO_ROOT_PASSWORD}"
 export AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-us-east-1}"
 export TEMPORAL_HOSTPORT="${TEMPORAL_HOSTPORT:-localhost:7233}"
+
+is_loopback() {
+  local target="$1"
+  local pattern='^([a-zA-Z][a-zA-Z0-9+.-]*://)?([^@/]*@)?(127(\.[0-9]+){3}|localhost|\[::1\]|::1)(:[0-9]+)?(/.*)?$'
+  if [[ "$target" =~ $pattern ]]; then
+    return 0
+  fi
+  return 1
+}
+
+if [[ "$POSTGRES_PASSWORD" == "trajir" ]] || [[ "$AWS_SECRET_ACCESS_KEY" == "minioadmin" ]]; then
+  if ! is_loopback "$TRAJIR_DATABASE_URL" || ! is_loopback "$TRAJIR_S3_ENDPOINT_URL"; then
+    echo "WARNING: default development credentials detected on non-loopback endpoint." >&2
+    echo "Do not use default credentials on public or untrusted networks." >&2
+  fi
+fi
 
 if [[ "$SKIP_UP" -eq 0 ]]; then
   echo "==> docker compose up (postgres + minio$( [[ $WITH_TEMPORAL -eq 1 ]] && echo ' + temporal' ))"
@@ -46,7 +124,7 @@ if [[ "$SKIP_UP" -eq 0 ]]; then
 
   echo "==> wait postgres healthy"
   for i in $(seq 1 60); do
-    if docker exec trajir-live-postgres pg_isready -U trajir -d trajir >/dev/null 2>&1; then
+    if docker exec trajir-live-postgres pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null 2>&1; then
       break
     fi
     sleep 2
@@ -57,8 +135,9 @@ if [[ "$SKIP_UP" -eq 0 ]]; then
   done
 
   echo "==> wait minio healthy"
+  minio_live_url="http://127.0.0.1:9000/minio/health/live"
   for i in $(seq 1 60); do
-    if curl -sf "http://127.0.0.1:9000/minio/health/live" >/dev/null; then
+    if curl -sf "$minio_live_url" >/dev/null; then
       break
     fi
     sleep 2

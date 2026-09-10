@@ -186,15 +186,26 @@ func Sign(path string, privateKey ed25519.PrivateKey, meta SignerMeta) error {
 // Verify checks package signature policy for path.
 // When SIGNATURE is absent and RequireSignature is false, returns (nil, nil).
 //
-// Prefer verifySignatureFromZipFiles when the archive is already open (Load/Import)
-// so signature metadata cannot come from a different file than the parsed members
-// (TOCTOU / CWE-367).
+// Prefer VerifyReader or verifySignatureFromZipFiles when the archive is
+// already open so signature metadata cannot come from a different file than
+// the parsed members (TOCTOU / CWE-367).
 func Verify(path string, opts VerifyOptions) (*SignatureInfo, error) {
 	members, sigRaw, err := readZipMembersAndSignature(path)
 	if err != nil {
 		return nil, err
 	}
 	return verifyFromMembers(members, sigRaw, opts)
+}
+
+// VerifyReader checks package signature policy from an already-open io.ReaderAt.
+// Use this instead of Verify when the caller has already opened the file to
+// avoid a time-of-check to time-of-use race (TOCTOU / CWE-367).
+func VerifyReader(r io.ReaderAt, size int64, opts VerifyOptions) (*SignatureInfo, error) {
+	zr, err := zip.NewReader(r, size)
+	if err != nil {
+		return nil, fmt.Errorf("%w: open zip: %v", ErrTir, err)
+	}
+	return verifySignatureFromZipFiles(zr.File, opts)
 }
 
 // verifySignatureFromZipFiles verifies SIGNATURE against members from an already-open
