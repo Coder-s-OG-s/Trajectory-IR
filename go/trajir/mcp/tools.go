@@ -5,12 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/client"
 	nodelog "github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/log"
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/tir"
+	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/workdir"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -173,19 +175,57 @@ type importOut struct {
 	Signed       bool   `json:"signed"`
 }
 
-// openBoundedTIR validates the path under TRAJIR_MCP_ROOT and opens the file in
-// a single step. The caller gets an *os.File whose identity is the same file
-// that passed confinement, closing the TOCTOU / CWE-367 window that existed
-// when requireBoundedPath and tir.Load/tir.Verify opened the path separately.
+// openBoundedTIR securely opens a .tir package file confined beneath the
+// workspace root using os.OpenRoot. By performing directory-confined opening
+// on the root handle directly instead of sequential string-based validation
+// followed by os.Open, this eliminates the time-of-check to time-of-use
+// (TOCTOU / CWE-367) race where a file or directory component could be swapped
+// for a malicious symlink pointing outside the boundary between check and open.
 func openBoundedTIR(rawPath string) (*os.File, error) {
-	path, err := requireBoundedPath(rawPath, "")
+	if strings.TrimSpace(rawPath) == "" {
+		return nil, fmt.Errorf("mcp: path is required")
+	}
+	root, err := approvedRoot()
 	if err != nil {
 		return nil, err
 	}
-	f, err := os.Open(path)
+
+	clean := filepath.Clean(rawPath)
+	var rel string
+	if filepath.IsAbs(clean) {
+		r, err := filepath.Rel(root, clean)
+		if err != nil || !workdir.IsSubpath(root, clean) {
+			return nil, fmt.Errorf("mcp: path %q escapes workspace root %q", rawPath, root)
+		}
+		rel = r
+	} else {
+		if clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+			return nil, fmt.Errorf("mcp: path %q escapes workspace root %q", rawPath, root)
+		}
+		rel = clean
+	}
+
+	rootDir, err := os.OpenRoot(root)
+	if err != nil {
+		return nil, fmt.Errorf("mcp: open workspace root: %w", err)
+	}
+	defer rootDir.Close()
+
+	f, err := rootDir.Open(rel)
 	if err != nil {
 		return nil, fmt.Errorf("mcp: open %q: %w", rawPath, err)
 	}
+
+	st, err := f.Stat()
+	if err != nil {
+		f.Close()
+		return nil, fmt.Errorf("mcp: stat %q: %w", rawPath, err)
+	}
+	if st.IsDir() {
+		f.Close()
+		return nil, fmt.Errorf("mcp: %q is a directory", rawPath)
+	}
+
 	return f, nil
 }
 
