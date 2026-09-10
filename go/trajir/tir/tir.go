@@ -510,6 +510,17 @@ func Load(path string) (*Package, error) {
 	return loadImpl(path, true)
 }
 
+// LoadReader reads and verifies a .tir zip from an already-open io.ReaderAt.
+// Use this instead of Load when the caller has already opened the file to
+// avoid a time-of-check to time-of-use race (TOCTOU / CWE-367).
+func LoadReader(r io.ReaderAt, size int64) (*Package, error) {
+	zr, err := zip.NewReader(r, size)
+	if err != nil {
+		return nil, fmt.Errorf("%w: open zip: %v", ErrTir, err)
+	}
+	return loadFromZip(zr, true)
+}
+
 // LoadUnverified loads without hash verification. UNSAFE for untrusted input.
 //
 // Requires TRAJIR_ALLOW_UNVERIFIED=1 in the environment. Without this the call
@@ -538,6 +549,10 @@ func loadImpl(path string, verify bool) (*Package, error) {
 		return nil, fmt.Errorf("%w: open zip: %v", ErrTir, err)
 	}
 	defer zr.Close()
+	return loadFromZip(&zr.Reader, verify)
+}
+
+func loadFromZip(zr *zip.Reader, verify bool) (*Package, error) {
 
 	if len(zr.File) > MaxZipEntries {
 		return nil, fmt.Errorf("%w: too many zip entries: %d > %d", ErrLimit, len(zr.File), MaxZipEntries)
