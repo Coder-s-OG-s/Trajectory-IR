@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 
@@ -172,17 +173,39 @@ type importOut struct {
 	Signed       bool   `json:"signed"`
 }
 
+// openBoundedTIR validates the path under TRAJIR_MCP_ROOT and opens the file in
+// a single step. The caller gets an *os.File whose identity is the same file
+// that passed confinement, closing the TOCTOU / CWE-367 window that existed
+// when requireBoundedPath and tir.Load/tir.Verify opened the path separately.
+func openBoundedTIR(rawPath string) (*os.File, error) {
+	path, err := requireBoundedPath(rawPath, "")
+	if err != nil {
+		return nil, err
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("mcp: open %q: %w", rawPath, err)
+	}
+	return f, nil
+}
+
 func toolImportTIR(ctx context.Context, _ *mcp.CallToolRequest, in pathIn) (*mcp.CallToolResult, importOut, error) {
 	_ = ctx
 	var zero importOut
 	if strings.TrimSpace(in.Path) == "" {
 		return nil, zero, fmt.Errorf("mcp: path is required")
 	}
-	path, err := requireBoundedPath(in.Path, "")
+	f, err := openBoundedTIR(in.Path)
 	if err != nil {
 		return nil, zero, err
 	}
-	pkg, err := tir.Load(path)
+	defer f.Close()
+
+	st, err := f.Stat()
+	if err != nil {
+		return nil, zero, err
+	}
+	pkg, err := tir.LoadReader(f, st.Size())
 	if err != nil {
 		return nil, zero, err
 	}
@@ -190,7 +213,7 @@ func toolImportTIR(ctx context.Context, _ *mcp.CallToolRequest, in pathIn) (*mcp
 	traj, _ := pkg.Manifest["trajectory_id"].(string)
 	tenant, _ := pkg.Manifest["tenant_id"].(string)
 	return nil, importOut{
-		Path:         path,
+		Path:         f.Name(),
 		Mode:         mode,
 		TrajectoryID: traj,
 		TenantID:     tenant,
@@ -224,11 +247,18 @@ func toolVerifySignature(ctx context.Context, _ *mcp.CallToolRequest, in verifyI
 	if strings.TrimSpace(in.Path) == "" {
 		return nil, zero, fmt.Errorf("mcp: path is required")
 	}
-	path, err := requireBoundedPath(in.Path, "")
+	f, err := openBoundedTIR(in.Path)
 	if err != nil {
 		return nil, zero, err
 	}
-	info, err := tir.Verify(path, tir.VerifyOptions{RequireSignature: in.RequireSignature})
+	defer f.Close()
+
+	st, err := f.Stat()
+	if err != nil {
+		return nil, zero, err
+	}
+	path := f.Name()
+	info, err := tir.VerifyReader(f, st.Size(), tir.VerifyOptions{RequireSignature: in.RequireSignature})
 	if err != nil {
 		if errors.Is(err, tir.ErrSignature) {
 			// Signature policy failures (tamper, mismatch, missing-when-required)
