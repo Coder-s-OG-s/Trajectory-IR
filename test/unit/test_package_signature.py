@@ -116,6 +116,29 @@ def test_require_signature_rejects_unsigned(tmp_path):
     assert verify_package(out) is None
 
 
+def test_empty_trust_store_rejects_all_keys(tmp_path):
+    """Regression for #314: an empty trusted_keys/trusted_key_ids must mean
+    'trust nobody', not 'skip the check' (empty list is falsy in Python)."""
+    log = NodeLog(tmp_path / "nodes.sqlite")
+    log.append("DECISION", 1, {"plan": {"tool_calls": []}}, "t1", "demo", 1)
+    out = tmp_path / "p.tir"
+    key = _test_only_private_key()
+    export_tir(log, "t1", out, mode="thin", sign_key=key)
+
+    with pytest.raises(TirSignatureError, match="public key not in trust store"):
+        verify_package(out, require_signature=True, trusted_keys=[])
+    with pytest.raises(TirSignatureError, match="not in trust store"):
+        verify_package(out, require_signature=True, trusted_key_ids=[])
+
+    # A trust store that actually contains the signer's key still passes.
+    info = verify_package(out, require_signature=True, trusted_keys=[key[32:]])
+    assert info is not None
+    assert verify_package(out, require_signature=True, trusted_key_ids=[key_id(key[32:])]) is not None
+
+    # None (the default) means "no restriction" and must not raise.
+    assert verify_package(out, require_signature=True, trusted_keys=None) is not None
+
+
 def test_tamper_fails_verify(tmp_path):
     log = NodeLog(tmp_path / "nodes.sqlite")
     log.append("DECISION", 1, {"plan": {"tool_calls": []}}, "t1", "demo", 1)
