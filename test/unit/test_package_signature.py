@@ -133,7 +133,8 @@ def test_empty_trust_store_rejects_all_keys(tmp_path):
     # A trust store that actually contains the signer's key still passes.
     info = verify_package(out, require_signature=True, trusted_keys=[key[32:]])
     assert info is not None
-    assert verify_package(out, require_signature=True, trusted_key_ids=[key_id(key[32:])]) is not None
+    kid_info = verify_package(out, require_signature=True, trusted_key_ids=[key_id(key[32:])])
+    assert kid_info is not None
 
     # None (the default) means "no restriction" and must not raise.
     assert verify_package(out, require_signature=True, trusted_keys=None) is not None
