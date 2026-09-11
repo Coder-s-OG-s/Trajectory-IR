@@ -35,7 +35,7 @@ type Options struct {
 	WorkflowID string
 	// Backend overrides LocalSQLite when non nil. Caller owns Close unless Open created it.
 	Backend durable.Backend
-	// Mode is live (default) or sandbox (R06).
+	// Mode is live (default) or sandbox (R06: reject NON_IDEMPOTENT_WRITE, AGENT_SPAWN, SENSITIVE).
 	Mode sandbox.Mode
 }
 

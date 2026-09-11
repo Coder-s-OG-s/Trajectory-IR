@@ -430,7 +430,7 @@ These are runnable tests, not descriptions of intent. R01 and R02 are the hard g
 | R03 | A `PURE` tool may be recomputed freely on resume. Runnable: `conformance/r03_pure_recompute_test.py` (and Go `go test ./trajir/resume -run R03`). |
 | R04 | A `CONSTRAINT` node is never silently dropped under budget pressure; the system either includes it or raises a hard error. Runnable: `conformance/r04_constraint_budget_test.py` (and Go `go test ./trajir/projector`). |
 | R05 | Export and re import of a `.tir` package preserves all node hashes and seals exactly. Runnable: `conformance/r05_tir_roundtrip_test.py` (and Go `go test ./trajir/tir`). |
-| R06 | A sandbox/what if branch rejects any real `NON_IDEMPOTENT_WRITE` execution. Runnable: `conformance/r06_sandbox_test.py`. |
+| R06 | A sandbox/what-if branch rejects `NON_IDEMPOTENT_WRITE`, `AGENT_SPAWN`, and `SENSITIVE` effects before the tool body runs. Runnable: `conformance/r06_sandbox_test.py`. |
 | R07 | Grafting an artifact between agents transfers only the artifact reference, never private `THOUGHT` nodes. Runnable: `conformance/r07_graft_test.py`. |
 | R08 | Redaction removes secrets/flagged content from what gets projected into context. Runnable: `conformance/r08_projection_redaction_test.py`. |
 | R09 | Sign a thin package; verify succeeds; mutate one byte of `nodes.ndjson`; verify fails. Runnable: `conformance/r09_tir_signature_test.py`. |

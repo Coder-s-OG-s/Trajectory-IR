@@ -21,6 +21,10 @@ func RequiresBlockAndGate(e EffectClass) bool {
 	return e == NON_IDEMPOTENT_WRITE
 }
 
+func IsForbiddenInSandbox(e EffectClass) bool {
+	return e == NON_IDEMPOTENT_WRITE || e == AGENT_SPAWN || e == SENSITIVE
+}
+
 // ClassifyFromMCP maps MCP tool annotations to an EffectClass.
 // Missing or ambiguous input becomes NON_IDEMPOTENT_WRITE.
 //

@@ -81,7 +81,8 @@ def make_run_step(
       when durable memo is absent (R03 for PURE). Prior TOOL_CALL rows alone
       must not raise ``BlockedNeedsGate`` for these classes.
 
-    Sandbox mode (R06): rejects NON_IDEMPOTENT_WRITE before the tool body runs.
+    Sandbox mode (R06): rejects NON_IDEMPOTENT_WRITE, AGENT_SPAWN, and
+    SENSITIVE before the tool body runs.
 
     Durable backend hooks default to the DBOS adapter. Pass Restate (or local
     memo) wrappers via ``durable_infer_fn`` / ``durable_tool_fn`` /

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Sandbox error string renamed from `SANDBOX_REJECTS_NON_IDEMPOTENT_WRITE` to
+  `SANDBOX_FORBIDDEN` (#347). Callers matching the old substring should update.
+- Sandbox mode rejects `AGENT_SPAWN` and `SENSITIVE` effects in addition to
+  `NON_IDEMPOTENT_WRITE` (#347).
+
 ## [0.2.2] - 2026-09-07
 
 ### Added
@@ -209,7 +216,8 @@ First library-tagged release of the Phase 1A surface: dual-language IR, portable
   conformance + Go tests; only NON_IDEMPOTENT_WRITE is gated.
 - R04 default context projector (`project_context` / `trajir/projector`) with
   CONSTRAINT+pinned budget safety and `BUDGET_IMPOSSIBLE` (RFC 8785 size metric).
-- R06 sandbox mode (`RunMode.SANDBOX`) rejects NON_IDEMPOTENT_WRITE before side effects.
+- R06 sandbox mode (`RunMode.SANDBOX`) rejects `NON_IDEMPOTENT_WRITE`,
+  `AGENT_SPAWN`, and `SENSITIVE` before side effects.
 - R07 `graft_artifact_ref` / `trajir/graft` transfers artifact refs only (never THOUGHT).
 - R08 projection redaction (`runtime/redact`, `trajir/redact`); shared with `.tir` redacted export.
 - Maintainer release notes and process: `docs/RELEASE.md`, `docs/RELEASE_NOTES_0.1.0.md`.

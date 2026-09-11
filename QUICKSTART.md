@@ -65,7 +65,8 @@ def echo(msg: str) -> str:
 
 
 traj = open_trajectory(tenant_id="demo", trajectory_id="qs-1", db_path="qs.sqlite")
-# Optional sandbox (R06): open_trajectory(..., mode="sandbox")  # rejects NON_IDEMPOTENT_WRITE
+# Optional sandbox (R06): open_trajectory(..., mode="sandbox")
+# rejects NON_IDEMPOTENT_WRITE, AGENT_SPAWN, and SENSITIVE
 
 project(traj, step_n=1, context={"goal": "hello"})
 seal_decision(traj, step_n=1, plan={"tool_calls": [{"name": "echo", "args": {"msg": "hi"}}]})
@@ -138,8 +139,8 @@ from trajectory_ir.effects import EffectClass
 from trajectory_ir.runtime.tool import Tool
 
 traj = open_trajectory("demo", "sandbox-1", db_path="s.sqlite", mode="sandbox")
-# NON_IDEMPOTENT_WRITE → SandboxForbidden before the tool body runs
-# PURE / READ_ONLY / etc. still allowed
+# NON_IDEMPOTENT_WRITE, AGENT_SPAWN, SENSITIVE → SandboxForbidden
+# PURE / READ_ONLY / IDEMPOTENT_WRITE still allowed
 ```
 
 ---
