@@ -33,6 +33,7 @@ import (
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/cas"
 	nodelog "github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/log"
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/nodes"
+	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/redact"
 )
 
 // Package format constants match the Python reference.
@@ -109,6 +110,14 @@ type ExportOptions struct {
 	// length fails closed; it does not silently produce an unsigned package.
 	SignKey    ed25519.PrivateKey
 	SignerMeta SignerMeta
+	// Redacted, when true, strips thoughts and fields that match a secret-like
+	// key name or value shape before export (matches export_tir(redacted=True)
+	// in the Python reference). This is a keyword/pattern heuristic, not a
+	// general secret scanner: it will not catch every secret, so redacted
+	// output still needs a human review pass before being shared outside the
+	// tenant. Fat mode is forced down to thin in redacted output since
+	// embedded artifact bytes may themselves hold secrets.
+	Redacted bool
 }
 
 // contentHash returns SHA-256 hex of data.
@@ -196,6 +205,53 @@ func asPayload(v any) (map[string]any, error) {
 		return nil, fmt.Errorf("payload must be an object, got %T", v)
 	}
 	return m, nil
+}
+
+// redactNodeRecord returns a copy of a node record with thoughts/secrets
+// stripped, matching Python's _redact_node. payload_hash and id are
+// recomputed from the redacted payload since export produces a new,
+// differently-hashed package; ts is carried over unchanged (wall clock is
+// never part of node identity).
+func redactNodeRecord(rec map[string]any) (map[string]any, error) {
+	kind, _ := asString(rec["kind"])
+	payload, err := asPayload(rec["payload"])
+	if err != nil {
+		return nil, err
+	}
+	newPayload := redact.RedactPayload(kind, payload)
+	tenant, _ := asString(rec["tenant_id"])
+	traj, _ := asString(rec["trajectory_id"])
+	stepN, err := asStepN(rec["step_n"])
+	if err != nil {
+		return nil, err
+	}
+	seq, err := asInt(rec["seq"])
+	if err != nil {
+		return nil, err
+	}
+	ph, err := nodes.PayloadHash(newPayload)
+	if err != nil {
+		return nil, err
+	}
+	id, err := nodes.NodeID(tenant, traj, stepN, seq, kind, ph)
+	if err != nil {
+		return nil, err
+	}
+	var ts float64
+	if v, ok := rec["ts"].(float64); ok {
+		ts = v
+	}
+	return map[string]any{
+		"id":            id,
+		"trajectory_id": traj,
+		"tenant_id":     tenant,
+		"step_n":        rec["step_n"],
+		"seq":           seq,
+		"kind":          kind,
+		"payload":       newPayload,
+		"ts":            ts,
+		"payload_hash":  ph,
+	}, nil
 }
 
 // verifyNodeRecord recomputes id from fields; fails on mismatch.
@@ -333,6 +389,24 @@ func Export(nodeLog *nodelog.NodeLog, trajectoryID, dest string, opts ExportOpti
 		}
 	}
 
+	if opts.Redacted {
+		redactedList := make([]map[string]any, 0, len(nodeList))
+		for _, n := range nodeList {
+			rn, err := redactNodeRecord(n)
+			if err != nil {
+				return "", err
+			}
+			redactedList = append(redactedList, rn)
+		}
+		nodeList = redactedList
+		if mode == ModeFat {
+			// Fat artifacts may hold secrets; omit bytes in redacted mode.
+			mode = ModeThin
+			opts.Artifacts = nil
+			opts.ArtifactBytes = nil
+		}
+	}
+
 	artifactBytes := map[string][]byte{}
 	artifacts := opts.Artifacts
 	if artifacts == nil {
@@ -374,7 +448,7 @@ func Export(nodeLog *nodelog.NodeLog, trajectoryID, dest string, opts ExportOpti
 		"node_count":     len(nodeList),
 		"seal_count":     len(seals),
 		"signature":      nil,
-		"redacted":       false,
+		"redacted":       opts.Redacted,
 	}
 
 	artManifest := make([]map[string]any, 0, len(artifacts))
