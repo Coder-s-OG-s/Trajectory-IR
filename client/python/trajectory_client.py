@@ -78,7 +78,7 @@ def open_trajectory(
     ``mode="sandbox"`` rejects NON_IDEMPOTENT_WRITE, AGENT_SPAWN,
     and SENSITIVE tools (R06).
     """
-    init_backend(app_name=trajectory_id)
+    init_backend(db_path=db_path)
     return Trajectory(
         trajectory_id=trajectory_id,
         tenant_id=tenant_id,
@@ -203,7 +203,7 @@ def resume(
     caller bug (wrong db_path or trajectory_id), and should fail loudly
     rather than silently behave like ``open_trajectory``.
     """
-    init_backend(app_name=trajectory_id)
+    init_backend(db_path=db_path)
     traj = Trajectory(
         trajectory_id=trajectory_id,
         tenant_id=tenant_id,

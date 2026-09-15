@@ -7,7 +7,7 @@ from drivers.durable_backend.dbos.adapter import (
 
 def test_wrapped_workflow_runs_and_returns_result(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    init_backend(app_name="test-adapter")
+    init_backend(db_path=str(tmp_path / "test-adapter.sqlite"))
 
     call_count = {"n": 0}
 
