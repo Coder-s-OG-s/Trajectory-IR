@@ -4,6 +4,7 @@ Phase 1B default path is **Go**. Full detail lives in the repo:
 
 - [go/QUICKSTART.md](https://github.com/Coder-s-OG-s/Trajectory-IR/blob/main/go/QUICKSTART.md)
 - Root [QUICKSTART.md](https://github.com/Coder-s-OG-s/Trajectory-IR/blob/main/QUICKSTART.md) (Go first, Python reference below)
+- Normative [master specification](https://github.com/Coder-s-OG-s/Trajectory-IR/blob/main/docs/MASTER_SPECIFICATION.md)
 
 ## Prerequisites
 

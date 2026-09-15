@@ -1,8 +1,9 @@
 # Contributing to Trajectory IR
 
 Thanks for helping. Trajectory IR is a portable semantic layer for agent runs
-(seals, effect classes, `.tir`, honest resume). The root `README.md` is the
-master specification.
+(seals, effect classes, `.tir`, honest resume). The normative master
+specification is [`docs/MASTER_SPECIFICATION.md`](docs/MASTER_SPECIFICATION.md)
+(the root `README.md` is the project landing page).
 
 Also read: [MAINTAINERS.md](MAINTAINERS.md), [GOVERNANCE.md](GOVERNANCE.md),
 [docs/ROADMAP.md](docs/ROADMAP.md), [docs/SCOPE_AND_NON_GOALS.md](docs/SCOPE_AND_NON_GOALS.md),
@@ -11,8 +12,10 @@ Also read: [MAINTAINERS.md](MAINTAINERS.md), [GOVERNANCE.md](GOVERNANCE.md),
 
 ## 1. Spec before code
 
-1. Read the root `README.md` (Phase 1B language priority is in §5 and §12.1).
-2. Do not implement behavior that is not defined there.
+1. Read [`docs/MASTER_SPECIFICATION.md`](docs/MASTER_SPECIFICATION.md)
+   (Phase 1B language priority is in §5 and §12.1). Skim the root `README.md`
+   for onboarding context.
+2. Do not implement behavior that is not defined in the master specification.
 3. Do not reimplement durable execution (retry, lease, custom crash engines).
    That belongs under `go/trajir/durable` (Temporal production for Go) or
    `drivers/durable_backend/` (DBOS for the Python reference port).

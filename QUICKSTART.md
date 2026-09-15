@@ -284,6 +284,7 @@ Integration recipes and CI parity commands live in
 | [docs/E2E_POSTGRES_CAS_THIN.md](docs/E2E_POSTGRES_CAS_THIN.md) | Full Postgres + CAS + thin package walkthrough |
 | [docs/PHASE_1A_STATUS.md](docs/PHASE_1A_STATUS.md) | What shipped in Phase 1A |
 | [docs/PHASE_1B_STATUS.md](docs/PHASE_1B_STATUS.md) | Go primary program (when present on branch) |
-| [README.md](README.md) | Master specification |
+| [README.md](README.md) | Project landing page |
+| [docs/MASTER_SPECIFICATION.md](docs/MASTER_SPECIFICATION.md) | Master specification (normative) |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | DCO, CI, local dev, integration services |
 

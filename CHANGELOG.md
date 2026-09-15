@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Docs:** root `README.md` is now a project landing page for users, students,
+  and contributors. The normative master specification moved to
+  [`docs/MASTER_SPECIFICATION.md`](docs/MASTER_SPECIFICATION.md) (`spec-v0.2-draft`
+  content preserved). Contributor and governance links updated accordingly.
 - Sandbox error string renamed from `SANDBOX_REJECTS_NON_IDEMPOTENT_WRITE` to
   `SANDBOX_FORBIDDEN` (#347). Callers matching the old substring should update.
 - Sandbox mode rejects `AGENT_SPAWN` and `SENSITIVE` effects in addition to
