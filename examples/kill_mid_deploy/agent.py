@@ -140,7 +140,7 @@ def main():
         on_decision_sealed=seal_marker_hook,
     )
 
-    init_backend(app_name="kill_mid_deploy")
+    init_backend(db_path=DB_PATH)
 
     try:
         with SetWorkflowID(TRAJECTORY_ID):

@@ -1,6 +1,6 @@
 # Phase 1A status (as of v0.1.0)
 
-Honest inventory of what is **on `main`** versus what remains **out of scope** or deferred. Normative detail stays in the root `README.md`.
+Honest inventory of what is **on `main`** versus what remains **out of scope** or deferred. Normative detail stays in [`docs/MASTER_SPECIFICATION.md`](MASTER_SPECIFICATION.md).
 
 ## Shipped (code + runnable checks)
 

@@ -16,7 +16,7 @@ real LLM client without changing seal or tool execution.
 4. Optional `--with-package`: `put_artifact` into `FileSystemCAS`, thin
    `export_tir(..., cas=...)`, `load_tir` + `rehydrate_artifacts` with a
    byte match check
-5. Optional `--sandbox`: non idempotent tools are rejected before the body runs
+5. Optional `--sandbox`: non idempotent, agent spawn, and sensitive tools are rejected before the body runs
 
 ## How this differs from other examples
 

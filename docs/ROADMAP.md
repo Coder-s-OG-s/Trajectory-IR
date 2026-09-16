@@ -1,8 +1,9 @@
 # Roadmap
 
-Public roadmap for Trajectory IR. Normative product rules remain in the root
-`README.md`. This file is the **URL** intended for CNCF Sandbox form “Roadmap”
-and for contributors planning work.
+Public roadmap for Trajectory IR. Normative product rules remain in
+[`docs/MASTER_SPECIFICATION.md`](MASTER_SPECIFICATION.md) (root `README.md` is
+the landing page). This file is the **URL** intended for CNCF Sandbox form
+“Roadmap” and for contributors planning work.
 
 Milestones board: https://github.com/Coder-s-OG-s/Trajectory-IR/milestones
 
@@ -39,7 +40,7 @@ trajectories (seals, effects, `.tir`) on top of existing durable backends.
 
 ## Explicit non-goals (do not prioritize)
 
-Aligned with root README §5 / Future milestone:
+Aligned with master specification §5 / Future milestone:
 
 - Custom crash detection, retry, or lease engines (use Temporal / DBOS / Restate)
 - Becoming “the” agent framework (LangGraph/CrewAI competitor)

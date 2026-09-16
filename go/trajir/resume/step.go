@@ -30,7 +30,7 @@ type RunStepConfig struct {
 	WorkflowID       string // durable memo scope; often same as TrajectoryID
 	Tools            map[string]Tool
 	OnDecisionSealed func() // optional test hook after DECISION is appended
-	// Mode is live (default) or sandbox (R06: reject NON_IDEMPOTENT_WRITE).
+	// Mode is live (default) or sandbox (R06: reject NON_IDEMPOTENT_WRITE, AGENT_SPAWN, SENSITIVE).
 	Mode sandbox.Mode
 }
 

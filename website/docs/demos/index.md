@@ -6,7 +6,7 @@ These are the **conference-ready** Trajectory IR demos. They use the **Go primar
 |---|---|---|---|
 | [Kill mid deploy](kill-mid-deploy.md) | Seal + crash mid non-idempotent tool → honest gate, no silent re-deploy | 3–4 min | `go run ./examples/kill_mid_deploy ...` |
 | [Adoption host + `.tir`](adoption-host.md) | Host loop + thin package + CAS rehydrate | 2 min | `go run ./examples/adoption_host -with-package` |
-| [Sandbox mode](sandbox.md) | R06: reject real `NON_IDEMPOTENT_WRITE` in sandbox | 30–45 sec | `go run ./examples/adoption_host -sandbox` |
+| [Sandbox mode](sandbox.md) | R06: reject `NON_IDEMPOTENT_WRITE`, `AGENT_SPAWN`, and `SENSITIVE` in sandbox | 30–45 sec | `go run ./examples/adoption_host -sandbox` |
 
 ## Recommended talk order
 

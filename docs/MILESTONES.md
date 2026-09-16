@@ -44,7 +44,7 @@ In the GitHub UI: issue/PR sidebar → Milestone.
 
 ## Related docs
 
-- Master spec phases: root `README.md` §5
+- Master spec phases: [`docs/MASTER_SPECIFICATION.md`](MASTER_SPECIFICATION.md) §5
 - Phase 1A inventory: [PHASE_1A_STATUS.md](PHASE_1A_STATUS.md)
 - Phase 1B program: epic [#113](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/113)
 - Phase 1C status: [PHASE_1C_STATUS.md](PHASE_1C_STATUS.md)

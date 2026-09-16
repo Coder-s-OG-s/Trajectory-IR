@@ -27,7 +27,7 @@ We will acknowledge receipt of your vulnerability report within 48 hours. Please
 
 ## 3. Scope of Security Concerns (Architecture Specific)
 
-Based on the [Infrastructure Blueprint](infrastructure.md) and [Master Spec](README.md), we are actively monitoring for vulnerabilities in the following planes:
+Based on the [Infrastructure Blueprint](infrastructure.md) and [Master Spec](docs/MASTER_SPECIFICATION.md), we are actively monitoring for vulnerabilities in the following planes:
 
 ### A. Execution & Tool Safety Plane
 - **Safety Boundary Bypasses**: Exploits that trick the system into classifying a `NON_IDEMPOTENT_WRITE` tool as `PURE` or `READ_ONLY`, bypassing the Fail-Closed default.
