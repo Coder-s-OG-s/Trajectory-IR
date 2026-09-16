@@ -5,7 +5,8 @@ document describes how decisions are made and how maintainership works.
 
 ## Principles
 
-1. **Spec before code** — the root `README.md` is the master specification.
+1. **Spec before code** — [`docs/MASTER_SPECIFICATION.md`](docs/MASTER_SPECIFICATION.md)
+   is the master specification (root `README.md` is the landing page).
 2. **Thin core** — do not reimplement durable execution engines (Temporal, DBOS, Restate).
 3. **Portability first** — the portable `.tir` unit and effect-safe seals are the product.
 4. **CNCF-friendly process** — DCO, public discussion, documented maintainers.
@@ -24,8 +25,8 @@ Current maintainers: [MAINTAINERS.md](MAINTAINERS.md).
 
 1. **Day-to-day** — maintainers merge PRs that pass CI, match the spec, and have
    DCO. Prefer squash merge; keep `main` green.
-2. **Spec or scope changes** — open a Spec question issue or PR that edits the
-   root README / roadmap first. Wait for maintainer consensus (lazy consensus:
+2. **Spec or scope changes** — open a Spec question issue or PR that edits
+   `docs/MASTER_SPECIFICATION.md` / roadmap first. Wait for maintainer consensus (lazy consensus:
    silence of 5 business days after explicit call for objections may count as
    assent for non-breaking docs; breaking or product-scope changes need explicit
    approval from at least two maintainers when more than one is active).

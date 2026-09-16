@@ -192,3 +192,61 @@ func TestRequireBoundedPathFailsClosedOnInvalidPreferRoot(t *testing.T) {
 		t.Fatal("expected requireBoundedPath to fail when preferRoot cannot be resolved")
 	}
 }
+
+func TestOpenBoundedTIR(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv(EnvWorkspaceRoot, root)
+
+	// Valid relative file under root
+	targetFile := filepath.Join(root, "valid.tir")
+	if err := os.WriteFile(targetFile, []byte("valid content"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	f, err := openBoundedTIR("valid.tir")
+	if err != nil {
+		t.Fatalf("openBoundedTIR relative: %v", err)
+	}
+	f.Close()
+
+	// Valid absolute path under root
+	f, err = openBoundedTIR(targetFile)
+	if err != nil {
+		t.Fatalf("openBoundedTIR absolute: %v", err)
+	}
+	f.Close()
+
+	// Outside file must fail
+	outside := t.TempDir()
+	outsideFile := filepath.Join(outside, "secret.tir")
+	if err := os.WriteFile(outsideFile, []byte("secret"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := openBoundedTIR(outsideFile); err == nil {
+		t.Fatal("expected outside file to fail")
+	}
+
+	// Relative traversal must fail
+	if _, err := openBoundedTIR("../secret.tir"); err == nil {
+		t.Fatal("expected .. to fail")
+	}
+
+	// Directory must fail
+	if _, err := openBoundedTIR("."); err == nil {
+		t.Fatal("expected directory to fail")
+	}
+
+	// Empty path must fail
+	if _, err := openBoundedTIR(""); err == nil {
+		t.Fatal("expected empty path to fail")
+	}
+
+	// Symlink escape test (if symlinks are supported)
+	symlinkPath := filepath.Join(root, "sym_escape.tir")
+	if err := os.Symlink(outsideFile, symlinkPath); err == nil {
+		if _, err := openBoundedTIR("sym_escape.tir"); err == nil {
+			t.Fatal("expected symlink escape to fail")
+		}
+	}
+}
+

@@ -31,7 +31,7 @@ SECRET_VALUE_RE = re.compile(
     r"|AIza[0-9A-Za-z\-_]{35}"  # GCP API key
     r"|-----BEGIN[ A-Z]*PRIVATE KEY-----"  # PEM private key block
     r"|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}"  # JWT
-    r"|[a-zA-Z][a-zA-Z0-9+.-]*://[^:@\s]+:[^@\s]+@)"  # credential URI (scheme://user:pass@)
+    r"|[a-zA-Z][a-zA-Z0-9+.-]*://[^:@\s]*:[^@\s]+@)"  # credential URI (scheme://user:pass@ or scheme://:pass@)
 )
 
 REDACTED = "[REDACTED]"
