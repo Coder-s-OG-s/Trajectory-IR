@@ -65,7 +65,8 @@ def echo(msg: str) -> str:
 
 
 traj = open_trajectory(tenant_id="demo", trajectory_id="qs-1", db_path="qs.sqlite")
-# Optional sandbox (R06): open_trajectory(..., mode="sandbox")  # rejects NON_IDEMPOTENT_WRITE
+# Optional sandbox (R06): open_trajectory(..., mode="sandbox")
+# rejects NON_IDEMPOTENT_WRITE, AGENT_SPAWN, and SENSITIVE
 
 project(traj, step_n=1, context={"goal": "hello"})
 seal_decision(traj, step_n=1, plan={"tool_calls": [{"name": "echo", "args": {"msg": "hi"}}]})
@@ -138,8 +139,8 @@ from trajectory_ir.effects import EffectClass
 from trajectory_ir.runtime.tool import Tool
 
 traj = open_trajectory("demo", "sandbox-1", db_path="s.sqlite", mode="sandbox")
-# NON_IDEMPOTENT_WRITE → SandboxForbidden before the tool body runs
-# PURE / READ_ONLY / etc. still allowed
+# NON_IDEMPOTENT_WRITE, AGENT_SPAWN, SENSITIVE → SandboxForbidden
+# PURE / READ_ONLY / IDEMPOTENT_WRITE still allowed
 ```
 
 ---
@@ -283,6 +284,7 @@ Integration recipes and CI parity commands live in
 | [docs/E2E_POSTGRES_CAS_THIN.md](docs/E2E_POSTGRES_CAS_THIN.md) | Full Postgres + CAS + thin package walkthrough |
 | [docs/PHASE_1A_STATUS.md](docs/PHASE_1A_STATUS.md) | What shipped in Phase 1A |
 | [docs/PHASE_1B_STATUS.md](docs/PHASE_1B_STATUS.md) | Go primary program (when present on branch) |
-| [README.md](README.md) | Master specification |
+| [README.md](README.md) | Project landing page |
+| [docs/MASTER_SPECIFICATION.md](docs/MASTER_SPECIFICATION.md) | Master specification (normative) |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | DCO, CI, local dev, integration services |
 

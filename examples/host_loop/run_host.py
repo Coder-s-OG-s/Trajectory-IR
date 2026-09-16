@@ -111,7 +111,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--sandbox",
         action="store_true",
-        help="Open trajectory in sandbox mode (rejects NON_IDEMPOTENT_WRITE)",
+        help=(
+            "Open trajectory in sandbox mode (rejects NON_IDEMPOTENT_WRITE, AGENT_SPAWN, SENSITIVE)"
+        ),
     )
     parser.add_argument(
         "--db",

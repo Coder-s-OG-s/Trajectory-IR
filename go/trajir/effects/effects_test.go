@@ -23,6 +23,29 @@ func TestRequiresBlockAndGate(t *testing.T) {
 	}
 }
 
+func TestIsForbiddenInSandbox(t *testing.T) {
+	forbidden := []effects.EffectClass{
+		effects.NON_IDEMPOTENT_WRITE,
+		effects.AGENT_SPAWN,
+		effects.SENSITIVE,
+	}
+	for _, e := range forbidden {
+		if !effects.IsForbiddenInSandbox(e) {
+			t.Fatalf("%s must be forbidden in sandbox", e)
+		}
+	}
+	allowed := []effects.EffectClass{
+		effects.PURE,
+		effects.READ_ONLY,
+		effects.IDEMPOTENT_WRITE,
+	}
+	for _, e := range allowed {
+		if effects.IsForbiddenInSandbox(e) {
+			t.Fatalf("%s must be allowed in sandbox", e)
+		}
+	}
+}
+
 func TestMissingAnnotationsFailClosed(t *testing.T) {
 	if got := effects.ClassifyFromMCP(map[string]any{}); got != effects.NON_IDEMPOTENT_WRITE {
 		t.Fatalf("got %s, want NON_IDEMPOTENT_WRITE", got)

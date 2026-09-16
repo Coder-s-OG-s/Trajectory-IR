@@ -130,7 +130,7 @@ Fill the right column offline; paste into the GitHub form when ready.
 | **Adopters** | Optional URL; better non-empty than silent. |
 | **Maintainers file** | **Required** `.../blob/main/MAINTAINERS.md` with company column. |
 | **Security policy** | `.../blob/main/SECURITY.md` |
-| **Standard or specification?** | Yes, partially: normative IR / package semantics in root README (spec-v0.2-draft); Python + Go ports; conformance R01–R08. Not an ISO standard. |
+| **Standard or specification?** | Yes, partially: normative IR / package semantics in `docs/MASTER_SPECIFICATION.md` (spec-v0.2-draft); Python + Go ports; conformance R01–R08. Not an ISO standard. |
 | **Business product separation** | State honestly. If unrelated to a commercial product: *“This project is unrelated to any product or service.”* If related: describe upstream OSS vs product boundary (org, branding, governance). |
 
 ### 4.3 Cloud native context
@@ -343,7 +343,7 @@ Full list: [project-onboarding.md](https://github.com/cncf/sandbox/blob/main/.gi
 - [Third-party license allowlist](https://github.com/cncf/foundation/blob/main/policies-guidance/allowed-third-party-license-policy.md)  
 - [Sandbox Review Guide (optional GTR)](https://github.com/cncf/toc/blob/main/toc_subprojects/project-reviews-subproject/sandbox-review-guide.md)  
 - [General Technical Review questions](https://github.com/cncf/toc/blob/main/toc_subprojects/project-reviews-subproject/general-technical-questions.md)  
-- Internal: [CI_HARDENING.md](CI_HARDENING.md), [PHASE_1C_STATUS.md](PHASE_1C_STATUS.md), root README §3–§5  
+- Internal: [CI_HARDENING.md](CI_HARDENING.md), [PHASE_1C_STATUS.md](PHASE_1C_STATUS.md), [MASTER_SPECIFICATION.md](MASTER_SPECIFICATION.md) §3–§5  
 
 ---
 

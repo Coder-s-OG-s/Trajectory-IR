@@ -139,6 +139,97 @@ func TestExportImportRoundTripFat(t *testing.T) {
 	}
 }
 
+func TestExportRedactedStripsThoughtsAndSecrets(t *testing.T) {
+	src := openLog(t, "src.sqlite")
+	seedSample(t, src)
+	step := 5
+	if _, err := src.Append("THOUGHT", &step, map[string]any{
+		"text": "the password is hunter2",
+	}, "t-export", "demo", 5); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := src.Append("TOOL_CALL", &step, map[string]any{
+		"tool": "curl",
+		"args": map[string]any{"api_key": "sk-abcdefghijklmnopqrstu"},
+	}, "t-export", "demo", 6); err != nil {
+		t.Fatal(err)
+	}
+
+	out := filepath.Join(t.TempDir(), "redacted.tir")
+	path, err := tir.Export(src, "t-export", out, tir.ExportOptions{Mode: tir.ModeThin, Redacted: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pkg, err := tir.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pkg.Manifest["redacted"] != true {
+		t.Fatalf("manifest redacted=%v, want true", pkg.Manifest["redacted"])
+	}
+
+	var sawThought, sawSecretKey bool
+	for _, n := range pkg.Nodes {
+		kind, _ := n["kind"].(string)
+		payload, _ := n["payload"].(map[string]any)
+		switch kind {
+		case "THOUGHT":
+			sawThought = true
+			if payload["redacted"] != true || len(payload) != 1 {
+				t.Fatalf("THOUGHT payload not collapsed: %v", payload)
+			}
+		case "TOOL_CALL":
+			if args, ok := payload["args"].(map[string]any); ok {
+				if v, ok := args["api_key"]; ok {
+					sawSecretKey = true
+					if v != "[REDACTED]" {
+						t.Fatalf("api_key not redacted: %v", v)
+					}
+				}
+			}
+		}
+	}
+	if !sawThought {
+		t.Fatal("no THOUGHT node found in exported package")
+	}
+	if !sawSecretKey {
+		t.Fatal("no api_key field found to verify redaction")
+	}
+}
+
+func TestExportRedactedForcesFatToThin(t *testing.T) {
+	src := openLog(t, "src.sqlite")
+	seedSample(t, src)
+
+	blob := []byte("print('hello')\n")
+	sum := sha256.Sum256(blob)
+	h := hex.EncodeToString(sum[:])
+
+	out := filepath.Join(t.TempDir(), "redacted-fat.tir")
+	path, err := tir.Export(src, "t-export", out, tir.ExportOptions{
+		Mode:          tir.ModeFat,
+		Redacted:      true,
+		Artifacts:     []tir.ArtifactRef{{LogicalPath: "src/main.py", ContentHash: h}},
+		ArtifactBytes: map[string][]byte{h: blob},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pkg, err := tir.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pkg.Manifest["mode"] != "thin" {
+		t.Fatalf("mode=%v, want thin (redacted must force fat down to thin)", pkg.Manifest["mode"])
+	}
+	if len(pkg.ArtifactsManifest) != 0 {
+		t.Fatalf("artifacts manifest not empty: %v", pkg.ArtifactsManifest)
+	}
+	if len(pkg.ArtifactBytes) != 0 {
+		t.Fatalf("artifact bytes not empty: %v", pkg.ArtifactBytes)
+	}
+}
+
 func TestImportDetectsTamperedNode(t *testing.T) {
 	src := openLog(t, "src.sqlite")
 	seedSample(t, src)

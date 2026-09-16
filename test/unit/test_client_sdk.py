@@ -1,3 +1,6 @@
+import uuid
+from pathlib import Path
+
 import pytest
 
 from client.python.trajectory_client import (
@@ -5,6 +8,7 @@ from client.python.trajectory_client import (
     exec_tool,
     open_trajectory,
     project,
+    resume,
     seal_decision,
 )
 from trajectory_ir.effects import EffectClass
@@ -86,3 +90,41 @@ def test_trajectory_context_manager_and_close(db_path):
     # Once context manager exits, the connection should be closed
     with pytest.raises(sqlite3.ProgrammingError):
         conn.execute("SELECT 1")
+
+
+def test_open_trajectory_with_uuid(db_path):
+    traj_id = str(uuid.uuid4())
+    traj = open_trajectory(tenant_id="demo", trajectory_id=traj_id, db_path=db_path)
+    project(traj, step_n=1, context={"status": "ok"})
+    seal_decision(traj, step_n=1, plan={"tool_calls": []})
+    commit_step(traj, step_n=1, seq=2)
+    traj.close()
+
+    resumed = resume(trajectory_id=traj_id, tenant_id="demo", db_path=db_path)
+    assert resumed.trajectory_id == traj_id
+    resumed.close()
+
+
+def test_open_trajectory_path_traversal_and_url_parameters(db_path, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    traj_id = "../../tmp/evil?mode=ro&immutable=1"
+    traj = open_trajectory(tenant_id="demo", trajectory_id=traj_id, db_path=db_path)
+    project(traj, step_n=1, context={"safe": True})
+    traj.close()
+
+    assert not (tmp_path / "evil.sqlite").exists()
+    assert not (tmp_path / f"{traj_id}.sqlite").exists()
+    assert NodeLog(db_path).has(traj_id, "demo", 1, "PROJECT_CONTEXT")
+
+
+def test_open_trajectory_does_not_pollute_cwd_with_trajectory_id_sqlite(
+    db_path, tmp_path, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+    traj_id = "test-no-cwd-pollution"
+    traj = open_trajectory(tenant_id="demo", trajectory_id=traj_id, db_path=db_path)
+    project(traj, step_n=1, context={"clean": True})
+    traj.close()
+
+    assert not (tmp_path / f"{traj_id}.sqlite").exists()
+    assert Path(db_path).exists()

@@ -137,9 +137,13 @@ jobs:
           .venv-smoke/bin/pip install dist/trajectory_ir-*.whl
           .venv-smoke/bin/python -c "\
           import trajectory_ir; \
-          from trajectory_ir.runtime.nodes import Node; \
+          from trajectory_ir.runtime.nodes import Node, payload_hash; \
+          from trajectory_ir.runtime.log import NodeLog; \
           from trajectory_ir.storage import FileSystemCAS, content_hash; \
           assert content_hash(b'') == 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'; \
+          log = NodeLog(':memory:'); \
+          rec = log.append('DECISION', 1, {'plan': {}}, 't1', 'tenant1', seq=1); \
+          assert rec.id; \
           print('package smoke ok', getattr(trajectory_ir, '__file__', 'n/a'))"
 
       - name: Upload dist artifacts

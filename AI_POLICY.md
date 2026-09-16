@@ -16,7 +16,7 @@ As stated in [SECURITY.md §4](SECURITY.md#4-security-accountability-for-contrib
 
 ## 4. Rules for AI-assisted contributions
 
-1. **The spec governs, not general AI knowledge.** Per the root [README.md §0 and §15](README.md), AI agents (and contributors using them) must implement exactly what the spec defines. Do not let a tool invent behavior from familiarity with similar systems. Undefined behavior gets a `SPEC-QUESTION` issue, not an improvisation.
+1. **The spec governs, not general AI knowledge.** Per [docs/MASTER_SPECIFICATION.md §0 and §15](docs/MASTER_SPECIFICATION.md), AI agents (and contributors using them) must implement exactly what the spec defines. Do not let a tool invent behavior from familiarity with similar systems. Undefined behavior gets a `SPEC-QUESTION` issue, not an improvisation.
 2. **No AI-generated content that fabricates authorship, test results, benchmarks, or provenance.** Generated code, docs, and commit messages must accurately represent what was actually done and verified.
 3. **No bypassing review or CI gates using AI tooling.** Mandatory human sign-off on `pkg/effects/`, `pkg/resume/`, and their Go equivalents (per [SECURITY.md §4.2](SECURITY.md#4-security-accountability-for-contributors)) applies regardless of how the change was produced.
 4. **No submission of AI output you have not read and verified.** Pasting unreviewed model output into a PR, issue, or review comment is not a contribution.
