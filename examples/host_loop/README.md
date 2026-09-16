@@ -10,7 +10,7 @@ host process should call Trajectory IR.
 2. Stub model (no paid API; injectable function)
 3. `project` then `seal_decision` with concrete known args only
 4. `exec_tool` then `commit_step`
-5. Optional sandbox mode (`mode=sandbox`) so non idempotent tools are rejected
+5. Optional sandbox mode (`mode=sandbox`) so non idempotent, agent spawn, and sensitive tools are rejected
 
 ## Run
 

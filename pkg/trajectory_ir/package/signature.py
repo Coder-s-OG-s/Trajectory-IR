@@ -263,9 +263,9 @@ def _verify_signature_bytes(
     if signer.get("key_id") and kid != key_id(pub_raw):
         raise TirSignatureError("signer.key_id does not match public_key")
 
-    if trusted_keys and not any(k == pub_raw for k in trusted_keys):
+    if trusted_keys is not None and not any(k == pub_raw for k in trusted_keys):
         raise TirSignatureError("public key not in trust store")
-    if trusted_key_ids and kid not in trusted_key_ids:
+    if trusted_key_ids is not None and kid not in trusted_key_ids:
         raise TirSignatureError(f"key_id {kid!r} not in trust store")
 
     return SignatureInfo(

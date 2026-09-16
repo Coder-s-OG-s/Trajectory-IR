@@ -51,7 +51,7 @@ def test_plain_tool_logs_tool_call_and_result(tmp_path, monkeypatch):
 
     run_step = make_run_step(node_log, TENANT_ID, TRAJECTORY_ID, tool_registry)
 
-    init_backend(app_name="test-step-plain-tool")
+    init_backend(db_path=str(tmp_path / "nodes.sqlite"))
 
     with SetWorkflowID(TRAJECTORY_ID):
         results = run_step(step_n=1, model_call=_model_call, context={})
@@ -82,7 +82,7 @@ def test_plain_tool_logs_tool_call_when_tool_fails(tmp_path, monkeypatch):
     }
 
     run_step = make_run_step(node_log, TENANT_ID, "test-step-fail", tool_registry)
-    init_backend(app_name="test-step-fail")
+    init_backend(db_path=str(tmp_path / "nodes_fail.sqlite"))
 
     with SetWorkflowID("test-step-fail"), pytest.raises(RuntimeError, match="tool error"):
         run_step(step_n=1, model_call=_model_call_fail, context={})
@@ -114,7 +114,7 @@ def test_plain_tool_replay_does_not_duplicate_nodes(tmp_path, monkeypatch):
     }
 
     run_step = make_run_step(node_log, TENANT_ID, traj_id, tool_registry)
-    init_backend(app_name="test-step-replay")
+    init_backend(db_path=str(tmp_path / "nodes_replay.sqlite"))
 
     with SetWorkflowID(traj_id):
         r1 = run_step(step_n=1, model_call=_model_call_replay, context={})

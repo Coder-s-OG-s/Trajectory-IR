@@ -95,7 +95,7 @@ def test_r03_pure_run_step_does_not_block_on_second_invocation(tmp_path, monkeyp
         "compute": Tool(name="compute", fn=_r03_compute, effect_class=EffectClass.PURE),
     }
     run_step = make_run_step(log, tenant, traj, registry)
-    init_backend(app_name="r03-pure-recompute")
+    init_backend(db_path=str(tmp_path / "nodes.sqlite"))
 
     with SetWorkflowID(f"{traj}-a"):
         r1 = run_step(step_n=1, model_call=_r03_model_call, context={})

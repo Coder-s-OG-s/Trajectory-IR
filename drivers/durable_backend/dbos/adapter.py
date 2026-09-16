@@ -3,12 +3,13 @@ import os
 from dbos import DBOS, DBOSConfig
 
 
-def init_backend(app_name: str = "trajectory-ir-local") -> None:
+def init_backend(
+    db_path: str = "trajectory.sqlite",
+    app_name: str = "trajectory-ir-local",
+) -> None:
     config: DBOSConfig = {
         "name": app_name,
-        "system_database_url": os.environ.get(
-            "DBOS_SYSTEM_DATABASE_URL", f"sqlite:///{app_name}.sqlite"
-        ),
+        "system_database_url": os.environ.get("DBOS_SYSTEM_DATABASE_URL", f"sqlite:///{db_path}"),
     }
     DBOS(config=config)
     DBOS.launch()
