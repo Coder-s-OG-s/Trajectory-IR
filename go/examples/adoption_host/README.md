@@ -9,7 +9,7 @@ Optional filesystem CAS and thin `.tir` export with rehydrate check.
 2. `ExecTool` for PURE (`build_manifest`) and gated NON_IDEMPOTENT_WRITE (`ship_release`)
 3. `CommitStep`
 4. Optional `-with-package`: CAS put, thin export, rehydrate
-5. Optional `-sandbox`: non idempotent tools rejected
+5. Optional `-sandbox`: non idempotent, agent spawn, and sensitive tools rejected
 
 ## How this differs
 

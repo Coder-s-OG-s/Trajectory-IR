@@ -103,6 +103,6 @@ This bounds prompt-injected tool paths (CWE-73). Host configs should set
 
 ## Related
 
-- Package format: root `README.md` §9 / §9.1
+- Package format: [`docs/MASTER_SPECIFICATION.md`](MASTER_SPECIFICATION.md) §9 / §9.1
 - Go client: `go/trajir/client`
 - Implementation: `go/trajir/mcp`, `go/cmd/trajir-mcp`

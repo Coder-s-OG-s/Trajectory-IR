@@ -1,7 +1,8 @@
 # Scope and non-goals
 
 Short public summary for contributors and CNCF reviewers. Normative detail:
-root [README.md](../README.md).
+[docs/MASTER_SPECIFICATION.md](MASTER_SPECIFICATION.md) (root [README.md](../README.md)
+is the landing page).
 
 ## In scope
 

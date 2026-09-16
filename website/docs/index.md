@@ -30,6 +30,12 @@ This project maintains a [CNCF Sandbox application outline](https://github.com/C
 
 **We do not claim CNCF membership or “donated to CNCF” status** until the TOC votes Approved and the contribution agreement is signed. On stage and on this site we say: *open source, Apache 2.0, preparing for Sandbox*.
 
+## Normative spec
+
+The authoritative contract lives in the repo at
+[`docs/MASTER_SPECIFICATION.md`](https://github.com/Coder-s-OG-s/Trajectory-IR/blob/main/docs/MASTER_SPECIFICATION.md).
+The root [README](https://github.com/Coder-s-OG-s/Trajectory-IR/blob/main/README.md) is the landing page for users and contributors.
+
 ## Next steps
 
 1. [Watch the demos](demos/index.md)

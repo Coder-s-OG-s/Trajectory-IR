@@ -1,7 +1,7 @@
 # Phase 1B status (Go primary SDK)
 
 Honest inventory after Phase 1A / `v0.1.0`, the `v0.1.1` line, and the Phase 1B
-landings on main. Normative detail: root `README.md` (Go primary, Python reference).
+landings on main. Normative detail: [`docs/MASTER_SPECIFICATION.md`](MASTER_SPECIFICATION.md) (Go primary, Python reference).
 
 ## Decision
 

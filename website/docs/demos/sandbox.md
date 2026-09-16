@@ -1,6 +1,6 @@
 # Demo: Sandbox mode (R06)
 
-Fast safety demo. In sandbox mode, real `NON_IDEMPOTENT_WRITE` tools are rejected **before** side effects.
+Fast safety demo. In sandbox mode, real `NON_IDEMPOTENT_WRITE`, `AGENT_SPAWN`, and `SENSITIVE` tools are rejected **before** side effects.
 
 Source: same adoption host with `-sandbox`
 
