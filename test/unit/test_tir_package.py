@@ -267,6 +267,38 @@ def test_redacted_export_strips_secret_shaped_values(sample_log: NodeLog, tmp_pa
     assert args["message"] == "just a normal string"
 
 
+def test_redacted_export_strips_nested_thoughts_in_project_context(
+    sample_log: NodeLog, tmp_path: Path
+) -> None:
+    sample_log.append(
+        "PROJECT_CONTEXT",
+        1,
+        {
+            "items": [
+                {"id": "t1", "kind": "THOUGHT", "payload": {"text": "classified reasoning"}},
+                {
+                    "id": "c1",
+                    "kind": "CONSTRAINT",
+                    "payload": {"rule": "must-not-leak", "token": "secret-123"},
+                },
+            ],
+            "budget": 500,
+        },
+        trajectory_id="t-export",
+        tenant_id="demo",
+        seq=20,
+    )
+    out = tmp_path / "redacted-nested.tir"
+    export_tir(sample_log, "t-export", out, mode="thin", redacted=True)
+    pkg = load_tir(out)
+    pc_nodes = [n for n in pkg.nodes if n["kind"] == "PROJECT_CONTEXT" and n["seq"] == 20]
+    assert len(pc_nodes) == 1
+    items = {it["id"]: it for it in pc_nodes[0]["payload"]["items"]}
+    assert items["t1"]["payload"] == {"redacted": True}
+    assert items["c1"]["payload"]["token"] == "[REDACTED]"
+    assert "classified reasoning" not in str(pc_nodes[0]["payload"])
+
+
 def test_export_tenant_scope(sample_log: NodeLog, tmp_path: Path) -> None:
     other = NodeLog(str(tmp_path / "mixed.sqlite"))
     try:
