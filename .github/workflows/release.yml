@@ -5,15 +5,19 @@ on:
     tags:
       - "v*"
 
-# Least privilege: write only what release needs (CNCF GHA least-privilege).
+# Workflow default is read-only. Write scopes are job-scoped so OpenSSF
+# Scorecard Token-Permissions does not treat the whole workflow as write.
 permissions:
-  contents: write
-  id-token: write
+  contents: read
 
 jobs:
   python-dist:
     name: Build Python dist
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      # Reserved for future OIDC signing (cosign / SLSA); unused by current steps.
+      id-token: write
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
