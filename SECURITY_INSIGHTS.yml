@@ -1,0 +1,125 @@
+# OpenSSF Security Insights (https://github.com/ossf/security-insights)
+# Schema v2.2.0 — keep in sync with SECURITY.md and MAINTAINERS.md
+header:
+  schema-version: 2.2.0
+  last-updated: "2026-09-18"
+  last-reviewed: "2026-09-18"
+  url: https://raw.githubusercontent.com/Coder-s-OG-s/Trajectory-IR/main/SECURITY_INSIGHTS.yml
+  comment: |
+    Machine-readable security metadata for Trajectory IR. Human policy lives in
+    SECURITY.md. Dependency license notes live in docs/THIRD_PARTY_LICENSES.md.
+
+project:
+  name: Trajectory IR
+  homepage: https://github.com/Coder-s-OG-s/Trajectory-IR
+  roadmap: https://github.com/Coder-s-OG-s/Trajectory-IR/blob/main/docs/ROADMAP.md
+  administrators:
+    - name: Siddhartha Singh
+      affiliation: EliteFolks
+      email: siddharthagithub0007@gmail.com
+      social: https://github.com/Siddhartha-singh01
+      primary: true
+    - name: Ayush Patel
+      affiliation: Independent
+      email: ayushpatel2731@gmail.com
+      social: https://github.com/Ayush-Patel-56
+      primary: true
+  documentation:
+    quickstart-guide: https://github.com/Coder-s-OG-s/Trajectory-IR/blob/main/go/QUICKSTART.md
+    code-of-conduct: https://github.com/Coder-s-OG-s/Trajectory-IR/blob/main/CODE_OF_CONDUCT.md
+  repositories:
+    - name: Trajectory-IR
+      url: https://github.com/Coder-s-OG-s/Trajectory-IR
+      comment: |
+        Primary SDK and specification repository (Go primary, Python reference).
+  vulnerability-reporting:
+    reports-accepted: true
+    bug-bounty-available: false
+    contact:
+      name: Trajectory IR maintainers
+      email: siddharthagithub0007@gmail.com
+      primary: true
+    policy: https://github.com/Coder-s-OG-s/Trajectory-IR/blob/main/SECURITY.md
+
+repository:
+  url: https://github.com/Coder-s-OG-s/Trajectory-IR
+  status: active
+  bug-fixes-only: false
+  accepts-change-request: true
+  accepts-automated-change-request: true
+  no-third-party-packages: false
+  core-team:
+    - name: Siddhartha Singh
+      affiliation: EliteFolks
+      email: siddharthagithub0007@gmail.com
+      social: https://github.com/Siddhartha-singh01
+      primary: true
+    - name: Ayush Patel
+      affiliation: Independent
+      email: ayushpatel2731@gmail.com
+      social: https://github.com/Ayush-Patel-56
+      primary: true
+    - name: Monika Jakhar
+      affiliation: Independent
+      social: https://github.com/jakharmonika364
+      primary: false
+  documentation:
+    contributing-guide: https://github.com/Coder-s-OG-s/Trajectory-IR/blob/main/CONTRIBUTING.md
+    review-policy: https://github.com/Coder-s-OG-s/Trajectory-IR/blob/main/CONTRIBUTING.md
+    security-policy: https://github.com/Coder-s-OG-s/Trajectory-IR/blob/main/SECURITY.md
+    governance: https://github.com/Coder-s-OG-s/Trajectory-IR/blob/main/GOVERNANCE.md
+    dependency-management-policy: https://github.com/Coder-s-OG-s/Trajectory-IR/blob/main/docs/THIRD_PARTY_LICENSES.md
+  license:
+    url: https://github.com/Coder-s-OG-s/Trajectory-IR/blob/main/LICENSE
+    expression: Apache-2.0
+  release:
+    changelog: https://github.com/Coder-s-OG-s/Trajectory-IR/blob/main/CHANGELOG.md
+    automated-pipeline: true
+    distribution-points:
+      - uri: https://github.com/Coder-s-OG-s/Trajectory-IR/releases
+        comment: GitHub Releases (wheels, sdists, CycloneDX SBOMs)
+  security:
+    assessments:
+      self:
+        comment: |
+          OpenSSF Best Practices Passing badge (project 14075). Continuous CI includes
+          CodeQL, gitleaks, actionlint, pip-audit, govulncheck, and OpenSSF Scorecard.
+          Formal TAG Security joint assessment is not completed yet. See docs/CI_HARDENING.md
+          and milestone "OpenSSF security bar".
+    tools:
+      - name: CodeQL
+        type: SAST
+        integration:
+          adhoc: false
+          ci: true
+          release: false
+      - name: gitleaks
+        type: SCA
+        integration:
+          adhoc: false
+          ci: true
+          release: false
+      - name: OpenSSF Scorecard
+        type: SCA
+        integration:
+          adhoc: false
+          ci: true
+          release: false
+      - name: pip-audit
+        type: SCA
+        integration:
+          adhoc: false
+          ci: true
+          release: false
+      - name: govulncheck
+        type: SCA
+        integration:
+          adhoc: false
+          ci: true
+          release: false
+      - name: Dependabot
+        type: SCA
+        integration:
+          adhoc: false
+          ci: true
+          release: false
