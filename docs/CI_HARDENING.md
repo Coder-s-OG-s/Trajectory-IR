@@ -10,7 +10,7 @@ Milestone: **[Phase CI/CD harden](https://github.com/Coder-s-OG-s/Trajectory-IR/
 
 | Principle | Practice here |
 |-----------|----------------|
-| Least privilege | Workflows default `contents: read`; release only gets `contents: write` + `id-token` |
+| Least privilege | Workflows default `contents: read`; release job (not workflow top-level) gets `contents: write` + `id-token` |
 | Trusted sources | Prefer GitHub-owned actions; Dependabot weekly for `github-actions` |
 | Keep fresh | Dependabot for pip, gomod, and GitHub Actions |
 | Audit the kitchen | Scorecard, zizmor (advisory), actionlint, gitleaks, dependency license scan |
