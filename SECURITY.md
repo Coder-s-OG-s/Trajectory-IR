@@ -4,6 +4,11 @@ Trajectory IR acts as the durable semantic and execution layer for autonomous AI
 
 This policy is tightly integrated with our [Infrastructure Design](infrastructure.md), [Contributing Guidelines](CONTRIBUTING.md), [AI Usage Policy](AI_POLICY.md), and [Code of Conduct](CODE_OF_CONDUCT.md).
 
+Machine-readable OpenSSF Security Insights for this repository live in
+[`SECURITY_INSIGHTS.yml`](SECURITY_INSIGHTS.yml) (contacts, vulnerability
+reporting acceptance, license, and CI security tooling). Keep that file in
+sync when this policy changes.
+
 ## 1. Supported Versions
 
 Trajectory IR ships **0.2.x** (Phase 1B Go primary + Phase 1C harden). Older

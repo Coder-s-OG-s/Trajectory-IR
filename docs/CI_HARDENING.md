@@ -64,6 +64,10 @@ Local live stack (optional): [LIVE_INTEGRATION_DOCKER.md](LIVE_INTEGRATION_DOCKE
 4. **Fork PR approval** settings: require approval for first-time contributors (org setting)
 5. **zizmor fail-closed** after reviewing residual findings
 
+Active OpenSSF work tracks under milestone
+[OpenSSF security bar](https://github.com/Coder-s-OG-s/Trajectory-IR/milestone/10).
+Project Security Insights metadata: root [`SECURITY_INSIGHTS.yml`](../SECURITY_INSIGHTS.yml).
+
 ## References
 
 - [CNCF: Securing GitHub Actions CI dependencies (recipe card)](https://www.cncf.io/blog/2026/05/04/securing-github-actions-ci-dependencies-recipe-card/)
