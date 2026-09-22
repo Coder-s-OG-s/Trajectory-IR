@@ -272,3 +272,4 @@ If a panel needs a number that is not in §3–§4, extend **this document** fir
 - Seals: Go `trajir/client.SealDecision` (DECISION node)
 - Epic: [#391](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/391)
 - Spec issue: [#392](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/392)
+- Ingest: [CONSOLE_INGEST.md](CONSOLE_INGEST.md) / [#393](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/393)
