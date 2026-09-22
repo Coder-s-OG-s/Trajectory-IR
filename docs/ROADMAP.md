@@ -27,6 +27,7 @@ trajectories (seals, effects, `.tir`) on top of existing durable backends.
 | **Phase CI/CD harden** | Scorecard, CodeQL, secret/workflow scan, SBOM, Go race; SHA-pin Actions; optional require gitleaks/actionlint on `main` ([docs/CI_HARDENING.md](CI_HARDENING.md) when present) |
 | **CNCF Sandbox prep** | Process pack: MAINTAINERS, governance, this roadmap, adopters; do **not** apply until critical checklist is green ([CNCF_SANDBOX_APPLICATION_OUTLINE.md](CNCF_SANDBOX_APPLICATION_OUTLINE.md)) |
 | **Adoption** | Keep Go QUICKSTART and demos green; interop notes for `.tir` export/import |
+| **Trajectory console** | Operator visibility for seals, `.tir` handoffs, and context/token economy ([CONSOLE_EVENTS.md](CONSOLE_EVENTS.md), milestone [Trajectory console](https://github.com/Coder-s-OG-s/Trajectory-IR/milestone/11)) |
 | **Quality** | Keep dual-language parity, coverage floors, live Postgres/MinIO CI |
 
 ## Medium term (3–9 months)
