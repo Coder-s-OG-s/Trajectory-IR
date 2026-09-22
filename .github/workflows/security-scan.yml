@@ -25,15 +25,19 @@ jobs:
           fetch-depth: 0
 
       # Free CLI (not gitleaks-action): org repos would require a paid GITLEAKS_LICENSE.
+      # Version + sha256 pinned for Scorecard Pinned-Dependencies (#375).
       - name: Install gitleaks
         env:
-          GITLEAKS_VERSION: "8.24.2"
+          GITLEAKS_VERSION: "8.30.1"
+          GITLEAKS_SHA256: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
         run: |
           set -euo pipefail
-          curl -sSfL --retry 5 --retry-all-errors \
-            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
-            | tar -xz gitleaks
+          curl -sSfL --retry 5 --retry-all-errors -o gitleaks.tgz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  gitleaks.tgz" | sha256sum -c -
+          tar -xzf gitleaks.tgz gitleaks
           sudo mv gitleaks /usr/local/bin/gitleaks
+          rm -f gitleaks.tgz
           gitleaks version
 
       - name: Run gitleaks
@@ -73,7 +77,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install zizmor
-        run: pip install --upgrade pip "zizmor>=1.5"
+        run: pip install --upgrade pip "zizmor==1.30.1"
 
       - name: Audit workflows (advisory first wave)
         # Findings reported for review; fail-closed after SHA-pinning (#167).
@@ -96,7 +100,7 @@ jobs:
       # psycopg[binary], boto3 + transitives) -- not the ambient dev environment,
       # which pulls in unrelated packages that were never part of this project.
       - name: Install runtime dependencies
-        run: pip install --upgrade pip pip-licenses ".[postgres,s3]"
+        run: pip install --upgrade pip "pip-licenses==5.5.5" ".[postgres,s3]"
 
       # CNCF allowlist: permissive licenses only. psycopg/psycopg-binary are
       # LGPL-3.0-only -- an optional extra, imported as an unmodified library
@@ -123,7 +127,7 @@ jobs:
           go-version: "1.25.x"
 
       - name: Install go-licenses
-        run: go install github.com/google/go-licenses@latest
+        run: go install github.com/google/go-licenses/v2@v2.0.1
 
       # --ignore excludes: our own module (its LICENSE lives at the repo
       # root, one level above where go-licenses looks) and two upstream
