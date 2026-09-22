@@ -27,7 +27,8 @@ jobs:
 
       - name: Build sdist and wheel
         run: |
-          python -m pip install --upgrade pip "build==1.6.1" "twine==7.0.0"
+          python -m pip install --upgrade pip
+          pip install --require-hashes -r .github/ci-requirements/release-build.txt
           python -m build
           twine check dist/*
 

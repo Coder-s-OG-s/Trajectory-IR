@@ -77,7 +77,9 @@ jobs:
           python-version: "3.12"
 
       - name: Install zizmor
-        run: pip install --upgrade pip "zizmor==1.30.1"
+        run: |
+          python -m pip install --upgrade pip
+          pip install --require-hashes -r .github/ci-requirements/zizmor.txt
 
       - name: Audit workflows (advisory first wave)
         # Findings reported for review; fail-closed after SHA-pinning (#167).
@@ -100,7 +102,11 @@ jobs:
       # psycopg[binary], boto3 + transitives) -- not the ambient dev environment,
       # which pulls in unrelated packages that were never part of this project.
       - name: Install runtime dependencies
-        run: pip install --upgrade pip "pip-licenses==5.5.5" ".[postgres,s3]"
+        run: |
+          python -m pip install --upgrade pip
+          pip install --require-hashes -r .github/ci-requirements/pip-licenses.txt
+          # Project extras from pyproject.toml — intentional unhashed exception.
+          pip install ".[postgres,s3]"
 
       # CNCF allowlist: permissive licenses only. psycopg/psycopg-binary are
       # LGPL-3.0-only -- an optional extra, imported as an unmodified library

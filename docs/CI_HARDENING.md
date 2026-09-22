@@ -59,25 +59,25 @@ Local live stack (optional): [LIVE_INTEGRATION_DOCKER.md](LIVE_INTEGRATION_DOCKE
 ## Pinned install tools (Scorecard Pinned-Dependencies)
 
 GitHub Actions steps are SHA-pinned (#167). CLI tools installed inside jobs are
-version-pinned (and release tarballs checksummed where we download binaries):
+hash-pinned (pip `--require-hashes`) or checksummed (release tarballs):
 
 | Tool | Where | Pin style |
 |------|-------|-----------|
 | gitleaks | `security-scan.yml` | version + sha256 of linux_x64 tarball |
 | actionlint | `security-scan.yml` | `go install …@v1.7.7` |
-| zizmor | `security-scan.yml` | `pip install zizmor==…` |
-| pip-licenses | `security-scan.yml` | exact PyPI version |
+| zizmor / pip-licenses | `security-scan.yml` | `.github/ci-requirements/*.txt` + `--require-hashes` |
 | go-licenses | `security-scan.yml` | `go install github.com/google/go-licenses/v2@v2.0.1` |
 | govulncheck | `ci.yml` | `go install …@v1.7.0` |
-| dco-check / pip-audit / build / twine | `ci.yml` / `release.yml` | exact PyPI versions |
+| dco-check / pip-audit / build / twine | `ci.yml` / `release.yml` | `.github/ci-requirements/*.txt` + `--require-hashes` |
 | syft | `release.yml` | version + sha256 of linux_amd64 tarball |
+
+Regenerate notes: [`.github/ci-requirements/README.md`](../.github/ci-requirements/README.md).
 
 ### Intentional exceptions
 
 - `pip install -e ".[dev]"` / `".[postgres,s3]"` installs the **project tree** from
   `pyproject.toml`. Runtime deps move via Dependabot (`pip` ecosystem), not
-  per-workflow hash digests. Full `requirements.txt` hash pinning for every
-  transitive wheel is deferred until we adopt a lockfile workflow.
+  per-workflow hash digests. Full project lockfile hashing is a separate follow-up.
 - `pip install --upgrade pip` stays unpinned: we want the installer current on
   the runner image; the packages we care about are pinned above.
 
@@ -92,7 +92,7 @@ Track remaining Scorecard work under
 3. **SLSA provenance** / cosign sign release artifacts (when maintainers pick a key strategy)
 4. **Fork PR approval** settings: require approval for first-time contributors (org setting)
 5. **zizmor fail-closed** after reviewing residual findings
-6. ~~**Pin workflow CLI installs**~~ — in progress (#375): versions + checksums above
+6. ~~**Pin workflow CLI installs**~~ — #375 / PR #400: hashed ci-requirements + tarball checksums
 
 Active OpenSSF work tracks under milestone
 [OpenSSF security bar](https://github.com/Coder-s-OG-s/Trajectory-IR/milestone/10).
