@@ -2,8 +2,8 @@
 # Schema v2.2.0 — keep in sync with SECURITY.md and MAINTAINERS.md
 header:
   schema-version: 2.2.0
-  last-updated: "2026-09-18"
-  last-reviewed: "2026-09-18"
+  last-updated: "2026-09-22"
+  last-reviewed: "2026-09-22"
   url: https://raw.githubusercontent.com/Coder-s-OG-s/Trajectory-IR/main/SECURITY_INSIGHTS.yml
   comment: |
     Machine-readable security metadata for Trajectory IR. Human policy lives in
@@ -23,7 +23,7 @@ project:
       affiliation: Independent
       email: ayushpatel2731@gmail.com
       social: https://github.com/Ayush-Patel-56
-      primary: true
+      primary: false
   documentation:
     quickstart-guide: https://github.com/Coder-s-OG-s/Trajectory-IR/blob/main/go/QUICKSTART.md
     code-of-conduct: https://github.com/Coder-s-OG-s/Trajectory-IR/blob/main/CODE_OF_CONDUCT.md
@@ -35,6 +35,7 @@ project:
   vulnerability-reporting:
     reports-accepted: true
     bug-bounty-available: false
+    # Contact is a Contact object per OpenSSF schema v2.2.0 (not a string array).
     contact:
       name: Trajectory IR maintainers
       email: siddharthagithub0007@gmail.com
@@ -58,7 +59,7 @@ repository:
       affiliation: Independent
       email: ayushpatel2731@gmail.com
       social: https://github.com/Ayush-Patel-56
-      primary: true
+      primary: false
     - name: Monika Jakhar
       affiliation: Independent
       social: https://github.com/jakharmonika364
@@ -89,37 +90,55 @@ repository:
     tools:
       - name: CodeQL
         type: SAST
+        rulesets:
+          - default
         integration:
           adhoc: false
           ci: true
           release: false
+        results: {}
       - name: gitleaks
-        type: SCA
+        type: secret
+        rulesets:
+          - default
         integration:
           adhoc: false
           ci: true
           release: false
+        results: {}
       - name: OpenSSF Scorecard
-        type: SCA
+        type: other
+        rulesets:
+          - default
         integration:
           adhoc: false
           ci: true
           release: false
+        results: {}
       - name: pip-audit
         type: SCA
+        rulesets:
+          - default
         integration:
           adhoc: false
           ci: true
           release: false
+        results: {}
       - name: govulncheck
         type: SCA
+        rulesets:
+          - default
         integration:
           adhoc: false
           ci: true
           release: false
+        results: {}
       - name: Dependabot
         type: SCA
+        rulesets:
+          - default
         integration:
           adhoc: false
           ci: true
           release: false
+        results: {}
