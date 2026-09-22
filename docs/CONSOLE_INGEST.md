@@ -33,9 +33,13 @@ go run ./cmd/trajir-console -addr 127.0.0.1:8787
 | `GET` | `/v1/trajectories/{id}/events` | Append-ordered events |
 | `GET` | `/v1/trajectories/{id}/summary` | Seal / economy / transfer rollup |
 | `GET` | `/healthz` | Liveness (no auth) |
+| `GET` | `/` | Operator UI shell (trajectory picker + panels) |
+| `GET` | `/ui/*` | Static CSS/JS for the shell |
 
 When `TRAJIR_CONSOLE_TOKEN` is set, send `Authorization: Bearer <token>` on
-all `/v1/*` routes.
+all `/v1/*` routes. The UI has a token field (sessionStorage) for local demos.
+
+Open `http://127.0.0.1:8787/?id=<trajectory_id>` for a deep link.
 
 ## Library
 

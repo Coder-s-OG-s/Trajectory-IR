@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"strings"
@@ -36,7 +37,27 @@ func NewServer(store *Store, token string) *Server {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok\n"))
 	})
+	s.mountUI()
 	return s
+}
+
+func (s *Server) mountUI() {
+	sub, err := fs.Sub(UI, "web")
+	if err != nil {
+		// Package is broken if embed fails; surface via a clear handler.
+		s.Mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, _ *http.Request) {
+			writeErr(w, http.StatusInternalServerError, "ui assets unavailable")
+		})
+		return
+	}
+	fileServer := http.FileServer(http.FS(sub))
+	s.Mux.Handle("GET /ui/", http.StripPrefix("/ui/", fileServer))
+	s.Mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFileFS(w, r, sub, "index.html")
+	})
+	s.Mux.HandleFunc("GET /ui", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/", http.StatusFound)
+	})
 }
 
 func (s *Server) Handler() http.Handler { return s.Mux }

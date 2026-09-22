@@ -34,7 +34,7 @@ func main() {
 		log.Fatalf("trajir-console: %v", err)
 	}
 	srv := console.NewServer(store, *token)
-	log.Printf("trajir-console: listening on http://%s (data=%s)", *addr, store.Root())
+	log.Printf("trajir-console: UI http://%s/  API /v1/*  data=%s", *addr, store.Root())
 	if err := console.ListenAndServe(*addr, srv.Handler()); err != nil {
 		log.Fatalf("trajir-console: %v", err)
 	}

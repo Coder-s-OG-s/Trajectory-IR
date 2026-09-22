@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Trajectory console</title>
+  <link rel="stylesheet" href="/ui/app.css" />
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <div class="app">
+    <aside class="sidebar" aria-label="Trajectories">
+      <header class="brand">
+        <h1>Trajectory console</h1>
+        <p class="muted">Local operator view</p>
+      </header>
+
+      <label class="field">
+        <span>API token</span>
+        <input id="token" type="password" autocomplete="off" placeholder="optional Bearer token" />
+      </label>
+
+      <div class="row">
+        <button type="button" id="refresh" class="btn">Refresh list</button>
+      </div>
+
+      <nav id="traj-list" class="traj-list" aria-label="Trajectory list"></nav>
+      <p id="traj-empty" class="empty muted hidden">
+        No trajectories yet. Emit events into
+        <code>TRAJIR_CONSOLE_DATA</code> or
+        <code>POST /v1/events</code>. See
+        <code>docs/CONSOLE_INGEST.md</code>.
+      </p>
+    </aside>
+
+    <main id="main" class="main">
+      <header class="main-head">
+        <div>
+          <h2 id="detail-title">Select a trajectory</h2>
+          <p id="detail-sub" class="muted">Deep link: <code>?id=&lt;trajectory_id&gt;</code></p>
+        </div>
+        <div class="filters" aria-label="Time range">
+          <label class="field inline">
+            <span>From</span>
+            <input id="from" type="datetime-local" />
+          </label>
+          <label class="field inline">
+            <span>To</span>
+            <input id="to" type="datetime-local" />
+          </label>
+        </div>
+      </header>
+
+      <div id="banner" class="banner hidden" role="status"></div>
+
+      <div id="panels" class="hidden">
+        <div class="tabs" role="tablist" aria-label="Views">
+          <button type="button" role="tab" aria-selected="true" data-tab="overview" id="tab-overview">Overview</button>
+          <button type="button" role="tab" aria-selected="false" data-tab="seals" id="tab-seals">Seals</button>
+          <button type="button" role="tab" aria-selected="false" data-tab="transfers" id="tab-transfers">Transfers</button>
+          <button type="button" role="tab" aria-selected="false" data-tab="economy" id="tab-economy">Context economy</button>
+        </div>
+
+        <section id="panel-overview" class="panel" role="tabpanel" aria-labelledby="tab-overview"></section>
+        <section id="panel-seals" class="panel hidden" role="tabpanel" aria-labelledby="tab-seals"></section>
+        <section id="panel-transfers" class="panel hidden" role="tabpanel" aria-labelledby="tab-transfers"></section>
+        <section id="panel-economy" class="panel hidden" role="tabpanel" aria-labelledby="tab-economy"></section>
+      </div>
+
+      <div id="placeholder" class="placeholder">
+        <h3>No trajectory selected</h3>
+        <p class="muted">
+          Pick an id on the left, or open
+          <code>?id=your-trajectory</code>.
+          Estimates use <code>estimated_tokens</code> (chars/4) — not provider invoices.
+        </p>
+      </div>
+    </main>
+  </div>
+  <script src="/ui/app.js"></script>
+</body>
+</html>

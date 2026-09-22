@@ -67,6 +67,30 @@ func TestHTTPIngestAndSummary(t *testing.T) {
 	}
 }
 
+func TestUIShellServed(t *testing.T) {
+	t.Parallel()
+	st, err := OpenStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := NewServer(st, "")
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d", rr.Code)
+	}
+	if !bytes.Contains(rr.Body.Bytes(), []byte("Trajectory console")) {
+		t.Fatalf("missing shell markup: %s", rr.Body.String())
+	}
+	req2 := httptest.NewRequest(http.MethodGet, "/ui/app.js", nil)
+	rr2 := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr2, req2)
+	if rr2.Code != http.StatusOK {
+		t.Fatalf("js status=%d", rr2.Code)
+	}
+}
+
 func TestHTTPHealthzNoAuth(t *testing.T) {
 	t.Parallel()
 	st, err := OpenStore(t.TempDir())
