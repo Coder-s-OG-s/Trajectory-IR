@@ -15,6 +15,7 @@ Board: [Milestones](https://github.com/Coder-s-OG-s/Trajectory-IR/milestones)
 | **Phase 1B Go primary SDK** | Closed | Complete; released as **v0.2.0**. |
 | **Phase 1C harden and adopt** | Closed | Complete at **v0.2.1** (protection, live stack docs, release assets). |
 | **Phase CI/CD harden** | Open | Scorecard, CodeQL, security scan, SBOM, race, CODEOWNERS. See [CI_HARDENING.md](CI_HARDENING.md). |
+| **Trajectory console** | Open | Operator console: seals, transfers, context economy. Event vocab in [CONSOLE_EVENTS.md](CONSOLE_EVENTS.md). |
 | **CNCF Sandbox prep** | Open | Process readiness only (not product features). See [CNCF_SANDBOX_APPLICATION_OUTLINE.md](CNCF_SANDBOX_APPLICATION_OUTLINE.md). |
 | **Future deferred product** | Open | Signatures, Fluid, SaaS, etc. Park only. |
 
@@ -24,9 +25,10 @@ Board: [Milestones](https://github.com/Coder-s-OG-s/Trajectory-IR/milestones)
 2. **Do not mix scopes.** Active phase work stays on the active milestone. Deferred product ideas go to Future.
 3. **Exit criteria live in the milestone description.** Close the milestone only when those criteria are met.
 4. **Suggested work order right now**
-   1. **Phase CI/CD harden** — supply-chain / contributor CI ([CI_HARDENING.md](CI_HARDENING.md)): Scorecard, CodeQL, gitleaks, actionlint, zizmor, Go race, SBOM, CODEOWNERS; then SHA-pin digests (#167) and optionally require new checks on `main` (#168)
-   2. **CNCF Sandbox prep** — MAINTAINERS, governance, roadmap, application pack ([CNCF_SANDBOX_APPLICATION_OUTLINE.md](CNCF_SANDBOX_APPLICATION_OUTLINE.md)); **do not apply** until critical checklist is green
-   3. Future product only after README scope bump (§14); SLSA/cosign when maintainers choose a signing strategy; package signature **scheme** is README §9.1 — **implementation** still Future ([#149](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/149))
+   1. **Phase CI/CD harden** / **OpenSSF security bar** — supply-chain CI ([CI_HARDENING.md](CI_HARDENING.md))
+   2. **Trajectory console** — event vocab first ([CONSOLE_EVENTS.md](CONSOLE_EVENTS.md)), then ingest/UI under milestone [Trajectory console](https://github.com/Coder-s-OG-s/Trajectory-IR/milestone/11)
+   3. **CNCF Sandbox prep** — MAINTAINERS, governance, roadmap, application pack ([CNCF_SANDBOX_APPLICATION_OUTLINE.md](CNCF_SANDBOX_APPLICATION_OUTLINE.md)); **do not apply** until critical checklist is green
+   4. Future product only after README scope bump (§14); SLSA/cosign when maintainers choose a signing strategy; package signature **scheme** is README §9.1 — **implementation** still Future ([#149](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/149))
 5. **Future milestone is a parking lot.** Example: [#149](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/149) package signature implementation (scheme already in README §9.1).
 6. **Labels still matter** (`go`, `ci`, `SPEC-QUESTION`, …). Milestone answers *when/why*; labels answer *kind of work*.
 
