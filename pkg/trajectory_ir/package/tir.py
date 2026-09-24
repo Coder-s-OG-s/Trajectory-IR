@@ -41,7 +41,7 @@ from trajectory_ir.package.signature import (
 )
 from trajectory_ir.runtime.log import NodeLog
 from trajectory_ir.runtime.nodes import Node, NodeValidationError, node_id, payload_hash
-from trajectory_ir.runtime.redact import redact_payload
+from trajectory_ir.runtime.redact import redact_payload, redact_projection_context
 
 _logger = logging.getLogger("trajectory_ir.package.tir")
 
@@ -199,7 +199,14 @@ def _seals_from_nodes(nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
 def _redact_node(rec: dict[str, Any]) -> dict[str, Any]:
     """Return a copy of a node record with thoughts/secrets stripped for sharing."""
     kind = rec["kind"]
-    new_payload = redact_payload(kind, rec.get("payload"))
+    payload = rec.get("payload")
+    if kind == "PROJECT_CONTEXT":
+        if isinstance(payload, dict):
+            new_payload = redact_projection_context(payload)
+        else:
+            new_payload = {"redacted": True}
+    else:
+        new_payload = redact_payload(kind, payload)
 
     # Rebuild via Node so id matches redacted payload (export is a new package).
     node = Node(
