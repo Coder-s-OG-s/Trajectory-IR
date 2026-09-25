@@ -43,7 +43,8 @@ jobs:
           curl -sSfL --retry 5 --retry-all-errors -o syft.tgz \
             "https://github.com/anchore/syft/releases/download/v${SYFT_VERSION}/syft_${SYFT_VERSION}_linux_amd64.tar.gz"
           echo "${SYFT_SHA256}  syft.tgz" | sha256sum -c -
-          tar -xzf syft.tgz -C /usr/local/bin syft
+          tar -xzf syft.tgz syft
+          sudo mv syft /usr/local/bin/syft
           rm -f syft.tgz
           syft version
           syft dir:. -o cyclonedx-json=dist/sbom-repo.cdx.json
