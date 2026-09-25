@@ -27,13 +27,26 @@ jobs:
 
       - name: Build sdist and wheel
         run: |
-          python -m pip install --upgrade pip build twine
+          python -m pip install --upgrade pip
+          pip install --require-hashes -r .github/ci-requirements/release-build.txt
           python -m build
           twine check dist/*
 
+      # Pinned release tarball + sha256 (Scorecard Pinned-Dependencies / #375).
+      # Avoid curl|sh installers that float with main.
       - name: Generate SBOMs with syft
+        env:
+          SYFT_VERSION: "1.52.0"
+          SYFT_SHA256: "caeedb81fb0491615f1ebd1761e4145d41ee86dd2cc7bf80669f9f5ad9d6133d"
         run: |
-          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+          set -euo pipefail
+          curl -sSfL --retry 5 --retry-all-errors -o syft.tgz \
+            "https://github.com/anchore/syft/releases/download/v${SYFT_VERSION}/syft_${SYFT_VERSION}_linux_amd64.tar.gz"
+          echo "${SYFT_SHA256}  syft.tgz" | sha256sum -c -
+          tar -xzf syft.tgz syft
+          sudo mv syft /usr/local/bin/syft
+          rm -f syft.tgz
+          syft version
           syft dir:. -o cyclonedx-json=dist/sbom-repo.cdx.json
           syft dir:go -o cyclonedx-json=dist/sbom-go.cdx.json
           syft dir:pkg -o cyclonedx-json=dist/sbom-python-src.cdx.json

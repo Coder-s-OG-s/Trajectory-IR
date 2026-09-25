@@ -44,7 +44,9 @@ jobs:
           python-version: "3.12"
 
       - name: Install dco-check
-        run: pip install --upgrade pip dco-check
+        run: |
+          python -m pip install --upgrade pip
+          pip install --require-hashes -r .github/ci-requirements/dco-check.txt
 
       # Dependabot signs as support@github.com but authors as
       # 49699333+dependabot[bot]@users.noreply.github.com. dco-check treats that
@@ -127,7 +129,8 @@ jobs:
 
       - name: Build sdist and wheel
         run: |
-          python -m pip install --upgrade pip build
+          python -m pip install --upgrade pip
+          pip install --require-hashes -r .github/ci-requirements/build.txt
           python -m build
 
       - name: Install wheel into clean environment and smoke import
@@ -170,10 +173,11 @@ jobs:
       - name: Install package and audit tooling
         run: |
           python -m pip install --upgrade pip
-          # Hosted images can ship an older setuptools that pip-audit flags.
-          pip install -U "setuptools>=83"
+          # setuptools + pip-audit pinned with hashes (#375).
+          pip install --require-hashes -r .github/ci-requirements/pip-audit.txt
+          # Project tree from pyproject.toml — intentional unhashed exception
+          # (Dependabot owns runtime bumps). See docs/CI_HARDENING.md.
           pip install -e ".[dev]"
-          pip install -U pip-audit
 
       - name: Run pip-audit on installed dependency tree
         run: |
