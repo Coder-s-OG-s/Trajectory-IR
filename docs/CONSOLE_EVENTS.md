@@ -51,6 +51,10 @@ Rules:
 - Unknown `kind`: store raw, do not crash the reader; UI hides until known.
 - `source: derived` is reserved for offline analysis of an existing `.tir` or
   NodeLog dump (§5). Live hooks use `go` / `python` / `cli`.
+- For `source: derived` events, `ts` MUST be the native timestamp of the node
+  or manifest field the event represents, never the time of derivation. The
+  console timeline must reflect when things happened in the trajectory, not
+  when the deriver happened to run.
 
 ---
 
@@ -82,7 +86,7 @@ explicit so the UI does not special-case node kinds alone.
 |---------------|------|----------|-------|
 | `node_id` | string | yes | Id of the `DECISION` node |
 | `step_n` | integer | yes | Step that was sealed |
-| `content_hash` | string | yes | Hash that freeze the plan |
+| `content_hash` | string | yes | Hash that freezes the plan |
 | `tool_names` | array[string] | no | Planned tool names when present in the plan |
 
 #### `seal.verified`
@@ -213,10 +217,10 @@ size-unit savings (`raw_size_units - size_units`) when those fields exist.
 | Metric | Source |
 |--------|--------|
 | `package_mode` | `export.completed.mode` / `import.completed.mode` |
-| `package_redacted` | boolean on export/import |
-| `package_bytes` | `bytes` |
-| `package_members` | `member_count` |
-| `package_nodes` | `node_count` |
+| `package_redacted` | `export.completed.redacted` / `import.completed.redacted` |
+| `package_bytes` | `export.completed.bytes` / `import.completed.bytes` |
+| `package_members` | `export.completed.member_count` / `import.completed.member_count` |
+| `package_nodes` | `export.completed.node_count` / `import.completed.node_count` |
 | `transfer_verify_ok` | `import.completed.verify_ok` (and seal.verified rollup) |
 
 A **handoff** in the Transfers view is an `export.completed` followed by an
@@ -234,8 +238,11 @@ and synthesize a minimal stream:
 2. Emit `import.completed` (or a synthetic `export.completed` if treating the
    file as an artifact under study) with manifest mode/redacted/sizes
 3. For each node, emit `node.appended`
-4. For each `DECISION`, emit `seal.created`; after successful hash checks emit
-   `seal.verified` with `ok: true` (or `ok: false` on failure — and stop)
+4. For each `DECISION`, emit `seal.created`; after hash checks emit
+   `seal.verified` with `ok: true` or `ok: false`. On `ok: false`, keep
+   deriving the remaining nodes — do not stop early. The console is a
+   debugging tool; an operator needs to see the full state of a compromised
+   trajectory, not just the point of first failure.
 5. Optionally rebuild projection/redaction **estimates** only if the deriver
    re-runs projector/redact over loaded nodes; do not invent `included_ids`
    without running that code path
