@@ -94,8 +94,30 @@ code { font-family: ui-monospace, Consolas, monospace; font-size: 0.9em; }
 }
 .stat .label { color: var(--muted); font-size: 0.75rem; }
 .stat .value { font-size: 1.15rem; font-weight: 600; margin-top: 0.2rem; }
+.ok { color: var(--ok); }
+.bad { color: var(--bad); }
 .stat .value.ok { color: var(--ok); }
 .stat .value.bad { color: var(--bad); }
+
+.badge {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 0.1rem 0.5rem;
+  font-size: 0.75rem;
+  border: 1px solid var(--border);
+}
+.badge.created { color: var(--accent); border-color: var(--accent); }
+.badge.verified { color: var(--ok); border-color: var(--ok); }
+.badge.failed { color: #1a0b0d; background: var(--bad); border-color: var(--bad); }
+tr.seal-failed { background: #2a1518; }
+.reason { color: #ffb4b8; }
+.hash { word-break: break-all; }
+.empty-seals {
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  padding: 1.25rem;
+  margin: 0;
+}
 
 table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
 th, td { text-align: left; padding: 0.45rem 0.4rem; border-bottom: 1px solid var(--border); vertical-align: top; }

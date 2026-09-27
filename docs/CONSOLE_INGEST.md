@@ -31,7 +31,7 @@ go run ./cmd/trajir-console -addr 127.0.0.1:8787
 | `POST` | `/v1/events` | Body = one event JSON; fail-closed on invalid envelope |
 | `GET` | `/v1/trajectories` | List trajectory ids |
 | `GET` | `/v1/trajectories/{id}/events` | Append-ordered events |
-| `GET` | `/v1/trajectories/{id}/summary` | Seal / economy / transfer rollup |
+| `GET` | `/v1/trajectories/{id}/summary` | Seal / economy / transfer rollup, including `seals[]` |
 | `GET` | `/healthz` | Liveness (no auth) |
 | `GET` | `/` | Operator UI shell (trajectory picker + panels) |
 | `GET` | `/ui/*` | Static CSS/JS for the shell |
@@ -40,6 +40,19 @@ When `TRAJIR_CONSOLE_TOKEN` is set, send `Authorization: Bearer <token>` on
 all `/v1/*` routes. The UI has a token field (sessionStorage) for local demos.
 
 Open `http://127.0.0.1:8787/?id=<trajectory_id>` for a deep link.
+
+## Seal fixture
+
+`go/trajir/console/testdata/multi_seal.ndjson` has several seals, including a
+failed verify whose reason is `content hash mismatch`.
+
+```bash
+mkdir -p "$TRAJIR_CONSOLE_DATA/trajectories"
+cp go/trajir/console/testdata/multi_seal.ndjson "$TRAJIR_CONSOLE_DATA/trajectories/demo-seals.ndjson"
+```
+
+Open `http://127.0.0.1:8787/?id=demo-seals` and choose **Seals**. A trajectory
+that only has `node.appended` events shows an empty state instead of a seal row.
 
 ## Library
 

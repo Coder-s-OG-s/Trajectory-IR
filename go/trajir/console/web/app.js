@@ -130,33 +130,71 @@
       </table>`;
   }
 
+  function sealStatusClass(status) {
+    if (status === "created" || status === "verified" || status === "failed") return status;
+    return "created";
+  }
+
+  function sealRange(row) {
+    const bits = [];
+    if (row.from_seq != null && row.to_seq != null) bits.push(`${row.from_seq}–${row.to_seq}`);
+    if (row.from_node_id && row.to_node_id) {
+      bits.push(
+        row.from_node_id === row.to_node_id
+          ? row.from_node_id
+          : `${row.from_node_id} → ${row.to_node_id}`
+      );
+    }
+    if (row.covered_nodes) bits.push(`${row.covered_nodes} nodes`);
+    if (row.content_hash) bits.push(row.content_hash);
+    if (row.tool_names && row.tool_names.length) bits.push(`tools: ${row.tool_names.join(", ")}`);
+    return bits.join(" · ") || "—";
+  }
+
   function renderSeals() {
-    const seals = filteredEvents().filter(
-      (e) => e.kind === "seal.created" || e.kind === "seal.verified"
-    );
     const s = state.summary || {};
+    const all = s.seals || [];
+    const rows = all.filter((row) => inRange(row.ts));
+    let empty = "";
+    if (rows.length === 0) {
+      if (all.length === 0 && s.node_count > 0) {
+        const noun = s.node_count === 1 ? "node" : "nodes";
+        empty = `This trajectory has ${s.node_count} ${noun} and no seals yet.`;
+      } else if (all.length === 0) {
+        empty = "No seal events yet.";
+      } else {
+        empty = "No seal events in range.";
+      }
+    }
+    const body = rows
+      .map((row) => {
+        const failed = row.status === "failed";
+        const reason = row.error ? `<span class="reason">${esc(row.error)}</span>` : "—";
+        return `<tr class="${failed ? "seal-failed" : ""}">
+          <td>${esc(row.ts)}</td>
+          <td><span class="badge ${sealStatusClass(row.status)}">${esc(row.status)}</span></td>
+          <td><code>${esc(row.kind)}</code></td>
+          <td class="${row.chain === "break" ? "bad" : "ok"}">${esc(row.chain || "—")}</td>
+          <td><code>${esc(row.node_id || "—")}</code>${row.step_n != null ? `<div class="muted">step ${esc(row.step_n)}</div>` : ""}</td>
+          <td class="hash"><code>${esc(sealRange(row))}</code></td>
+          <td>${reason}</td>
+        </tr>`;
+      })
+      .join("");
     $("panel-seals").innerHTML = `
       <div class="stats">
         ${stat("Created", s.seal_created_count)}
         ${stat("Verified OK", s.seal_verified_ok, "ok")}
         ${stat("Verified fail", s.seal_verified_fail, s.seal_verified_fail ? "bad" : "")}
       </div>
-      <table>
-        <thead><tr><th>Time</th><th>Kind</th><th>Payload</th></tr></thead>
-        <tbody>
-          ${seals
-            .map((e) => {
-              const p = e.payload || {};
-              const detail =
-                e.kind === "seal.verified"
-                  ? `ok=${p.ok} hash=${p.content_hash || ""}${p.error ? " err=" + p.error : ""}`
-                  : `step=${p.step_n} node=${p.node_id || ""} hash=${p.content_hash || ""}`;
-              const cls = e.kind === "seal.verified" && p.ok === false ? "bad" : "";
-              return `<tr><td>${esc(e.ts)}</td><td class="${cls}"><code>${esc(e.kind)}</code></td><td><code>${esc(detail)}</code></td></tr>`;
-            })
-            .join("") || `<tr><td colspan="3" class="muted">No seal events in range.</td></tr>`}
-        </tbody>
-      </table>`;
+      ${
+        empty
+          ? `<p class="empty-seals" role="status">${esc(empty)}</p>`
+          : `<table>
+              <thead><tr><th>Time</th><th>Status</th><th>Event</th><th>Chain</th><th>Node</th><th>Range / hash</th><th>Reason</th></tr></thead>
+              <tbody>${body}</tbody>
+            </table>`
+      }`;
   }
 
   function renderTransfers() {

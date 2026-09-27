@@ -1,0 +1,12 @@
+{"schema_version":"console-events-v1","id":"e1","ts":"2026-09-22T12:00:01Z","kind":"node.appended","source":"go","trajectory_id":"demo-seals","payload":{"node_id":"n1","kind":"THOUGHT","seq":1}}
+{"schema_version":"console-events-v1","id":"e2","ts":"2026-09-22T12:00:02Z","kind":"node.appended","source":"go","trajectory_id":"demo-seals","payload":{"node_id":"n2","kind":"TOOL_CALL","seq":2}}
+{"schema_version":"console-events-v1","id":"e3","ts":"2026-09-22T12:00:03Z","kind":"node.appended","source":"go","trajectory_id":"demo-seals","payload":{"node_id":"d1","kind":"DECISION","seq":3}}
+{"schema_version":"console-events-v1","id":"e4","ts":"2026-09-22T12:00:04Z","kind":"seal.created","source":"go","trajectory_id":"demo-seals","payload":{"node_id":"d1","step_n":3,"content_hash":"aaa111","tool_names":["deploy"]}}
+{"schema_version":"console-events-v1","id":"e5","ts":"2026-09-22T12:00:05Z","kind":"seal.verified","source":"go","trajectory_id":"demo-seals","payload":{"node_id":"d1","ok":true,"content_hash":"aaa111"}}
+{"schema_version":"console-events-v1","id":"e6","ts":"2026-09-22T12:00:06Z","kind":"node.appended","source":"go","trajectory_id":"demo-seals","payload":{"node_id":"n4","kind":"TOOL_RESULT","seq":4}}
+{"schema_version":"console-events-v1","id":"e7","ts":"2026-09-22T12:00:07Z","kind":"node.appended","source":"go","trajectory_id":"demo-seals","payload":{"node_id":"d2","kind":"DECISION","seq":5}}
+{"schema_version":"console-events-v1","id":"e8","ts":"2026-09-22T12:00:08Z","kind":"seal.created","source":"go","trajectory_id":"demo-seals","payload":{"node_id":"d2","step_n":5,"content_hash":"bbb222"}}
+{"schema_version":"console-events-v1","id":"e9","ts":"2026-09-22T12:00:09Z","kind":"seal.verified","source":"go","trajectory_id":"demo-seals","payload":{"node_id":"d2","ok":false,"content_hash":"bbb222","error":"content hash mismatch"}}
+{"schema_version":"console-events-v1","id":"e10","ts":"2026-09-22T12:00:10Z","kind":"node.appended","source":"go","trajectory_id":"demo-seals","payload":{"node_id":"n6","kind":"TOOL_CALL","seq":6}}
+{"schema_version":"console-events-v1","id":"e11","ts":"2026-09-22T12:00:11Z","kind":"node.appended","source":"go","trajectory_id":"demo-seals","payload":{"node_id":"d3","kind":"DECISION","seq":7}}
+{"schema_version":"console-events-v1","id":"e12","ts":"2026-09-22T12:00:12Z","kind":"seal.created","source":"go","trajectory_id":"demo-seals","payload":{"node_id":"d3","step_n":7,"content_hash":"ccc333"}}

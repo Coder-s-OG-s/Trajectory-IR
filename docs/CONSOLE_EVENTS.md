@@ -256,11 +256,28 @@ Derived events must not claim stronger provenance than the package itself.
 | Console panel (issues) | Primary kinds | Primary metrics |
 |------------------------|---------------|-----------------|
 | Overview (#394) | mix / latest of all | node count, last `ts`, verify rollup |
-| Seals (#395) | `seal.created`, `seal.verified` | seal count, failed verifies |
+| Seals (#395) | `seal.created`, `seal.verified` | seal count, failed verifies, reader `seals[]` |
 | Context economy (#396) | `context.projected`, `redaction.applied` | §3 aggregates |
 | Transfers (#397) | `export.*`, `import.completed` | §4 aggregates |
 
 If a panel needs a number that is not in §3–§4, extend **this document** first.
+
+### Seal timeline projection
+
+`GET /v1/trajectories/{id}/summary` includes `seals`: one object per
+`seal.created` or `seal.verified`, in append order. The reader sets:
+
+| Field | Meaning |
+|-------|---------|
+| `status` | `created`, `verified` (`payload.ok` true), or `failed` (`ok` false or absent) |
+| `error` | Copied from `payload.error` when present. This is the failing-check reason |
+| `chain` | `continuous` or `break`. Created seals break when `step_n` does not increase. Verified seals break when no earlier `seal.created` shares `node_id` |
+| `content_hash`, `node_id`, `step_n`, `tool_names` | Copied from the event (step on a verify may come from the matching created seal) |
+| `from_seq`, `to_seq`, `from_node_id`, `to_node_id`, `covered_nodes` | `node.appended` span since the previous `seal.created`. A verify reuses the span of the matching created seal |
+
+The reader does not recompute hashes. The Seals panel renders `seals` and does
+not decide integrity in the browser. Fixture:
+`go/trajir/console/testdata/multi_seal.ndjson` (`trajectory_id` `demo-seals`).
 
 ---
 

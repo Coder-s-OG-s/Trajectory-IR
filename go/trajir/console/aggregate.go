@@ -12,9 +12,9 @@ type Summary struct {
 	NodeCount    int    `json:"node_count"`
 	LastTS       string `json:"last_ts,omitempty"`
 
-	SealCreatedCount  int `json:"seal_created_count"`
-	SealVerifiedOK    int `json:"seal_verified_ok"`
-	SealVerifiedFail  int `json:"seal_verified_fail"`
+	SealCreatedCount int `json:"seal_created_count"`
+	SealVerifiedOK   int `json:"seal_verified_ok"`
+	SealVerifiedFail int `json:"seal_verified_fail"`
 
 	ProjectionSizeUnits int  `json:"projection_size_units,omitempty"`
 	ProjectionBudget    int  `json:"projection_budget,omitempty"`
@@ -27,14 +27,16 @@ type Summary struct {
 
 	RedactionCollapses int `json:"redaction_collapses"`
 
-	ExportsOK          int    `json:"exports_ok"`
-	ImportsOK          int    `json:"imports_ok"`
-	LastPackageMode    string `json:"last_package_mode,omitempty"`
-	LastPackageBytes   int64  `json:"last_package_bytes,omitempty"`
-	LastPackageMembers int    `json:"last_package_members,omitempty"`
-	LastPackageNodes   int    `json:"last_package_nodes,omitempty"`
-	LastPackageRedacted *bool `json:"last_package_redacted,omitempty"`
-	TransferVerifyOK   *bool  `json:"transfer_verify_ok,omitempty"`
+	ExportsOK           int    `json:"exports_ok"`
+	ImportsOK           int    `json:"imports_ok"`
+	LastPackageMode     string `json:"last_package_mode,omitempty"`
+	LastPackageBytes    int64  `json:"last_package_bytes,omitempty"`
+	LastPackageMembers  int    `json:"last_package_members,omitempty"`
+	LastPackageNodes    int    `json:"last_package_nodes,omitempty"`
+	LastPackageRedacted *bool  `json:"last_package_redacted,omitempty"`
+	TransferVerifyOK    *bool  `json:"transfer_verify_ok,omitempty"`
+
+	Seals []SealView `json:"seals"`
 }
 
 // Summarize builds aggregates from an ordered event list.
@@ -87,6 +89,7 @@ func Summarize(trajectoryID string, events []Event) Summary {
 			applyPackage(&s, e.Payload)
 		}
 	}
+	s.Seals = deriveSeals(events)
 	return s
 }
 
