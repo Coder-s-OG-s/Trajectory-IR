@@ -331,7 +331,9 @@ def test_open_keeps_dsn_connect_timeout(monkeypatch: pytest.MonkeyPatch):
 def test_open_env_timeout_overrides_dsn(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("TRAJIR_PG_CONNECT_TIMEOUT", "6")
     seen = _capture_connect(monkeypatch)
-    log = open_postgres_node_log("postgresql://trajir:trajir@127.0.0.1:5432/trajir?connect_timeout=4")
+    log = open_postgres_node_log(
+        "postgresql://trajir:trajir@127.0.0.1:5432/trajir?connect_timeout=4"
+    )
     log.close()
     assert seen["kwargs"]["connect_timeout"] == 6
 
