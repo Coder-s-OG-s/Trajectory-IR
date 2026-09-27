@@ -60,7 +60,7 @@ Local live stack (optional): [LIVE_INTEGRATION_DOCKER.md](LIVE_INTEGRATION_DOCKE
     and Docker Hub `minio/minio` both reject pulls now, and `dl.min.io` 410s on the raw
     binary too — none of it is coming back. The `Integration (MinIO)` job runs against
     [`adobe/s3mock`](https://hub.docker.com/r/adobe/s3mock) instead (digest-pinned); the
-    check name is kept as-is so it still matches the required status check below.
+    check name is kept as-is so it still matches the required status check above.
     `docker-compose.live.yml` (local dev stack) still points at the dead MinIO image and
     needs the same swap — tracked as a follow-up, not done in this change.
 

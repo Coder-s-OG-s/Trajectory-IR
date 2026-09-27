@@ -359,8 +359,8 @@ jobs:
             -e initialBuckets=trajir \
             "${S3MOCK_IMAGE}"
           for attempt in $(seq 1 40); do
-            code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:9090 || true)
-            if [ "${code}" != "000" ]; then
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:9090/favicon.ico || true)
+            if [ "${code}" = "200" ]; then
               echo "s3mock is up (attempt ${attempt}, http ${code})"
               exit 0
             fi
