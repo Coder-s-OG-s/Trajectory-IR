@@ -21,7 +21,7 @@ Milestone: **[Phase CI/CD harden](https://github.com/Coder-s-OG-s/Trajectory-IR/
 
 | Workflow | File | Role |
 |----------|------|------|
-| **CI** | `.github/workflows/ci.yml` | DCO, Quality, Package smoke, pip-audit, Go (+ race), Conformance, Postgres, MinIO |
+| **CI** | `.github/workflows/ci.yml` | DCO, Quality, Package smoke, pip-audit, Go (+ race), Conformance, Postgres, MinIO[^minio] |
 | **Release** | `.github/workflows/release.yml` | Build dist, SBOM, attach to GitHub Release |
 | **Scorecard** | `.github/workflows/scorecard.yml` | OpenSSF Scorecard SARIF |
 | **CodeQL** | `.github/workflows/codeql.yml` | Go + Python static analysis |
@@ -55,6 +55,14 @@ govulncheck ./...
 ```
 
 Local live stack (optional): [LIVE_INTEGRATION_DOCKER.md](LIVE_INTEGRATION_DOCKER.md).
+
+[^minio]: MinIO archived their open-source Server/Client/KES upstream: `quay.io/minio/minio`
+    and Docker Hub `minio/minio` both reject pulls now, and `dl.min.io` 410s on the raw
+    binary too — none of it is coming back. The `Integration (MinIO)` job runs against
+    [`adobe/s3mock`](https://hub.docker.com/r/adobe/s3mock) instead (digest-pinned); the
+    check name is kept as-is so it still matches the required status check above.
+    `docker-compose.live.yml` (local dev stack) still points at the dead MinIO image and
+    needs the same swap — tracked as a follow-up, not done in this change.
 
 ## Pinned install tools (Scorecard Pinned-Dependencies)
 
@@ -93,6 +101,8 @@ Track remaining Scorecard work under
 4. **Fork PR approval** settings: require approval for first-time contributors (org setting)
 5. **zizmor fail-closed** after reviewing residual findings
 6. ~~**Pin workflow CLI installs**~~ — #375 / PR #400: hashed ci-requirements + tarball checksums
+7. **`docker-compose.live.yml`**: swap dead `quay.io/minio/minio` for `adobe/s3mock` (same
+   root cause as the CI job above; local dev live-integration stack is currently broken)
 
 Active OpenSSF work tracks under milestone
 [OpenSSF security bar](https://github.com/Coder-s-OG-s/Trajectory-IR/milestone/10).
