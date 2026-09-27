@@ -154,6 +154,23 @@ class S3CAS:
             raise
 
 
+_S3_CONNECT_TIMEOUT = 10
+_S3_READ_TIMEOUT = 60
+
+
+def _s3_client_config(*, path_style: bool) -> Any:
+    from botocore.client import Config
+
+    options: dict[str, Any] = {
+        "connect_timeout": _S3_CONNECT_TIMEOUT,
+        "read_timeout": _S3_READ_TIMEOUT,
+    }
+    if path_style:
+        options["signature_version"] = "s3v4"
+        options["s3"] = {"addressing_style": "path"}
+    return Config(**options)
+
+
 def build_s3_client_from_env() -> Any:
     """Build a boto3 S3 client from environment variables.
 
@@ -166,12 +183,13 @@ def build_s3_client_from_env() -> Any:
     When ``TRAJIR_S3_ENDPOINT_URL`` is set, path-style addressing is used so
     MinIO and LocalStack work without virtual-hosted DNS.
 
+    Connect timeout is 10 seconds and read timeout is 60 seconds.
+
     Raises:
         ImportError: if boto3 is not installed
     """
     try:
         import boto3
-        from botocore.client import Config
     except ImportError as exc:
         raise ImportError(
             "boto3 is required for S3CAS production use; pip install boto3 "
@@ -180,9 +198,10 @@ def build_s3_client_from_env() -> Any:
 
     region = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION") or "us-east-1"
     endpoint = os.environ.get("TRAJIR_S3_ENDPOINT_URL") or None
-    kwargs: dict[str, Any] = {"region_name": region}
+    kwargs: dict[str, Any] = {
+        "region_name": region,
+        "config": _s3_client_config(path_style=endpoint is not None),
+    }
     if endpoint:
         kwargs["endpoint_url"] = endpoint
-        # Path style is required for many local S3 implementations.
-        kwargs["config"] = Config(signature_version="s3v4", s3={"addressing_style": "path"})
     return boto3.client("s3", **kwargs)

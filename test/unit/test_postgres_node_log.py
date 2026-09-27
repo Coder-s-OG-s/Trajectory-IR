@@ -293,6 +293,73 @@ def test_open_requires_dsn(monkeypatch: pytest.MonkeyPatch):
         open_postgres_node_log(None)
 
 
+def _capture_connect(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
+    seen: dict[str, Any] = {}
+
+    def connect(dsn: str, **kwargs: Any) -> FakePgConnection:
+        seen["dsn"] = dsn
+        seen["kwargs"] = kwargs
+        return FakePgConnection()
+
+    monkeypatch.setattr(
+        "drivers.postgres.log._require_psycopg",
+        lambda: (type("Psycopg", (), {"connect": staticmethod(connect)})(), None),
+    )
+    return seen
+
+
+def test_open_sets_default_connect_timeout(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.delenv("TRAJIR_PG_CONNECT_TIMEOUT", raising=False)
+    seen = _capture_connect(monkeypatch)
+    dsn = "postgresql://trajir:trajir@127.0.0.1:5432/trajir"
+    log = open_postgres_node_log(dsn)
+    log.close()
+    assert seen["dsn"] == dsn
+    assert seen["kwargs"]["connect_timeout"] == 10
+
+
+def test_open_keeps_dsn_connect_timeout(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.delenv("TRAJIR_PG_CONNECT_TIMEOUT", raising=False)
+    seen = _capture_connect(monkeypatch)
+    dsn = "host=127.0.0.1 user=trajir dbname=trajir connect_timeout=4"
+    log = open_postgres_node_log(dsn)
+    log.close()
+    assert seen["dsn"] == dsn
+    assert "connect_timeout" not in seen["kwargs"]
+
+
+def test_open_env_timeout_overrides_dsn(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("TRAJIR_PG_CONNECT_TIMEOUT", "6")
+    seen = _capture_connect(monkeypatch)
+    log = open_postgres_node_log("postgresql://trajir:trajir@127.0.0.1:5432/trajir?connect_timeout=4")
+    log.close()
+    assert seen["kwargs"]["connect_timeout"] == 6
+
+
+def test_open_argument_overrides_env(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("TRAJIR_PG_CONNECT_TIMEOUT", "6")
+    seen = _capture_connect(monkeypatch)
+    log = open_postgres_node_log(
+        "postgresql://trajir:trajir@127.0.0.1:5432/trajir",
+        connect_timeout=3,
+    )
+    log.close()
+    assert seen["kwargs"]["connect_timeout"] == 3
+
+
+def test_open_rejects_non_positive_timeout(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.delenv("TRAJIR_PG_CONNECT_TIMEOUT", raising=False)
+    _capture_connect(monkeypatch)
+    with pytest.raises(ValueError, match="connect_timeout"):
+        open_postgres_node_log(
+            "postgresql://trajir:trajir@127.0.0.1:5432/trajir",
+            connect_timeout=0,
+        )
+    monkeypatch.setenv("TRAJIR_PG_CONNECT_TIMEOUT", "nope")
+    with pytest.raises(ValueError, match="TRAJIR_PG_CONNECT_TIMEOUT"):
+        open_postgres_node_log("postgresql://trajir:trajir@127.0.0.1:5432/trajir")
+
+
 @pytest.mark.skipif(
     not os.environ.get("TRAJIR_DATABASE_URL"),
     reason="Set TRAJIR_DATABASE_URL to run live Postgres integration",

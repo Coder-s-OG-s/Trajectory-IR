@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"testing"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
@@ -71,9 +72,9 @@ func awsString(s string) *string { return &s }
 
 type apiError string
 
-func (e apiError) Error() string                { return string(e) }
-func (e apiError) ErrorCode() string            { return string(e) }
-func (e apiError) ErrorMessage() string         { return string(e) }
+func (e apiError) Error() string                 { return string(e) }
+func (e apiError) ErrorCode() string             { return string(e) }
+func (e apiError) ErrorMessage() string          { return string(e) }
 func (e apiError) ErrorFault() smithy.ErrorFault { return smithy.FaultUnknown }
 
 func TestAWSObjectAPIRoundTrip(t *testing.T) {
@@ -147,6 +148,51 @@ func TestNewS3StoreFromEnvBuildsClient(t *testing.T) {
 	}
 	if _, ok := store.Client.(*AWSObjectAPI); !ok {
 		t.Fatalf("client type %T", store.Client)
+	}
+}
+
+type deadlineS3API struct {
+	*fakeS3API
+	ctx context.Context
+}
+
+func (f *deadlineS3API) HeadObject(ctx context.Context, in *s3.HeadObjectInput, opts ...func(*s3.Options)) (*s3.HeadObjectOutput, error) {
+	f.ctx = ctx
+	return f.fakeS3API.HeadObject(ctx, in, opts...)
+}
+
+func TestAWSObjectAPIDeadlineWhenMissing(t *testing.T) {
+	fake := &deadlineS3API{fakeS3API: newFakeS3API()}
+	api := &AWSObjectAPI{Client: fake}
+	err := api.HeadObject("b", "missing")
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatal(err)
+	}
+	deadline, ok := fake.ctx.Deadline()
+	if !ok {
+		t.Fatal("expected deadline")
+	}
+	remaining := time.Until(deadline)
+	if remaining < 55*time.Second || remaining > 60*time.Second {
+		t.Fatalf("remaining=%s", remaining)
+	}
+}
+
+func TestAWSObjectAPIKeepsCallerDeadline(t *testing.T) {
+	fake := &deadlineS3API{fakeS3API: newFakeS3API()}
+	parent, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	api := &AWSObjectAPI{Client: fake, Ctx: parent}
+	if err := api.HeadObject("b", "missing"); !errors.Is(err, ErrNotFound) {
+		t.Fatal(err)
+	}
+	deadline, ok := fake.ctx.Deadline()
+	if !ok {
+		t.Fatal("expected deadline")
+	}
+	parentDeadline, _ := parent.Deadline()
+	if !deadline.Equal(parentDeadline) {
+		t.Fatalf("deadline=%s parent=%s", deadline, parentDeadline)
 	}
 }
 

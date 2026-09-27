@@ -10,12 +10,19 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
+	"strconv"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/nodes"
+	"github.com/jackc/pgx/v5"
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
+
+const defaultPGConnectTimeout = 10 * time.Second
 
 // ErrSlotConflict is raised when a different payload already occupies the slot.
 var ErrSlotConflict = errors.New("postgres: slot conflict")
@@ -27,25 +34,97 @@ type NodeLog struct {
 }
 
 // OpenDSN opens a Postgres NodeLog from a connection string.
+// Ping and schema setup use TRAJIR_PG_CONNECT_TIMEOUT (seconds), else the DSN
+// connect_timeout, else 10s.
 func OpenDSN(dsn string) (*NodeLog, error) {
 	if dsn == "" {
 		return nil, errors.New("postgres: DSN is required")
 	}
-	db, err := sql.Open("pgx", dsn)
+	timeout, err := resolvePGConnectTimeout(dsn)
+	if err != nil {
+		return nil, err
+	}
+	effective, err := dsnWithConnectTimeout(dsn, timeout)
+	if err != nil {
+		return nil, err
+	}
+	db, err := sql.Open("pgx", effective)
 	if err != nil {
 		return nil, fmt.Errorf("postgres: open: %w", err)
 	}
 	db.SetMaxOpenConns(4)
-	if err := db.Ping(); err != nil {
+	pingCtx, pingCancel := context.WithTimeout(context.Background(), timeout)
+	err = db.PingContext(pingCtx)
+	pingCancel()
+	if err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("postgres: ping: %w", err)
 	}
 	nl := &NodeLog{db: db}
-	if err := nl.ensureSchema(context.Background()); err != nil {
+	schemaCtx, schemaCancel := context.WithTimeout(context.Background(), timeout)
+	err = nl.ensureSchema(schemaCtx)
+	schemaCancel()
+	if err != nil {
 		_ = db.Close()
 		return nil, err
 	}
 	return nl, nil
+}
+
+func resolvePGConnectTimeout(dsn string) (time.Duration, error) {
+	if raw := strings.TrimSpace(os.Getenv("TRAJIR_PG_CONNECT_TIMEOUT")); raw != "" {
+		sec, err := strconv.Atoi(raw)
+		if err != nil || sec <= 0 {
+			return 0, errors.New("postgres: TRAJIR_PG_CONNECT_TIMEOUT must be a positive integer number of seconds")
+		}
+		return time.Duration(sec) * time.Second, nil
+	}
+	cfg, err := pgx.ParseConfig(dsn)
+	if err != nil {
+		return 0, fmt.Errorf("postgres: parse dsn: %w", err)
+	}
+	if cfg.ConnectTimeout > 0 {
+		return cfg.ConnectTimeout, nil
+	}
+	return defaultPGConnectTimeout, nil
+}
+
+func dsnWithConnectTimeout(dsn string, timeout time.Duration) (string, error) {
+	seconds := int(timeout / time.Second)
+	if seconds < 1 {
+		return "", errors.New("postgres: connect timeout must be at least 1s")
+	}
+	want := strconv.Itoa(seconds)
+	if strings.Contains(dsn, "://") {
+		u, err := url.Parse(dsn)
+		if err != nil {
+			return "", fmt.Errorf("postgres: parse dsn: %w", err)
+		}
+		q := u.Query()
+		if q.Get("connect_timeout") == want {
+			return dsn, nil
+		}
+		q.Set("connect_timeout", want)
+		u.RawQuery = q.Encode()
+		return u.String(), nil
+	}
+	parts := strings.Fields(dsn)
+	for _, part := range parts {
+		key, val, ok := strings.Cut(part, "=")
+		if ok && strings.EqualFold(key, "connect_timeout") && val == want {
+			return dsn, nil
+		}
+	}
+	kept := make([]string, 0, len(parts)+1)
+	for _, part := range parts {
+		key, _, ok := strings.Cut(part, "=")
+		if ok && strings.EqualFold(key, "connect_timeout") {
+			continue
+		}
+		kept = append(kept, part)
+	}
+	kept = append(kept, "connect_timeout="+want)
+	return strings.Join(kept, " "), nil
 }
 
 // OpenFromEnv resolves TRAJIR_DATABASE_URL or DATABASE_URL and opens a log.
