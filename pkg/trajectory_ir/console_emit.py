@@ -102,14 +102,17 @@ def note_node(
     }
     if node.step_n is not None:
         payload["step_n"] = node.step_n
-    emit(sink, {
-        "kind": "node.appended",
-        "source": source,
-        "runtime": runtime,
-        "trajectory_id": trajectory_id,
-        "tenant_id": tenant_id,
-        "payload": payload,
-    })
+    emit(
+        sink,
+        {
+            "kind": "node.appended",
+            "source": source,
+            "runtime": runtime,
+            "trajectory_id": trajectory_id,
+            "tenant_id": tenant_id,
+            "payload": payload,
+        },
+    )
 
 
 def note_seal(
@@ -134,14 +137,17 @@ def note_seal(
             names.append(call["name"])
     if names:
         payload["tool_names"] = names
-    emit(sink, {
-        "kind": "seal.created",
-        "source": source,
-        "runtime": runtime,
-        "trajectory_id": trajectory_id,
-        "tenant_id": tenant_id,
-        "payload": payload,
-    })
+    emit(
+        sink,
+        {
+            "kind": "seal.created",
+            "source": source,
+            "runtime": runtime,
+            "trajectory_id": trajectory_id,
+            "tenant_id": tenant_id,
+            "payload": payload,
+        },
+    )
 
 
 def note_package(
@@ -175,11 +181,14 @@ def note_package(
         payload["ok"] = bool(ok)
     if error:
         payload["error"] = error
-    emit(sink, {
-        "kind": kind,
-        "source": source,
-        "runtime": runtime,
-        "trajectory_id": trajectory_id,
-        "tenant_id": tenant_id,
-        "payload": payload,
-    })
+    emit(
+        sink,
+        {
+            "kind": kind,
+            "source": source,
+            "runtime": runtime,
+            "trajectory_id": trajectory_id,
+            "tenant_id": tenant_id,
+            "payload": payload,
+        },
+    )

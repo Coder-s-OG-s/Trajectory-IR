@@ -384,29 +384,35 @@ def export_tir(
         except Exception as exc:
             # Any failure after the unsigned zip is on disk (crypto, IO, disk full)
             # must not leave a half signed package behind.
-            _notify_observer(on_exported, {
-                "path": str(dest_path),
-                "mode": mode,
-                "redacted": bool(redacted),
-                "bytes": dest_path.stat().st_size if dest_path.exists() else 0,
-                "member_count": member_count,
-                "node_count": len(nodes),
-                "ok": False,
-                "error": type(exc).__name__,
-            })
+            _notify_observer(
+                on_exported,
+                {
+                    "path": str(dest_path),
+                    "mode": mode,
+                    "redacted": bool(redacted),
+                    "bytes": dest_path.stat().st_size if dest_path.exists() else 0,
+                    "member_count": member_count,
+                    "node_count": len(nodes),
+                    "ok": False,
+                    "error": type(exc).__name__,
+                },
+            )
             with contextlib.suppress(OSError):
                 dest_path.unlink()
             raise
 
-    _notify_observer(on_exported, {
-        "path": str(dest_path),
-        "mode": mode,
-        "redacted": bool(redacted),
-        "bytes": dest_path.stat().st_size,
-        "member_count": member_count,
-        "node_count": len(nodes),
-        "ok": True,
-    })
+    _notify_observer(
+        on_exported,
+        {
+            "path": str(dest_path),
+            "mode": mode,
+            "redacted": bool(redacted),
+            "bytes": dest_path.stat().st_size,
+            "member_count": member_count,
+            "node_count": len(nodes),
+            "ok": True,
+        },
+    )
     return dest_path
 
 
@@ -624,13 +630,16 @@ def import_tir(
             size = Path(path).stat().st_size
         except OSError:
             pass
-        _notify_observer(on_imported, {
-            "path": str(path),
-            "mode": pkg.manifest.get("mode") or "",
-            "redacted": bool(pkg.manifest.get("redacted")),
-            "bytes": size,
-            "member_count": member_count,
-            "node_count": len(pkg.nodes),
-            "verify_ok": True,
-        })
+        _notify_observer(
+            on_imported,
+            {
+                "path": str(path),
+                "mode": pkg.manifest.get("mode") or "",
+                "redacted": bool(pkg.manifest.get("redacted")),
+                "bytes": size,
+                "member_count": member_count,
+                "node_count": len(pkg.nodes),
+                "verify_ok": True,
+            },
+        )
     return pkg
