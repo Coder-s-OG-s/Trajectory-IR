@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "domain": "trajir-idempotency-v1",
+  "algorithm": "sha256",
+  "encoding": "utf8-nul-separated lowercase hex",
+  "cases": [
+    {
+      "name": "demo-t1-step1-seq2",
+      "tenant_id": "demo",
+      "trajectory_id": "t1",
+      "step_n": 1,
+      "seq": 2,
+      "idempotency_key": "0358d0a44a083ec34c50d84eb7da863e11b84bb814985f388d44699cc3664222"
+    },
+    {
+      "name": "demo-traj-1-step1-seq2",
+      "tenant_id": "demo",
+      "trajectory_id": "traj-1",
+      "step_n": 1,
+      "seq": 2,
+      "idempotency_key": "fc1b828aa7b86f232298e4066163c293a2bd7ec5d20370e4da53d368caa3fd33"
+    }
+  ]
+}

@@ -9,12 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Seal-derived idempotency keys on every `TOOL_CALL` (`trajectory_id:step_n:seq`)
-  in Go and Python. Hosts must forward the key to the remote API. The IR log
-  is not exactly-once.
+- Seal-derived idempotency keys on every `TOOL_CALL`. Format is now
+  `hex(sha256(trajir-idempotency-v1 || tenant || trajectory || step || seq))`
+  (colon form withdrawn). Exposed to the tool body via Go `FnWithMeta` /
+  Python `current_idempotency_key()` and `IdempotencyKeyHeader`. Never
+  injected into tool args. Hosts must forward the key to the remote API.
+  The IR log is not exactly-once.
 - `ClassifyTool` / `classify_tool`: known open-world primitives (`bash`,
   `python`, `sql`, browser, …) fail closed even if MCP hints claim read-only.
   Name denylist, not a command AST.
+- `ExecTool` / `RunStep` refuse an open-world primitive tagged `PURE`,
+  `READ_ONLY`, or `IDEMPOTENT_WRITE` unless `AllowOpenWorldOverride` is set.
+- Optional `world_snapshot` on `DECISION`. `CheckWorld` is fail-loud
+  `WORLD_DRIFT` when a host-declared snapshot diverges. Empty snapshot is a
+  no-op. Not a pause of the physical world.
 
 ### Changed
 
@@ -23,6 +31,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   world. Block-and-gate is at-most-one automatic attempt, not "the world still
   only got one deploy." R06 is a demo/CI effect-class gate, not a security
   sandbox. "IR" is a runtime trajectory IR, not LLVM.
+- **Spec 1.8:** hashed keys, optional `WORLD_SNAPSHOT`, ExecTool open-world
+  enforcement. Colon `trajectory_id:step_n:seq` keys are withdrawn.
 - **Docs:** root `README.md` is now a project landing page for users, students,
   and contributors. The normative master specification moved to
   [`docs/MASTER_SPECIFICATION.md`](docs/MASTER_SPECIFICATION.md) (`spec-v0.2-draft`

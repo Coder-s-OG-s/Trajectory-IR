@@ -12,7 +12,8 @@ is the landing page).
 - Named open-world primitives (`bash`, `python`, `sql`, browser, …) defaulting
   to `NON_IDEMPOTENT_WRITE`. This is a name denylist, not an AST of the command.
 - Block-and-gate for non-idempotent tools (at-most-one automatic attempt)
-- Seal-derived idempotency keys recorded on `TOOL_CALL` for the host to forward
+- Seal-derived hashed idempotency keys recorded on `TOOL_CALL` and exposed to the tool body (CallMeta / contextvar) so the host can forward `Idempotency-Key`
+- Optional host-declared `WORLD_SNAPSHOT` on `DECISION`; `CheckWorld` is fail-loud `WORLD_DRIFT`
 - Portable `.tir` packages (thin / fat; redacted export heuristics)
 - Dual SDK: **Go primary**, Python reference/parity
 - Pluggable durable backends (Temporal for Go production; DBOS for Python reference)
@@ -24,7 +25,7 @@ is the landing page).
 |-------|--------|
 | Reimplement Temporal/Restate/DBOS crash/retry/leases | Never (adapter only) |
 | Exactly-once remote writes without a server-side key | Never. Client gates cannot solve Two Generals. |
-| Pause or re-validate the physical world on resume | Never automatic. Honest resume ≠ world-valid resume. |
+| Pause or re-validate the physical world on resume | Never automatic. Optional host-declared `WORLD_SNAPSHOT` compared by `CheckWorld` is fail-loud `WORLD_DRIFT`. Honest resume ≠ world-valid resume. |
 | Parse `bash` / `python` / `sql` bodies for effect class | Never. No command AST. |
 | Process / syscall sandbox, seccomp, gVisor | Never. R06 is an effect-class gate for demos and CI. |
 | Agent graph orchestration / “be LangGraph” | Out |
@@ -39,7 +40,9 @@ is the landing page).
 1. **A seal freezes the plan, not the environment.** If the node you reserved is
    gone five minutes later, replaying the sealed `ReserveNode` is still the
    honest resume. The API should fail; the host then starts a **new** step.
-   Re-checking the world is `READ_ONLY` observation, not re-inference.
+   Re-checking the world is `READ_ONLY` observation, not re-inference. Hosts
+   that declared a `WORLD_SNAPSHOT` at seal time can `CheckWorld` and get
+   `WORLD_DRIFT` instead of a surprising 404.
 2. **Block-and-gate does not know if the packet landed.** A claimed `TOOL_CALL`
    with no `TOOL_RESULT` means *do not retry and do not re-infer*. A human or
    host policy confirms success, confirms failure, compensates, or re-runs in a

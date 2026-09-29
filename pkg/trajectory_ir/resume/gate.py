@@ -1,4 +1,4 @@
-from trajectory_ir.resume.idempotency import idempotency_key
+from trajectory_ir.resume.idempotency import CallMeta, bind_call_meta
 
 
 class BlockedNeedsGate(Exception):
@@ -56,12 +56,13 @@ def make_gated_tool_call(node_log, trajectory_id, tenant_id, step_n, seq, tool_n
         # appended and committed to SQLite before the durable backend records
         # the step's memoized output, so a crash in that window leaves *both*
         # nodes present. A `not TOOL_RESULT` conjunct fails open there.
+        meta = CallMeta.make(tenant_id, trajectory_id, step_n, seq)
         claimed = node_log.claim_tool_call(
             step_n,
             {
                 "tool": tool_name,
                 "args": kwargs,
-                "idempotency_key": idempotency_key(trajectory_id, step_n, seq),
+                "idempotency_key": meta.idempotency_key,
             },
             trajectory_id,
             tenant_id,
@@ -78,7 +79,7 @@ def make_gated_tool_call(node_log, trajectory_id, tenant_id, step_n, seq, tool_n
             )
             raise BlockedNeedsGate(step_n, tool_name)
 
-        result = tool_fn(**kwargs)
+        result = bind_call_meta(meta, tool_fn, kwargs)
         node_log.append(
             "TOOL_RESULT",
             step_n,
@@ -101,20 +102,21 @@ def make_plain_tool_call(node_log, trajectory_id, tenant_id, step_n, seq, tool_n
     """
 
     def plain(**kwargs):
+        meta = CallMeta.make(tenant_id, trajectory_id, step_n, seq)
         node_log.append(
             "TOOL_CALL",
             step_n,
             {
                 "tool": tool_name,
                 "args": kwargs,
-                "idempotency_key": idempotency_key(trajectory_id, step_n, seq),
+                "idempotency_key": meta.idempotency_key,
             },
             trajectory_id,
             tenant_id,
             seq=seq,
         )
 
-        result = tool_fn(**kwargs)
+        result = bind_call_meta(meta, tool_fn, kwargs)
 
         node_log.append(
             "TOOL_RESULT",
