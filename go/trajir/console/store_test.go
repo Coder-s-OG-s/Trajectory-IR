@@ -3,7 +3,9 @@ package console
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 )
@@ -57,6 +59,49 @@ func TestStoreAppendListRead(t *testing.T) {
 	path := filepath.Join(root, "trajectories", "t-demo.ndjson")
 	if path == "" {
 		t.Fatal("expected path")
+	}
+}
+
+func TestStoreConcurrentAppendAndRead(t *testing.T) {
+	st, err := OpenStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	const n = 80
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < n; i++ {
+			e := sampleEvent(KindNodeAppended)
+			e.ID = fmt.Sprintf("w-%d", i)
+			e.Payload = json.RawMessage(`{"node_id":"n1","kind":"THOUGHT"}`)
+			if err := st.Append(e); err != nil {
+				t.Errorf("append: %v", err)
+				return
+			}
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		for i := 0; i < n; i++ {
+			if _, err := st.ReadEvents("t-demo"); err != nil && !errors.Is(err, ErrNotFound) {
+				t.Errorf("read: %v", err)
+				return
+			}
+			if _, err := st.ListTrajectories(); err != nil {
+				t.Errorf("list: %v", err)
+				return
+			}
+		}
+	}()
+	wg.Wait()
+	events, err := st.ReadEvents("t-demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != n {
+		t.Fatalf("len=%d want %d", len(events), n)
 	}
 }
 

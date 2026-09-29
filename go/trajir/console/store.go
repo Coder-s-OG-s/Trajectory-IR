@@ -22,7 +22,7 @@ const (
 // Store is an append-only NDJSON event store keyed by trajectory id.
 type Store struct {
 	root string
-	mu   sync.Mutex
+	mu   sync.RWMutex
 }
 
 // OpenStore uses TRAJIR_CONSOLE_DATA when root is empty.
@@ -84,7 +84,9 @@ func (s *Store) Append(e Event) error {
 // ListTrajectories returns trajectory ids that have at least one event, sorted.
 func (s *Store) ListTrajectories() ([]string, error) {
 	dir := filepath.Join(s.root, trajectoriesDir)
+	s.mu.RLock()
 	entries, err := os.ReadDir(dir)
+	s.mu.RUnlock()
 	if err != nil {
 		return nil, fmt.Errorf("console: list: %w", err)
 	}
@@ -113,7 +115,9 @@ func (s *Store) ReadEvents(trajectoryID string) ([]Event, error) {
 	if err != nil {
 		return nil, err
 	}
+	s.mu.RLock()
 	raw, err := os.ReadFile(path)
+	s.mu.RUnlock()
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, fmt.Errorf("%w: %s", ErrNotFound, trajectoryID)
