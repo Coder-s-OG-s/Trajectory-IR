@@ -9,6 +9,10 @@ import (
 
 // BlockedNeedsGate is raised when a NON_IDEMPOTENT_WRITE tool was already
 // attempted for this step/seq and must not be silently re-run.
+//
+// This is at-most-one automatic attempt from this client, not exactly-once
+// in the world. A human or host policy must confirm success, confirm the
+// call never landed, compensate, or re-run in a new step (spec §8.3).
 type BlockedNeedsGate struct {
 	StepN    int
 	ToolName string
@@ -47,7 +51,11 @@ func MakeGatedToolCall(
 
 		claimed, err := log.ClaimToolCall(
 			stepN,
-			map[string]any{"tool": toolName, "args": args},
+			map[string]any{
+				"tool":            toolName,
+				"args":            args,
+				"idempotency_key": IdempotencyKey(trajectoryID, stepN, seq),
+			},
 			trajectoryID,
 			tenantID,
 			seq,
@@ -109,7 +117,11 @@ func MakePlainToolCall(
 		if _, err := log.Append(
 			"TOOL_CALL",
 			&step,
-			map[string]any{"tool": toolName, "args": args},
+			map[string]any{
+				"tool":            toolName,
+				"args":            args,
+				"idempotency_key": IdempotencyKey(trajectoryID, stepN, seq),
+			},
 			trajectoryID,
 			tenantID,
 			seq,

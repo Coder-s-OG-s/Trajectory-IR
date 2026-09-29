@@ -1,6 +1,6 @@
 # Demo: Kill mid deploy
 
-**The hero demo.** Shows why Trajectory IR exists: a non-idempotent tool crashes mid-flight, and resume must not silently re-run the side effect or re-ask the model after the decision was sealed.
+**The hero demo.** A non-idempotent tool crashes mid-flight. Resume must not silently re-run the side effect or re-ask the model after the decision was sealed. This proves **at-most-one automatic attempt** on a local counter, not exactly-once delivery to a remote API.
 
 Source: [`go/examples/kill_mid_deploy`](https://github.com/Coder-s-OG-s/Trajectory-IR/tree/main/go/examples/kill_mid_deploy)
 

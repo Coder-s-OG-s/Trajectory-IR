@@ -125,6 +125,36 @@ func TestContradictoryReadOnlyAndDestructive(t *testing.T) {
 	}
 }
 
+func TestClassifyToolFailClosesBashEvenIfReadOnlyHint(t *testing.T) {
+	readOnly := map[string]any{"readOnlyHint": true}
+	if got := effects.ClassifyFromMCP(readOnly); got != effects.READ_ONLY {
+		t.Fatalf("MCP mapper: got %s", got)
+	}
+	for _, name := range []string{"bash", "BASH", "python_interpreter", "sql_query"} {
+		if got := effects.ClassifyTool(name, readOnly); got != effects.NON_IDEMPOTENT_WRITE {
+			t.Fatalf("%s: got %s, want NON_IDEMPOTENT_WRITE", name, got)
+		}
+	}
+}
+
+func TestClassifyToolLeavesOrdinaryNamesToMCP(t *testing.T) {
+	if got := effects.ClassifyTool("echo", map[string]any{"readOnlyHint": true}); got != effects.READ_ONLY {
+		t.Fatalf("echo: got %s", got)
+	}
+	if got := effects.ClassifyTool("charge_card", map[string]any{}); got != effects.NON_IDEMPOTENT_WRITE {
+		t.Fatalf("charge_card: got %s", got)
+	}
+}
+
+func TestIsOpenWorldPrimitive(t *testing.T) {
+	if !effects.IsOpenWorldPrimitive("bash") || !effects.IsOpenWorldPrimitive(" Shell ") {
+		t.Fatal("expected open-world names")
+	}
+	if effects.IsOpenWorldPrimitive("echo") {
+		t.Fatal("echo is not an open-world primitive")
+	}
+}
+
 func TestStringValuesMatchPython(t *testing.T) {
 	want := map[effects.EffectClass]string{
 		effects.PURE:                 "PURE",

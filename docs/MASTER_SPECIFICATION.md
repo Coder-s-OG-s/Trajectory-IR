@@ -27,6 +27,8 @@ Any AI coding agent picking up a task on this repository should treat this docum
 
 Trajectory IR is a typed, **portable** intermediate representation for agent execution. An agent run is a **trajectory**: an append only sequence of typed nodes. Before any world changing tool executes, the model's plan for that step is **sealed**.
 
+**What "IR" means here, and what it does not.** This is a *runtime trajectory IR*: hosts lower a live agent step into typed, content addressed nodes that can be projected, redacted, grafted, verified, and exported onto more than one backend. It is not LLVM, Java bytecode, or SQL algebra. You cannot compile a prompt into `.tir` ahead of time, and this project does not optimize or instruction-select plans. Calling the portable unit an IR is a claim about *semantic contract and multi-backend targeting*, not a claim that we are a compiler.
+
 Trajectory IR is **not** a durable execution engine and does not compete with one. Crash detection, retry, deterministic replay, and lease/heartbeat coordination are already solved, hardened problems, durable execution engines such as Temporal, Restate, and DBOS provide them today, and are already being adopted directly underneath agent frameworks. Reimplementing that machinery would be redundant engineering effort with no advantage over adopting it. Trajectory IR instead runs **on top of** a pluggable durable execution backend (§3.1) and owns the layer that backend does not provide: the semantics of what a sealed agent decision *means*, a tool effect classification tuned to LLM driven action, and, the part of this problem with no existing open answer, a **portable, hash verifiable, runtime independent export format** for a trajectory, so that what an agent did can be moved, audited, or handed to another agent outside the runtime that produced it.
 
 The project addresses a gap identified in the CNCF TAG Infrastructure white paper on data storage for cloud native AI: agentic AI workloads require mutable short term state, append only event histories, artifact repositories, and long term memory consolidation, and no existing open standard defines the **portable semantics** of that closed loop. Fact memory products (Mem0, Zep), framework checkpoints (LangGraph, CrewAI, Google ADK), durable execution engines (Temporal, Restate, DBOS), and MCP's own tool safety annotations each cover part of the problem, see §3.1 for the specific boundary this project draws around each of them. None of them define a portable, effect safe, auditable, cross runtime unit of "what the agent actually did."
@@ -88,7 +90,7 @@ This section exists so that no contributor, human or AI, spends effort reimpleme
 ## 4. Design principles (non negotiable)
 
 1. **A run is a trajectory, not a log.** Every meaningful event is a typed node with a stable identity, not a free text line.
-2. **Decisions are sealed before side effects run.** The model may be non deterministic; the sealed plan is not. Resume replays the seal; it does not re infer. The replay guarantee itself, that a sealed step already executed is never re executed, is provided by the chosen durable execution backend (§3.1), not reimplemented here.
+2. **Decisions are sealed before side effects run.** The model may be non deterministic; the sealed plan is not. Resume replays the seal; it does not re infer. The replay guarantee itself, that a sealed step already executed is never re executed, is provided by the chosen durable execution backend (§3.1), not reimplemented here. The seal freezes **the plan**, not **the environment**. A plan generated against world state at t0 is not automatically valid at t0+Δ. Re-observation (`READ_ONLY`) is allowed; re-inference of a sealed step is not; re-planning is a **new** step (§8.4).
 3. **Effect safety is explicit, not assumed.** Every tool is classified. Unknown or ambiguous tool metadata is treated as the most dangerous class by default (fail closed), consistent with and extending MCP's own fail closed tool annotation default (§3.1).
 4. **Correctness never depends on a cache.** Any performance layer (including Fluid) may be cold, missing, or stale looking; the system must still be correct by falling back to the durable source of truth and verifying content hashes.
 5. **Portability is a first class requirement.** A trajectory can be exported and understood outside the runtime that produced it, including outside the durable execution backend that ran it. This is the project's core differentiator (§3.1) and the one property no dependency below already provides.
@@ -231,11 +233,17 @@ Tools registered from MCP (or any other source) must be mapped into this table b
 
 `AGENT_SPAWN` and `SENSITIVE` have no MCP equivalent, they are the two distinctions this project adds on top of MCP's four hints, driven by what the resume matrix (§8.2) and redaction (§9, R08) need that MCP has no reason to define. **If a tool's effect metadata is missing or ambiguous, it is classified as `NON_IDEMPOTENT_WRITE` by default.** This is a deliberate fail closed posture. An operator may explicitly override a tool to a safer class, but the default must never silently assume safety.
 
+**Open-world primitives.** Tools whose *arguments* are an arbitrary command, query, or UI action (`bash`, `shell`, `python` / `python_interpreter`, `sql_query`, `browser_action`, and the non-exhaustive list in `ClassifyTool` / `classify_tool`) cannot be classified from static MCP hints on the tool definition. `bash("cat file")` is a read; `bash("rm -rf /")` is a catastrophic write; `bash("curl …/spawn")` is a spawn. Trajectory IR does **not** parse those bodies. `ClassifyTool(name, annotations)` fail-closes known primitive names to `NON_IDEMPOTENT_WRITE` even if `readOnlyHint` is true. An operator who still wants a safer class must set `Tool.Effect` / `Tool.effect_class` explicitly and own that lie. R06 sandbox is an effect-class gate, not a process sandbox and not an AST analyzer.
+
 ### 7.3 Idempotency keys
 
-`idempotency_key = trajectory_id : step_n : stable_call_id`
+`idempotency_key = trajectory_id:step_n:stable_call_id`
 
-`stable_call_id` is derived from the **sealed** `DECISION` node, never from a fresh model utterance produced after a crash. This is what prevents a re inference after resume from minting a new call id and causing a duplicate side effect.
+`stable_call_id` is the sealed tool slot `seq` (typically `2 + 2*i` from the sealed `DECISION` tool list), never a fresh id minted after a crash. Implementations **must** record this string on the `TOOL_CALL` payload as `idempotency_key`. They **must not** inject it into the tool's user arguments (Python tools use explicit kwargs).
+
+The host **must** forward that string to the remote API as `Idempotency-Key` or the vendor equivalent (Stripe, cloud control planes, a database unique constraint). The IR log is not the server. A client-side claim that "this slot was attempted" cannot tell you whether the packet reached the far side. That is Two Generals; we do not pretend to have solved it.
+
+This key is what prevents a re-inference after resume from minting a new call id. It is not, by itself, exactly-once delivery.
 
 ---
 
@@ -265,7 +273,7 @@ This table describes what the trajectory log should show at each state; the "act
 | State found on disk | Action | Enforced by |
 |---|---|---|
 | No `DECISION` for step `n` | Start fresh: new `PROJECT_CONTEXT`, new inference is allowed | Trajectory IR |
-| `DECISION` sealed, tool results incomplete | Replay the sealed tools. **Do not re invoke the model.** | Durable execution backend (replay guarantee) |
+| `DECISION` sealed, tool results incomplete | Replay the sealed tools. **Do not re invoke the model.** If a tool now fails because the world moved, record the failure; do not re-infer this step. Re-plan is a new step (§8.4). | Durable execution backend (replay guarantee) |
 | All tool results present, no `COMMIT_STEP` | Finish any remaining state/artifact writes, then commit | Trajectory IR |
 | Step already committed | Move on; never reopen a committed step | Trajectory IR |
 | Crash mid tool on a `NON_IDEMPOTENT_WRITE` | Block and gate, see §8.3 | Trajectory IR (policy), backend (crash detection) |
@@ -277,13 +285,31 @@ For a crash mid execution of a non idempotent tool call, the default v0.1 behavi
 - Mark the call `BLOCKED_NEEDS_GATE`.
 - Do not auto retry.
 - Do not re invoke the model.
-- A human or an explicit policy decision resolves it: confirm the side effect succeeded, confirm it failed, run a compensation, or explicitly re run in a **new** step.
+- A human or an explicit policy decision resolves it: confirm the side effect succeeded, confirm it failed (the packet never landed), run a compensation, or explicitly re run in a **new** step.
 
 This is genuinely Trajectory IR's own contribution: a generic durable execution engine will happily retry or resume a step according to its configured policy, but it has no concept of "this step touched something irreversible from an *agent's* perspective and a human should look at it before an LLM gets another turn." That gating decision is what this project adds on top of the backend's mechanics.
 
 Long running tools rely on the backend adapter's own heartbeat/lease primitive to detect an `IN_PROGRESS` call that has gone stale; Trajectory IR does not implement a second heartbeat mechanism alongside it. A call with no heartbeat eventually times out, at the backend's configured interval, into the gated state above rather than blocking resume forever.
 
-This is the mechanism that makes "kill the process mid deploy, restart, and the world still only got one deploy" a true statement rather than a hopeful one, provided by the backend, gated by Trajectory IR's policy.
+**What this invariant actually is.** Kill the process mid-deploy, restart, and this client will not fire a *second* automatic deploy. That is at-most-one automatic attempt, provided by the backend's crash detection and Trajectory IR's gate. It is **not** "the world still only got one deploy." If the original HTTP call died before the wire, the world got zero and the gate will sit blocked until a human confirms failure and starts a new step. If it landed, the world got one and you still have no `TOOL_RESULT` until someone looks. Forward §7.3's `idempotency_key` to the callee if you need the server to collapse those two cases.
+
+### 8.4 World validity versus honest resume
+
+Honest resume (R01) means: after a `DECISION` is sealed, do not ask the model again for that step. It does **not** mean the plan is still a good idea.
+
+The physical world does not pause while the worker is dead. Inventory moves. Nodes get preempted. Users cancel. A sealed `ReserveNode(i-123)` replayed two hours later is honest and can still be wrong.
+
+The protocol distinguishes three different acts:
+
+| Act | After a seal, allowed? | Where |
+|---|---|---|
+| Re-infer (ask the LLM for a new plan for this step) | No | R01, §8.2 |
+| Re-observe (run `READ_ONLY` / `PURE`; record divergence as a new `TOOL_RESULT`) | Yes | §7.1 re-fetch rule |
+| Re-plan (new `PROJECT_CONTEXT` → new inference → new `DECISION`) | Yes, as a **new** step after commit or abort | §8.1 linear known args; §8.2 "no DECISION" |
+
+Preconditions belong in observation, not in a second inference of the sealed step. A host that needs "is the node still there?" runs a `READ_ONLY` check in this step if it was already in the sealed list, or aborts and starts a new step if it was not. Embedding a hidden conditional planner inside resume is out of scope.
+
+This is a documented limitation, not an accident. The alternative, silently re-inferring after every crash, is the divergence bug seals exist to stop.
 
 ---
 
@@ -431,7 +457,7 @@ These are runnable tests, not descriptions of intent. R01 and R02 are the hard g
 | R03 | A `PURE` tool may be recomputed freely on resume. Runnable: `conformance/r03_pure_recompute_test.py` (and Go `go test ./trajir/resume -run R03`). |
 | R04 | A `CONSTRAINT` node is never silently dropped under budget pressure; the system either includes it or raises a hard error. Runnable: `conformance/r04_constraint_budget_test.py` (and Go `go test ./trajir/projector`). |
 | R05 | Export and re import of a `.tir` package preserves all node hashes and seals exactly. Runnable: `conformance/r05_tir_roundtrip_test.py` (and Go `go test ./trajir/tir`). |
-| R06 | A sandbox/what-if branch rejects `NON_IDEMPOTENT_WRITE`, `AGENT_SPAWN`, and `SENSITIVE` effects before the tool body runs. Runnable: `conformance/r06_sandbox_test.py`. |
+| R06 | A sandbox/what-if **effect-class gate** (not a process sandbox) rejects `NON_IDEMPOTENT_WRITE`, `AGENT_SPAWN`, and `SENSITIVE` before the tool body runs. Runnable: `conformance/r06_sandbox_test.py`. |
 | R07 | Grafting an artifact between agents transfers only the artifact reference, never private `THOUGHT` nodes. Runnable: `conformance/r07_graft_test.py`. |
 | R08 | Redaction removes secrets/flagged content from what gets projected into context. Runnable: `conformance/r08_projection_redaction_test.py`. |
 | R09 | Sign a thin package; verify succeeds; mutate one byte of `nodes.ndjson`; verify fails. Runnable: `conformance/r09_tir_signature_test.py`. |
@@ -628,7 +654,7 @@ Treat every numbered rule below as an immutable constraint, not a suggestion:
 3. **Do not create parallel schemas.** The node kinds in §6.2 are the complete set for this phase. Do not add new node kinds, rename existing ones, or introduce an alternative representation (e.g. a "simplified" event format) for convenience.
 4. **Hashing must be exact and cross language stable.** Any node identity or content hash computation must follow §6.3 precisely, using a conformant RFC 8785 JCS implementation. Do not substitute a custom "sorted keys" JSON serialization, this is the single most likely source of silent, hard to debug divergence between components written by different agents or sessions.
 5. **Respect the linear known args rule (§8.1).** Do not implement, suggest, or work around it with symbolic argument references, speculative execution, or a hidden dependency graph. If a task seems to require it, stop and raise it as an issue rather than solving it locally.
-6. **Effect classification defaults to fail closed (§7.2).** Never write code that defaults an unclassified or ambiguous tool to anything other than `NON_IDEMPOTENT_WRITE`.
+6. **Effect classification defaults to fail closed (§7.2).** Never write code that defaults an unclassified or ambiguous tool to anything other than `NON_IDEMPOTENT_WRITE`. Use `ClassifyTool` / `classify_tool` for named tools so open-world primitives cannot be tagged `READ_ONLY` by MCP hint alone. Do not implement a command AST.
 7. **Never make correctness depend on a cache.** Any code path touching Fluid, or any other caching layer, must have a working fallback to the durable source of truth with hash verification, per §11.3. Code review (automated or human) should treat a cache dependent correctness path as a blocking defect.
 8. **Stay inside declared scope (§5).** Do not implement anything listed under "out of scope for this phase," even if it seems like a natural extension, without an approved issue first. This includes Kubernetes provisioning, plan DAGs, a second backend adapter, and Fluid integration outside of the `k8s-fluid` profile.
 9. **One module, one clear owner in the code, even without a manually assigned task.** Before modifying a directory under `pkg/`, `drivers/`, or `conformance/`, check whether existing code in that directory implies an established pattern (naming, error handling, data structures) and follow it exactly rather than introducing a second convention. If two implementations of the same responsibility already exist, that is a defect to be reported, not a choice to pick one arbitrarily.
@@ -642,6 +668,11 @@ Treat every numbered rule below as an immutable constraint, not a suggestion:
 Trajectory IR deliberately does not attempt to:
 
 - **Reimplement durable execution.** Crash safe replay, retries, and lease/heartbeat coordination are Temporal/Restate/DBOS territory (§3.1); this project consumes one of them and does not compete with any of them.
+- **Solve Two Generals on the client.** Block-and-gate is at-most-one automatic attempt. Exactly-once remote mutation requires a server that honors §7.3's key.
+- **Freeze or re-validate the physical world** when a worker dies. Honest resume is not world-valid resume (§8.4).
+- **Parse open-world tool bodies** (`bash`, `python`, `sql`, browser). Effect class is a tag, plus a name denylist. Not an AST.
+- **Be a process / syscall sandbox.** R06 is a demo/CI effect-class gate.
+- **Be a compiler IR** in the LLVM sense. No ahead-of-time lowering of prompts, no DCE, no instruction selection.
 - Win on long term memory recall quality or benchmark scores (Mem0/Zep territory).
 - Become "the" agent framework (LangGraph/CrewAI/ADK territory).
 - Guarantee LLM determinism, non determinism is accepted and handled by sealing outputs, not by pretending inference is repeatable.
@@ -702,6 +733,7 @@ Trajectory IR deliberately does not attempt to:
 | 1.4 | 2026-08-13 | Defines package signature scheme **`trajir-pkg-sig-v1`** in new §9.1 (payload over zip members excluding `SIGNATURE`, domain-separated Ed25519, file-only document, unsigned default). Implementation remains Future ([#149](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/149)). Updates §5 out-of-scope wording and lists proposed conformance R09–R11. |
 | 1.5 | 2026-08-28 | Records shipped Go and Python `trajir-pkg-sig-v1` APIs and marks conformance R09–R11 runnable. Sigstore / `sigstore-bundle` stays Future (Phase D of [#149](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/149)). |
 | 1.6 | 2026-09-15 | Moves the normative master specification from the repository root to `docs/MASTER_SPECIFICATION.md`. The root `README.md` becomes a landing page for users, students, and contributors while this file remains authoritative. |
+| 1.7 | 2026-09-30 | Honest resume vs world validity (§8.4). Block-and-gate restated as at-most-one automatic attempt, not exactly-once (Two Generals). Idempotency keys recorded on `TOOL_CALL` and required to be forwarded by the host (§7.3). Open-world primitives fail closed by name; no command AST (§7.2). R06 described as an effect-class gate, not a process sandbox. "IR" defined as a runtime trajectory IR, not a compiler (§1, §16). |
 
 ---
 

@@ -180,7 +180,9 @@ runs**. A run is a trajectory of nodes (context, decision, tool call/result,
 commit, abort, artifacts). Before world-changing tools execute, the model’s plan
 is **sealed**; resume replays the seal rather than silently re-inferring. Tools
 carry **effect classes** (including fail-closed mapping from MCP annotations),
-and **block-and-gate** prevents unsafe retry of non-idempotent side effects.
+and **block-and-gate** blocks automatic retry of an interrupted non-idempotent
+call (at-most-one attempt from this client; exactly-once still needs a
+server-side idempotency key).
 
 Trajectory IR is **not** a durable execution engine. Crash detection, leases, and
 at-most-once execution are delegated to backends such as Temporal (Go) or DBOS

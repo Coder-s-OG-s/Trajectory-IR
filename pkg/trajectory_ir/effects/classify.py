@@ -30,6 +30,47 @@ def is_forbidden_in_sandbox(effect: EffectClass) -> bool:
     )
 
 
+# Non-exhaustive. These names are open-world execution primitives: the same
+# tool can be a read, a write, a spawn, or a wipe depending on the argument
+# string. Static MCP hints on the *tool definition* cannot classify them.
+# Hosts must treat them as NON_IDEMPOTENT_WRITE unless an operator sets
+# Tool.effect_class explicitly. This is not an AST analyzer.
+OPEN_WORLD_PRIMITIVES = frozenset(
+    {
+        "bash",
+        "shell",
+        "sh",
+        "zsh",
+        "terminal",
+        "execute",
+        "python",
+        "python_interpreter",
+        "code_interpreter",
+        "sql",
+        "sql_query",
+        "execute_sql",
+        "browser",
+        "browser_action",
+        "computer",
+    }
+)
+
+
+def is_open_world_primitive(tool_name: str) -> bool:
+    """True for known arbitrary-execution tool names (case-insensitive)."""
+    return str(tool_name).strip().lower() in OPEN_WORLD_PRIMITIVES
+
+
+def classify_tool(tool_name: str, annotations: Any = None) -> EffectClass:
+    """Classify a named tool. Open-world primitives fail closed even if MCP
+    hints claim they are read-only. Operators override by setting
+    ``Tool.effect_class`` directly, not by lying on the hint bits.
+    """
+    if is_open_world_primitive(tool_name):
+        return EffectClass.NON_IDEMPOTENT_WRITE
+    return classify_from_mcp(annotations)
+
+
 def classify_from_mcp(annotations: Any) -> EffectClass:
     """Fail-closed per spec §7.2. Any missing or ambiguous annotation -> NON_IDEMPOTENT_WRITE.
 

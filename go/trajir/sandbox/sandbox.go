@@ -1,4 +1,8 @@
 // Package sandbox implements live vs sandbox run modes (R06).
+//
+// Sandbox is an effect-class gate for demos and CI. It is not a process
+// sandbox, seccomp, or an AST of bash/python/sql. The gate trusts the
+// tool's classified effect.
 package sandbox
 
 import (

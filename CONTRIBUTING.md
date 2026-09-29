@@ -1,7 +1,8 @@
 # Contributing to Trajectory IR
 
 Thanks for helping. Trajectory IR is a portable semantic layer for agent runs
-(seals, effect classes, `.tir`, honest resume). The normative master
+(seals, effect classes, `.tir`, honest resume of a sealed plan). Honest resume
+is not world-valid resume; block-and-gate is not exactly-once. The normative master
 specification is [`docs/MASTER_SPECIFICATION.md`](docs/MASTER_SPECIFICATION.md)
 (the root `README.md` is the project landing page).
 

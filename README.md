@@ -9,9 +9,9 @@
 
 **Portable, hash-verifiable intermediate representation for agent execution trajectories.**
 
-Trajectory IR is the **flight recorder + safety switch** for agent runs: seal the model's plan before side effects, classify tool effects, resume without re-inventing the plan, and export a runtime-independent `.tir` package anyone can verify by content hash.
+A **flight recorder** for agent runs: typed nodes, a sealed model plan, fail-closed effect classes, and a runtime-independent `.tir` package anyone can verify by content hash.
 
-It sits **on top of** durable execution engines (Temporal, DBOS, Restate). It does **not** replace them, and it is **not** another agent framework.
+It sits **on top of** durable execution engines (Temporal, DBOS, Restate). It does **not** replace them, and it is **not** another agent framework. It does **not** freeze AWS, auctions, or users while you are crashed, and a client-side gate is **not** exactly-once at Stripe.
 
 ```text
   Agent host / framework          (LangGraph, custom loops, MCP hosts, ...)
@@ -29,16 +29,20 @@ It sits **on top of** durable execution engines (Temporal, DBOS, Restate). It do
 
 ## Why it exists
 
-Production agent stacks keep failing the same way:
+Production agent stacks keep failing the same way. Crash replay is already Temporal/DBOS/Restate's job. The hole they do not fill is a **portable, hash-verifiable record of what the agent actually decided and invoked**, plus agent-shaped policy on top of that record.
 
-| Failure | What happens today | What Trajectory IR adds |
+| Failure | Who actually solves it | What Trajectory IR adds |
 |---|---|---|
-| **Crash mid-tool** | Retry re-fires a non-idempotent write (double charge, double deploy) | Block-and-gate + durable backend memoization |
-| **Naive resume** | Host re-asks the model; the new plan diverges silently | Sealed `DECISION` is the plan; resume replays it |
-| **Locked history** | Checkpoints trapped in one framework | Portable thin/fat `.tir` with hash-checked node IDs |
-| **Unsafe demos** | A demo can email, charge, or deploy for real | Sandbox mode rejects dangerous effect classes before the tool body |
+| **Crash mid-tool** | Durable backend memoization. **Exactly-once** still needs a server-side idempotency key the remote API honors. | Block-and-gate: at most one automatic attempt from this client. Unknown in-flight calls go to `BLOCKED_NEEDS_GATE` for a human, not a second LLM turn. The seal-derived key is recorded on `TOOL_CALL` so you can *forward* it. |
+| **Naive resume** | Do not re-call the model for a sealed step (backend replay + IR seal). | Honest resume of the sealed plan (R01). That freezes **the plan**, not **the world**. If the cluster changed while you were dead, re-observe (`READ_ONLY`) or abort and start a **new** step. Do not silently re-infer the sealed one. |
+| **Locked history** | Nobody else ships a runtime-independent unit. | Portable thin/fat `.tir` with hash-checked node IDs |
+| **Unsafe demos** | Host policy. | Sandbox mode is a **demo/CI effect-class gate** before the tool body (R06). It is not a process sandbox, not an AST of `bash`, and not a security boundary for arbitrary code. |
 
 **One-line pitch:** portable semantics for *what the agent actually did*, on top of engines that already solve crash safety.
+
+### What "IR" means here
+
+This is a **runtime trajectory IR**, not LLVM. You do not compile a prompt into `.tir` ahead of time. Hosts **lower** a live agent step into typed, content-addressed nodes; you can project, redact, graft, verify, and export that trace onto more than one backend. If you wanted a compiler, this is the wrong repo. If you wanted a vendor-neutral flight recorder for agent steps, this is the product.
 
 > Full normative contract: **[docs/MASTER_SPECIFICATION.md](docs/MASTER_SPECIFICATION.md)** (`spec-v0.2-draft`).  
 > Short scope card: **[docs/SCOPE_AND_NON_GOALS.md](docs/SCOPE_AND_NON_GOALS.md)**.
@@ -47,12 +51,13 @@ Production agent stacks keep failing the same way:
 
 ## Features
 
-- **Sealed decisions** — freeze the plan (`DECISION`) before world-changing tools run
-- **Effect classes** — fail-closed classification aligned with MCP tool hints, plus `AGENT_SPAWN` and `SENSITIVE`
-- **Honest resume** — sealed steps replay; they do not re-infer (conformance R01)
-- **Block-and-gate** — non-idempotent tools do not double-execute after interruption (R02)
+- **Sealed decisions** — freeze the model's plan (`DECISION`) before world-changing tools run. The world is not frozen with it.
+- **Effect classes** — fail-closed mapping from MCP tool hints, plus `AGENT_SPAWN` and `SENSITIVE`. Open-world primitives (`bash`, `python`, `sql`, browser) stay `NON_IDEMPOTENT_WRITE` unless an operator sets the class on the tool. No command parser.
+- **Honest resume** — a sealed step does not re-infer (R01). Re-observe is allowed; re-plan is a **new** step.
+- **Block-and-gate** — non-idempotent tools are not blindly retried after interruption (R02). At-most-one automatic attempt, not exactly-once in the world.
+- **Seal-derived idempotency keys** — `trajectory_id:step_n:seq` on every `TOOL_CALL`. Hosts must forward that string to the remote API.
 - **`.tir` packages** — thin or fat export/import with content-addressed identity; optional `trajir-pkg-sig-v1` signatures
-- **Sandbox mode** — block unsafe effect classes for demos, CI, and student labs
+- **Sandbox mode** — demo/CI gate that rejects dangerous effect classes before the tool body. Not a security sandbox.
 - **Dual SDK** — **Go primary** (Temporal production backend), **Python reference** (DBOS local profile)
 - **Conformance suite** — R01–R11 runnable across languages
 - **OpenSSF Best Practices** — project badge and continuous hardening
@@ -109,7 +114,7 @@ More: **[QUICKSTART.md](QUICKSTART.md)** · kill-mid-deploy demo: [`examples/kil
 |---|---|
 | **Students / newcomers** | This README → [go/QUICKSTART.md](go/QUICKSTART.md) → try sandbox + kill-mid-deploy demos |
 | **Agent / platform engineers** | [docs/SCOPE_AND_NON_GOALS.md](docs/SCOPE_AND_NON_GOALS.md) → [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) → wire seals into your host loop |
-| **Security / compliance** | Seals + `.tir` + sandbox; report issues via [SECURITY.md](SECURITY.md) |
+| **Security / compliance** | Seals + `.tir` (hash-verifiable export); report issues via [SECURITY.md](SECURITY.md). Sandbox is a demo gate, not a security boundary. |
 | **Contributors** | [CONTRIBUTING.md](CONTRIBUTING.md) (DCO required) → Phase 1B/1C: **Go first** |
 | **AI coding agents** | [docs/MASTER_SPECIFICATION.md](docs/MASTER_SPECIFICATION.md) + [AI_POLICY.md](AI_POLICY.md) — implement the spec, do not invent behavior |
 | **Talks / demos** | [website/](website/README.md) MkDocs site and speaker runbook |
@@ -131,7 +136,7 @@ flowchart LR
 3. Tools execute under an effect class (fail closed if unknown)  
 4. Step commits; trajectory can be exported as `.tir`
 
-Same agent, two modes: **live** does the job; **sandbox** stops dangerous writes and still keeps the sealed plan.
+Same agent, two modes: **live** does the job; **sandbox** refuses dangerous *classified* effects and still keeps the sealed plan. Classify `bash` as read-only and sandbox will believe you. Don't.
 
 ---
 
@@ -139,10 +144,12 @@ Same agent, two modes: **live** does the job; **sandbox** stops dangerous writes
 
 | Trajectory IR **is** | Trajectory IR **is not** |
 |---|---|
-| A portable IR + package format for agent trajectories | A replacement for Temporal / DBOS / Restate |
-| Seals, effect classes, resume *semantics*, `.tir` | An agent orchestration framework (not LangGraph) |
-| A thin layer over pluggable durable backends | A long-term memory / recall product (not Mem0/Zep) |
-| Open source libraries (Apache-2.0) | A hosted multi-tenant SaaS control plane |
+| A portable runtime IR + `.tir` package for agent trajectories | LLVM, bytecode, or a compiler for prompts |
+| Seals, effect classes, resume *semantics*, hash-verifiable export | A replacement for Temporal / DBOS / Restate (adapters only) |
+| A thin layer over pluggable durable backends | An agent orchestration framework (not LangGraph) |
+| At-most-one automatic retry policy + a key you can forward | Exactly-once remote writes (that is the *server's* idempotency key) |
+| A demo/CI effect-class gate (R06) | A process sandbox or `bash` AST analyzer |
+| Open source libraries (Apache-2.0) | A hosted multi-tenant SaaS control plane, or a long-term memory product |
 
 ---
 

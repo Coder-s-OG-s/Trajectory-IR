@@ -1,8 +1,15 @@
+from trajectory_ir.resume.idempotency import idempotency_key
+
+
 class BlockedNeedsGate(Exception):
     """Raised when a NON_IDEMPOTENT_WRITE tool call was interrupted mid-
-    execution and must not be silently retried. Resolving the block (manual
-    replay/approval) is out of scope for this milestone -- raising is the
-    gate."""
+    execution and must not be silently retried.
+
+    Raising is the gate. Resolution is a host/human decision (spec §8.3):
+    confirm the remote write succeeded, confirm it never landed, compensate,
+    or re-run in a *new* step. This client cannot know which of those is
+    true (Two Generals). Do not auto-retry and do not re-infer.
+    """
 
     def __init__(self, step_n: int, tool_name: str):
         self.step_n = step_n
@@ -51,7 +58,11 @@ def make_gated_tool_call(node_log, trajectory_id, tenant_id, step_n, seq, tool_n
         # nodes present. A `not TOOL_RESULT` conjunct fails open there.
         claimed = node_log.claim_tool_call(
             step_n,
-            {"tool": tool_name, "args": kwargs},
+            {
+                "tool": tool_name,
+                "args": kwargs,
+                "idempotency_key": idempotency_key(trajectory_id, step_n, seq),
+            },
             trajectory_id,
             tenant_id,
             seq,
@@ -93,7 +104,11 @@ def make_plain_tool_call(node_log, trajectory_id, tenant_id, step_n, seq, tool_n
         node_log.append(
             "TOOL_CALL",
             step_n,
-            {"tool": tool_name, "args": kwargs},
+            {
+                "tool": tool_name,
+                "args": kwargs,
+                "idempotency_key": idempotency_key(trajectory_id, step_n, seq),
+            },
             trajectory_id,
             tenant_id,
             seq=seq,

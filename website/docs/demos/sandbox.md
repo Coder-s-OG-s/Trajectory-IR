@@ -1,6 +1,6 @@
 # Demo: Sandbox mode (R06)
 
-Fast safety demo. In sandbox mode, real `NON_IDEMPOTENT_WRITE`, `AGENT_SPAWN`, and `SENSITIVE` tools are rejected **before** side effects.
+Demo/CI **effect-class gate**, not a process sandbox. In sandbox mode, tools classified `NON_IDEMPOTENT_WRITE`, `AGENT_SPAWN`, or `SENSITIVE` are rejected **before** the tool body. Classify `bash` as read-only and this gate will believe you. Don't.
 
 Source: same adoption host with `-sandbox`
 

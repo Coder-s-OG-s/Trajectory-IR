@@ -2,7 +2,7 @@
 
 **Portable, hash-verifiable intermediate representation for agent execution trajectories.**
 
-Trajectory IR sits **on top of** durable execution engines. It does not replace Temporal, DBOS, or Restate. It seals model decisions, classifies tool effects, and exports a runtime-independent `.tir` package that auditors and peer agents can verify by content hash.
+Trajectory IR sits **on top of** durable execution engines. It does not replace Temporal, DBOS, or Restate. It is a **runtime flight recorder**: typed nodes, sealed decisions, fail-closed effect classes, and a `.tir` package auditors can verify by content hash. A seal freezes the plan, not the world. A client-side gate is at-most-one automatic attempt, not exactly-once at the far API.
 
 !!! tip "Live demos for talks and docs"
     Start here: **[Demos](demos/index.md)** — crash-safe resume, portable `.tir` export, and sandbox rejection. These are the same Go examples we run on stage.
@@ -11,10 +11,11 @@ Trajectory IR sits **on top of** durable execution engines. It does not replace 
 
 | Capability | Why it matters |
 |---|---|
-| Sealed decisions | Resume does not silently re-ask the model for a sealed step |
-| Effect classes | Fail-closed mapping for tools (including MCP-aligned hints) |
-| Block-and-gate | Non-idempotent tools do not double-fire after a mid-flight crash |
-| `.tir` packages | Thin or fat portable evidence with hash verification |
+| Sealed decisions | Resume does not silently re-ask the model for a sealed step. The world may still have moved. |
+| Effect classes | Fail-closed mapping for tools (including MCP-aligned hints). `bash`/`python`/`sql` stay dangerous by name. |
+| Block-and-gate | At-most-one automatic retry of a non-idempotent tool. Not exactly-once in the world. |
+| Idempotency key | `trajectory_id:step_n:seq` on `TOOL_CALL`; host forwards it to the remote API. |
+| `.tir` packages | Thin or fat portable evidence with hash verification. This is the product. |
 | Dual SDK | **Go primary**, Python reference / parity |
 
 ## Stack at a glance

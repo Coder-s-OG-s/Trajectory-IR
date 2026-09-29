@@ -1,8 +1,12 @@
-"""Sandbox / what-if trajectory mode (README §10 R06).
+"""Sandbox / what-if trajectory mode (spec R06).
 
 Live mode is the default. Sandbox mode allows planning and safe tools
 (PURE, READ_ONLY, IDEMPOTENT_WRITE) but rejects NON_IDEMPOTENT_WRITE,
 AGENT_SPAWN, and SENSITIVE effects before the tool body runs.
+
+This is an effect-class gate for demos and CI. It is not a process sandbox,
+seccomp, or an AST of bash/python/sql. The gate trusts the tool's classified
+effect; open-world primitives must be classified NON_IDEMPOTENT_WRITE.
 """
 
 from __future__ import annotations

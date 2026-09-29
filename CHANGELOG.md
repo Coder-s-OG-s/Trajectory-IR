@@ -7,8 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Seal-derived idempotency keys on every `TOOL_CALL` (`trajectory_id:step_n:seq`)
+  in Go and Python. Hosts must forward the key to the remote API. The IR log
+  is not exactly-once.
+- `ClassifyTool` / `classify_tool`: known open-world primitives (`bash`,
+  `python`, `sql`, browser, …) fail closed even if MCP hints claim read-only.
+  Name denylist, not a command AST.
+
 ### Changed
 
+- **Docs honesty:** landing README, scope card, master spec §7.2/§7.3/§8.3/§8.4
+  now state the actual invariants. Honest resume freezes the plan, not the
+  world. Block-and-gate is at-most-one automatic attempt, not "the world still
+  only got one deploy." R06 is a demo/CI effect-class gate, not a security
+  sandbox. "IR" is a runtime trajectory IR, not LLVM.
 - **Docs:** root `README.md` is now a project landing page for users, students,
   and contributors. The normative master specification moved to
   [`docs/MASTER_SPECIFICATION.md`](docs/MASTER_SPECIFICATION.md) (`spec-v0.2-draft`
