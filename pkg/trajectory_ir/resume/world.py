@@ -23,8 +23,7 @@ class WorldDrift(Exception):
         self.step_n = step_n
         self.mismatches = mismatches
         super().__init__(
-            f"WORLD_DRIFT: step {step_n}: {len(mismatches)} sealed snapshot "
-            "key(s) diverged"
+            f"WORLD_DRIFT: step {step_n}: {len(mismatches)} sealed snapshot key(s) diverged"
         )
 
 
@@ -87,9 +86,7 @@ def check_world(
     """
     sealed = sealed_world_snapshot(node_log, trajectory_id, tenant_id, step_n)
     if sealed is None:
-        raise ValueError(
-            f"no DECISION for step {step_n}; cannot check world snapshot"
-        )
+        raise ValueError(f"no DECISION for step {step_n}; cannot check world snapshot")
     if not sealed:
         return
     seen = normalize_world_snapshot(observed)
