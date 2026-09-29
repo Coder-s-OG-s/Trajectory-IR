@@ -12,7 +12,8 @@ def test_console_demo_scripts_prepare_fixture():
     url = "http://127.0.0.1:8787/?id=console-demo"
     for text in (sh, ps):
         assert "console_demo.ndjson" in text
-        assert fixture.replace("/", "\\") in text or fixture in text or "console_demo.ndjson" in text
+        windows_path = fixture.replace("/", "\\")
+        assert windows_path in text or fixture in text or "console_demo.ndjson" in text
         assert url in text
         assert "trajir-console" in text
     assert sh.startswith("#!/usr/bin/env bash")
