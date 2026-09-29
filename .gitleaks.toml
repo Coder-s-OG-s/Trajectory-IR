@@ -8,13 +8,14 @@ title = "Trajectory IR"
 useDefault = true
 
 [allowlist]
-description = "Test fixtures that intentionally contain secret-shaped values for redaction coverage"
+description = "Redaction fixtures plus published SHA-256 golden hashes (not secrets)"
 paths = [
   '''(^|/)go/trajir/redact/.*_test\.go$''',
   '''(^|/)test/unit/test_.*redact.*\.py$''',
   '''(^|/)test/unit/test_tir_package\.py$''',
   '''(^|/)conformance/r08_.*\.py$''',
   '''(^|/)test/unit/test_redact\.py$''',
+  '''(^|/)testdata/idempotency_vectors\.json$''',
 ]
 regexTarget = "match"
 regexes = [
