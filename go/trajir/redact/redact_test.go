@@ -45,8 +45,8 @@ func TestRedactProjectionContextFreeFormDict(t *testing.T) {
 		"api_key": "shh",
 		"note":    "benign",
 	})
-	if out["redacted"] != true {
-		t.Fatalf("out=%v", out)
+	if out["redacted"] != nil {
+		t.Fatalf("out=%v, should not have redacted=true", out)
 	}
 	if out["api_key"] != redact.Redacted {
 		t.Fatalf("api_key=%v", out["api_key"])

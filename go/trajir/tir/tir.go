@@ -218,7 +218,12 @@ func redactNodeRecord(rec map[string]any) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	newPayload := redact.RedactPayload(kind, payload)
+	var newPayload map[string]any
+	if kind == "PROJECT_CONTEXT" {
+		newPayload = redact.RedactProjectionContext(payload)
+	} else {
+		newPayload = redact.RedactPayload(kind, payload)
+	}
 	tenant, _ := asString(rec["tenant_id"])
 	traj, _ := asString(rec["trajectory_id"])
 	stepN, err := asStepN(rec["step_n"])

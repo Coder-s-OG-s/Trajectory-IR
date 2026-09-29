@@ -197,6 +197,63 @@ func TestExportRedactedStripsThoughtsAndSecrets(t *testing.T) {
 	}
 }
 
+func TestExportRedactedStripsNestedThoughtsInProjectContext(t *testing.T) {
+	src := openLog(t, "src.sqlite")
+	seedSample(t, src)
+	step := 5
+	if _, err := src.Append("PROJECT_CONTEXT", &step, map[string]any{
+		"items": []any{
+			map[string]any{"id": "t1", "kind": "THOUGHT", "payload": map[string]any{"text": "classified reasoning"}},
+			map[string]any{"id": "c1", "kind": "CONSTRAINT", "payload": map[string]any{"rule": "must-not-leak", "token": "secret-123"}},
+		},
+		"budget": 500,
+	}, "t-export", "demo", 7); err != nil {
+		t.Fatal(err)
+	}
+
+	out := filepath.Join(t.TempDir(), "redacted-nested.tir")
+	path, err := tir.Export(src, "t-export", out, tir.ExportOptions{Mode: tir.ModeThin, Redacted: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pkg, err := tir.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var sawProjectContext bool
+	for _, n := range pkg.Nodes {
+		if kind, _ := n["kind"].(string); kind == "PROJECT_CONTEXT" {
+			if seq, _ := n["seq"].(float64); seq == 7 {
+				sawProjectContext = true
+				payload, _ := n["payload"].(map[string]any)
+				items, ok := payload["items"].([]any)
+				if !ok || len(items) == 0 {
+					t.Fatalf("PROJECT_CONTEXT items missing or empty: %v", payload)
+				}
+				for _, it := range items {
+					item, _ := it.(map[string]any)
+					if item["id"] == "t1" {
+						innerPayload, _ := item["payload"].(map[string]any)
+						if innerPayload["redacted"] != true || len(innerPayload) != 1 {
+							t.Fatalf("Nested THOUGHT payload not collapsed: %v", innerPayload)
+						}
+					}
+					if item["id"] == "c1" {
+						innerPayload, _ := item["payload"].(map[string]any)
+						if innerPayload["token"] != "[REDACTED]" {
+							t.Fatalf("Nested CONSTRAINT token not redacted: %v", innerPayload["token"])
+						}
+					}
+				}
+			}
+		}
+	}
+	if !sawProjectContext {
+		t.Fatal("no PROJECT_CONTEXT node found in exported package")
+	}
+}
+
 func TestExportRedactedForcesFatToThin(t *testing.T) {
 	src := openLog(t, "src.sqlite")
 	seedSample(t, src)

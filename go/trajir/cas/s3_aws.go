@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -25,10 +26,13 @@ type S3API interface {
 	HeadObject(ctx context.Context, params *s3.HeadObjectInput, optFns ...func(*s3.Options)) (*s3.HeadObjectOutput, error)
 }
 
+const defaultS3RequestTimeout = 60 * time.Second
+
 // AWSObjectAPI adapts an AWS SDK v2 S3 client to ObjectAPI.
 type AWSObjectAPI struct {
 	Client S3API
-	// Ctx is used for all calls; defaults to context.Background when nil.
+	// Ctx is the base context for S3 calls. Nil uses context.Background.
+	// A call with no deadline is limited to 60s.
 	Ctx context.Context
 }
 
@@ -39,12 +43,22 @@ func (a *AWSObjectAPI) ctx() context.Context {
 	return context.Background()
 }
 
+func (a *AWSObjectAPI) opCtx() (context.Context, context.CancelFunc) {
+	ctx := a.ctx()
+	if _, ok := ctx.Deadline(); ok {
+		return ctx, func() {}
+	}
+	return context.WithTimeout(ctx, defaultS3RequestTimeout)
+}
+
 // PutObject implements ObjectAPI.
 func (a *AWSObjectAPI) PutObject(bucket, key string, body []byte) error {
 	if a.Client == nil {
 		return fmt.Errorf("%w: S3 client is nil", ErrCAS)
 	}
-	_, err := a.Client.PutObject(a.ctx(), &s3.PutObjectInput{
+	ctx, cancel := a.opCtx()
+	defer cancel()
+	_, err := a.Client.PutObject(ctx, &s3.PutObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(key),
 		Body:   bytes.NewReader(body),
@@ -57,7 +71,9 @@ func (a *AWSObjectAPI) GetObject(bucket, key string) ([]byte, error) {
 	if a.Client == nil {
 		return nil, fmt.Errorf("%w: S3 client is nil", ErrCAS)
 	}
-	out, err := a.Client.GetObject(a.ctx(), &s3.GetObjectInput{
+	ctx, cancel := a.opCtx()
+	defer cancel()
+	out, err := a.Client.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(key),
 	})
@@ -80,7 +96,9 @@ func (a *AWSObjectAPI) HeadObject(bucket, key string) error {
 	if a.Client == nil {
 		return fmt.Errorf("%w: S3 client is nil", ErrCAS)
 	}
-	_, err := a.Client.HeadObject(a.ctx(), &s3.HeadObjectInput{
+	ctx, cancel := a.opCtx()
+	defer cancel()
+	_, err := a.Client.HeadObject(ctx, &s3.HeadObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(key),
 	})

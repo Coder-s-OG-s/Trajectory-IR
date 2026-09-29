@@ -75,7 +75,6 @@ func RedactProjectionContext(context map[string]any) map[string]any {
 		for k, v := range context {
 			out[k] = RedactValue(k, v)
 		}
-		out["redacted"] = true
 		return out
 	}
 	newItems := make([]any, 0, len(rawItems))

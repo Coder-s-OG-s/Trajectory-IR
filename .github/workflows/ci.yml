@@ -44,7 +44,9 @@ jobs:
           python-version: "3.12"
 
       - name: Install dco-check
-        run: pip install --upgrade pip dco-check
+        run: |
+          python -m pip install --upgrade pip
+          pip install --require-hashes -r .github/ci-requirements/dco-check.txt
 
       # Dependabot signs as support@github.com but authors as
       # 49699333+dependabot[bot]@users.noreply.github.com. dco-check treats that
@@ -127,7 +129,8 @@ jobs:
 
       - name: Build sdist and wheel
         run: |
-          python -m pip install --upgrade pip build
+          python -m pip install --upgrade pip
+          pip install --require-hashes -r .github/ci-requirements/build.txt
           python -m build
 
       - name: Install wheel into clean environment and smoke import
@@ -170,10 +173,11 @@ jobs:
       - name: Install package and audit tooling
         run: |
           python -m pip install --upgrade pip
-          # Hosted images can ship an older setuptools that pip-audit flags.
-          pip install -U "setuptools>=83"
+          # setuptools + pip-audit pinned with hashes (#375).
+          pip install --require-hashes -r .github/ci-requirements/pip-audit.txt
+          # Project tree from pyproject.toml — intentional unhashed exception
+          # (Dependabot owns runtime bumps). See docs/CI_HARDENING.md.
           pip install -e ".[dev]"
-          pip install -U pip-audit
 
       - name: Run pip-audit on installed dependency tree
         run: |
@@ -331,10 +335,15 @@ jobs:
         run: go test ./trajir/postgres/... -count=1 -v
 
   integration-minio:
+    # MinIO's OSS Server/Client/KES are archived upstream (no more images or
+    # binaries served, ever: quay.io/Docker Hub reject the pull and dl.min.io
+    # 410s). Runs against adobe/s3mock instead; the job/check name stays
+    # "Integration (MinIO)" so branch protection's required check keeps
+    # matching (see docs/maintainer-branch-protection.md).
     name: Integration (MinIO)
     runs-on: ubuntu-latest
     env:
-      TRAJIR_S3_ENDPOINT_URL: http://127.0.0.1:9000
+      TRAJIR_S3_ENDPOINT_URL: http://127.0.0.1:9090
       TRAJIR_S3_BUCKET: trajir
       AWS_ACCESS_KEY_ID: minioadmin
       AWS_SECRET_ACCESS_KEY: minioadmin
@@ -343,23 +352,26 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - name: Start MinIO
+      - name: Start S3 mock (adobe/s3mock)
+        env:
+          # Digest-pinned per this repo's Scorecard Pinned-Dependencies bar
+          # (docs/CI_HARDENING.md). Bump the tag comment when re-pinning.
+          S3MOCK_IMAGE: "adobe/s3mock:5.2.3@sha256:ab01a6946750f451ca215a47e91030695b260e4003b8a5a6201d25029b8fca92"
         run: |
-          docker run -d --name minio \
-            -p 9000:9000 \
-            -e MINIO_ROOT_USER=minioadmin \
-            -e MINIO_ROOT_PASSWORD=minioadmin \
-            quay.io/minio/minio:RELEASE.2024-12-18T13-15-44Z \
-            server /data --console-address ":9001"
+          docker run -d --name s3mock \
+            -p 9090:9090 \
+            -e initialBuckets=trajir \
+            "${S3MOCK_IMAGE}"
           for attempt in $(seq 1 40); do
-            if curl -sf http://127.0.0.1:9000/minio/health/live; then
-              echo "MinIO is up (attempt ${attempt})"
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:9090/favicon.ico || true)
+            if [ "${code}" = "200" ]; then
+              echo "s3mock is up (attempt ${attempt}, http ${code})"
               exit 0
             fi
             sleep 1
           done
-          echo "MinIO failed to become healthy" >&2
-          docker logs minio || true
+          echo "s3mock failed to become healthy" >&2
+          docker logs s3mock || true
           exit 1
 
       - name: Set up Python
@@ -374,13 +386,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev,s3]"
 
-      - name: Create MinIO bucket
+      - name: Create bucket (idempotent, s3mock also creates it from initialBuckets)
         run: |
           python -c "from drivers.s3.cas import build_s3_client_from_env; c=build_s3_client_from_env();
           try:
             c.create_bucket(Bucket='trajir')
           except Exception as e:
-            # Bucket may already exist on a reused runner volume.
+            # Bucket may already exist (initialBuckets or a reused runner volume).
             print('create_bucket:', e)"
 
       - name: Live MinIO S3 CAS tests (Python)

@@ -18,6 +18,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Sandbox mode rejects `AGENT_SPAWN` and `SENSITIVE` effects in addition to
   `NON_IDEMPOTENT_WRITE` (#347).
 
+### Fixed
+
+- Postgres open paths bound ping and schema setup (default 10s, DSN
+  `connect_timeout`, or `TRAJIR_PG_CONNECT_TIMEOUT`). S3 clients set an
+  explicit 10s connect timeout and 60s read deadline (#406).
+
 ## [0.2.2] - 2026-09-07
 
 ### Added
