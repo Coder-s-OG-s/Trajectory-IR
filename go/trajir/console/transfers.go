@@ -24,9 +24,9 @@ type Handoff struct {
 	Status       string `json:"status"`
 	Mode         string `json:"mode,omitempty"`
 	Redacted     *bool  `json:"redacted"`
-	Bytes        int64  `json:"bytes,omitempty"`
-	MemberCount  int    `json:"member_count,omitempty"`
-	NodeCount    int    `json:"node_count,omitempty"`
+	Bytes        int64  `json:"bytes"`
+	MemberCount  int    `json:"member_count"`
+	NodeCount    int    `json:"node_count"`
 	ExportID     string `json:"export_id,omitempty"`
 	ImportID     string `json:"import_id,omitempty"`
 	ExportTS     string `json:"export_ts,omitempty"`

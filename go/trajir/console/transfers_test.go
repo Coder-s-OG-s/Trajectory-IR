@@ -76,6 +76,9 @@ func TestTransfersHandoffs(t *testing.T) {
 	if hs[4].Status != handoffFailed || hs[4].Error != "WriteError" || hs[4].ExportPath != "bad.tir" {
 		t.Fatalf("export fail %+v", hs[4])
 	}
+	if hs[4].Bytes != 0 || hs[4].MemberCount != 0 || hs[4].NodeCount != 0 {
+		t.Fatalf("zero package hidden %+v", hs[4])
+	}
 
 	raw, err := json.Marshal(sum.Transfers)
 	if err != nil {
@@ -83,6 +86,9 @@ func TestTransfersHandoffs(t *testing.T) {
 	}
 	if bytes.Contains(raw, []byte("THOUGHT")) {
 		t.Fatalf("thought body leaked: %s", raw)
+	}
+	if !bytes.Contains(raw, []byte(`"bytes":0`)) {
+		t.Fatalf("zero-byte export dropped: %s", raw)
 	}
 }
 

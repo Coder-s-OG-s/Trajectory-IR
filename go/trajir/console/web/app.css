@@ -24,12 +24,13 @@ code { font-family: ui-monospace, Consolas, monospace; font-size: 0.9em; }
 }
 .skip:focus { left: 0; }
 
-.app { display: grid; grid-template-columns: 280px 1fr; min-height: 100vh; }
+.app { display: grid; grid-template-columns: 280px 1fr; min-height: 100vh; min-width: 0; }
 .sidebar {
   border-right: 1px solid var(--border);
   background: var(--panel);
   padding: 1rem;
   display: flex; flex-direction: column; gap: 0.75rem;
+  min-width: 0;
 }
 .brand h1 { font-size: 1.05rem; margin: 0 0 0.25rem; }
 .brand p { margin: 0; font-size: 0.85rem; }
@@ -62,7 +63,7 @@ code { font-family: ui-monospace, Consolas, monospace; font-size: 0.9em; }
 }
 .traj-item[aria-current="true"] { border-color: var(--accent); }
 
-.main { padding: 1rem 1.25rem 2rem; }
+.main { padding: 1rem 1.25rem 2rem; min-width: 0; }
 .main-head {
   display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
   align-items: flex-start; margin-bottom: 1rem;
@@ -84,6 +85,7 @@ code { font-family: ui-monospace, Consolas, monospace; font-size: 0.9em; }
 .panel {
   background: var(--panel); border: 1px solid var(--border);
   border-radius: 8px; padding: 1rem;
+  max-width: 100%; overflow-x: auto;
 }
 .stats {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
@@ -93,7 +95,7 @@ code { font-family: ui-monospace, Consolas, monospace; font-size: 0.9em; }
   background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 0.65rem;
 }
 .stat .label { color: var(--muted); font-size: 0.75rem; }
-.stat .value { font-size: 1.15rem; font-weight: 600; margin-top: 0.2rem; }
+.stat .value { font-size: 1.15rem; font-weight: 600; margin-top: 0.2rem; word-break: keep-all; }
 .stat .value.ok { color: var(--ok); }
 .stat .value.bad { color: var(--bad); }
 td.ok { color: var(--ok); }

@@ -64,7 +64,8 @@
 
   function parseLocal(dt) {
     if (!dt) return null;
-    const d = new Date(dt);
+    // Tables show RFC3339 Zulu. The picker has no zone, so read it as UTC.
+    const d = new Date(dt.endsWith("Z") ? dt : dt + "Z");
     return Number.isNaN(d.getTime()) ? null : d;
   }
 
@@ -107,7 +108,7 @@
       <div class="stats">
         ${stat("Events (filtered)", ev.length)}
         ${stat("Nodes", s.node_count)}
-        ${stat("Last ts", s.last_ts || "—")}
+        ${stat("Last ts", s.last_ts ? String(s.last_ts).replace("T", " ") : "—")}
         ${stat("Seals created", s.seal_created_count)}
         ${stat("Verify fail", s.seal_verified_fail, s.seal_verified_fail ? "bad" : "")}
         ${stat("Exports OK", s.exports_ok)}
@@ -186,8 +187,10 @@
               const path = h.export_path || h.import_path || "";
               const verify = h.verify_ok === true ? "ok" : h.verify_ok === false ? "fail" : "";
               const verifyText = [verify, h.error || ""].filter(Boolean).join(" ");
-              const ends = [h.export_source, h.import_source].filter(Boolean).join(" -> ");
-              const who = [ends, h.runtime || ""].filter(Boolean).join(" ");
+              const sources = [h.export_source, h.import_source].filter(Boolean);
+              const runtime = h.runtime || "";
+              const ends = sources.join(" -> ");
+              const who = !runtime || sources.indexOf(runtime) >= 0 ? (ends || runtime) : [ends, runtime].filter(Boolean).join(" ");
               const bad = h.verify_ok === false || status === "failed" ? "bad" : "";
               return `<tr>
                 <td class="${cls}">${esc(status)}</td>
@@ -276,7 +279,8 @@
       });
     } catch (err) {
       showBanner(String(err.message || err), true);
-      $("traj-empty").classList.remove("hidden");
+      $("traj-list").innerHTML = "";
+      $("traj-empty").classList.add("hidden");
     }
   }
 
@@ -304,6 +308,11 @@
       renderPanels();
       selectTab(state.tab);
     } catch (err) {
+      state.events = [];
+      state.summary = null;
+      ["overview", "seals", "transfers", "economy"].forEach((n) => {
+        $("panel-" + n).innerHTML = `<p class="empty-seals" role="status">Could not load this trajectory.</p>`;
+      });
       showBanner(String(err.message || err), true);
     }
   }

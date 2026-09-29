@@ -137,14 +137,7 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	events, err := s.Store.ReadEvents(id)
 	if err != nil {
-		status := http.StatusInternalServerError
-		if errors.Is(err, ErrNotFound) || errors.Is(err, ErrInvalidEvent) {
-			status = http.StatusNotFound
-			if errors.Is(err, ErrInvalidEvent) {
-				status = http.StatusBadRequest
-			}
-		}
-		writeErr(w, status, err.Error())
+		writeErr(w, statusForRead(err), err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -160,14 +153,20 @@ func (s *Server) handleSummary(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	events, err := s.Store.ReadEvents(id)
 	if err != nil {
-		status := http.StatusInternalServerError
-		if errors.Is(err, ErrNotFound) {
-			status = http.StatusNotFound
-		}
-		writeErr(w, status, err.Error())
+		writeErr(w, statusForRead(err), err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, Summarize(id, events))
+}
+
+func statusForRead(err error) int {
+	if errors.Is(err, ErrInvalidEvent) {
+		return http.StatusBadRequest
+	}
+	if errors.Is(err, ErrNotFound) {
+		return http.StatusNotFound
+	}
+	return http.StatusInternalServerError
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

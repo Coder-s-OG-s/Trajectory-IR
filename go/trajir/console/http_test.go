@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -122,5 +124,32 @@ func TestHTTPRejectsPathTraversalTrajectory(t *testing.T) {
 	srv.Handler().ServeHTTP(rr, req)
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("status=%d", rr.Code)
+	}
+}
+
+func TestHTTPSummaryRejectsBadFileAndBadID(t *testing.T) {
+	t.Parallel()
+	st, err := OpenStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(st.Root(), "trajectories", "broken.ndjson")
+	if err := os.WriteFile(path, []byte("{not-json}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	srv := NewServer(st, "")
+
+	for _, target := range []string{
+		"/v1/trajectories/broken/summary",
+		"/v1/trajectories/broken/events",
+		"/v1/trajectories/..%2Fevil/summary",
+		"/v1/trajectories/..%2Fevil/events",
+	} {
+		req := httptest.NewRequest(http.MethodGet, target, nil)
+		rr := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(rr, req)
+		if rr.Code != http.StatusBadRequest {
+			t.Fatalf("%s status=%d body=%s", target, rr.Code, rr.Body.String())
+		}
 	}
 }
