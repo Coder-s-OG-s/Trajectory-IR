@@ -46,4 +46,25 @@ Open `http://127.0.0.1:8787/?id=<trajectory_id>` for a deep link.
 Go package: `github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/console`
 
 Hosts can call `Store.Append` directly (file sink) without starting HTTP.
-SDK emit hooks are tracked separately ([#398](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/398)).
+
+## Attach a file sink
+
+Set `TRAJIR_CONSOLE_SINK=file` and `TRAJIR_CONSOLE_DATA` to the directory above. Leave the sink env unset and nothing is emitted. A sink error is logged. The node log and the package write still succeed.
+
+```go
+sink := emit.FromEnv()
+tr, err := client.OpenTrajectory(tenant, traj, client.Options{
+    WorkDir: dir, ConsoleSink: sink,
+})
+```
+
+`emit` is `github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/emit`. `client` is `go/trajir/client`.
+
+Python reference, same env vars:
+
+```python
+from trajectory_ir.console_emit import from_env
+traj = open_trajectory(tenant, traj, db_path, console_sink=from_env())
+```
+
+HTTP is `TRAJIR_CONSOLE_SINK=http`, `TRAJIR_CONSOLE_URL` (default `http://127.0.0.1:8787`), and optional `TRAJIR_CONSOLE_TOKEN`.

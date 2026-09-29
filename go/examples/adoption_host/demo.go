@@ -6,6 +6,7 @@
 package main
 
 import (
+	"archive/zip"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,6 +16,7 @@ import (
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/cas"
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/client"
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/effects"
+	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/emit"
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/resume"
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/sandbox"
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/tir"
@@ -37,11 +39,11 @@ type HostStepResult struct {
 
 // PackageResult is the outcome of thin export + rehydrate.
 type PackageResult struct {
-	TirPath      string
-	ContentHash  string
-	LogicalPath  string
-	Rehydrated   []byte
-	NodeCount    int
+	TirPath     string
+	ContentHash string
+	LogicalPath string
+	Rehydrated  []byte
+	NodeCount   int
 }
 
 func stubModel(ctx map[string]any) map[string]any {
@@ -101,8 +103,9 @@ func runHostStep(workDir string, sandboxMode bool, model func(map[string]any) ma
 		mode = sandbox.ModeSandbox
 	}
 	tr, err := client.OpenTrajectory(tenantID, trajectoryID, client.Options{
-		WorkDir: workDir,
-		Mode:    mode,
+		WorkDir:     workDir,
+		Mode:        mode,
+		ConsoleSink: emit.FromEnv(),
 	})
 	if err != nil {
 		return nil, err
@@ -216,7 +219,11 @@ func exportThinPackage(workDir, casRoot, dest string, payload []byte) (*PackageR
 		Size:        &size,
 	}
 
-	tr, err := client.OpenTrajectory(tenantID, trajectoryID, client.Options{WorkDir: workDir})
+	sink := emit.FromEnv()
+	tr, err := client.OpenTrajectory(tenantID, trajectoryID, client.Options{
+		WorkDir:     workDir,
+		ConsoleSink: sink,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -226,6 +233,25 @@ func exportThinPackage(workDir, casRoot, dest string, payload []byte) (*PackageR
 		Mode:      tir.ModeThin,
 		TenantID:  &tenant,
 		Artifacts: []tir.ArtifactRef{ref},
+		OnExported: func(n tir.ExportNotice) {
+			redacted := n.Redacted
+			ok := n.OK
+			emit.NotePackage(sink, emit.PackageFact{
+				Kind:         emit.KindExportCompleted,
+				TrajectoryID: trajectoryID,
+				TenantID:     tenantID,
+				Path:         n.Path,
+				Mode:         n.Mode,
+				Redacted:     &redacted,
+				Bytes:        n.Bytes,
+				MemberCount:  n.MemberCount,
+				NodeCount:    n.NodeCount,
+				OK:           &ok,
+				Error:        n.Error,
+				Source:       "go",
+				Runtime:      "go",
+			})
+		},
 	})
 	if err != nil {
 		return nil, err
@@ -234,6 +260,7 @@ func exportThinPackage(workDir, casRoot, dest string, payload []byte) (*PackageR
 	if err != nil {
 		return nil, err
 	}
+	noteImport(sink, path, pkg)
 	entries := make([]cas.ArtifactEntry, 0, len(pkg.ArtifactsManifest))
 	for _, m := range pkg.ArtifactsManifest {
 		e := cas.ArtifactEntry{}
@@ -278,4 +305,36 @@ func defaultWorkDir() (string, error) {
 
 func absJoin(dir, name string) string {
 	return filepath.Join(dir, name)
+}
+
+func noteImport(sink emit.Sink, path string, pkg *tir.Package) {
+	if sink == nil || pkg == nil {
+		return
+	}
+	var nbytes int64
+	if st, err := os.Stat(path); err == nil {
+		nbytes = st.Size()
+	}
+	members := 0
+	if zr, err := zip.OpenReader(path); err == nil {
+		members = len(zr.File)
+		_ = zr.Close()
+	}
+	mode, _ := pkg.Manifest["mode"].(string)
+	redacted, _ := pkg.Manifest["redacted"].(bool)
+	ok := true
+	emit.NotePackage(sink, emit.PackageFact{
+		Kind:         emit.KindImportCompleted,
+		TrajectoryID: trajectoryID,
+		TenantID:     tenantID,
+		Path:         path,
+		Mode:         mode,
+		Redacted:     &redacted,
+		Bytes:        nbytes,
+		MemberCount:  members,
+		NodeCount:    len(pkg.Nodes),
+		OK:           &ok,
+		Source:       "go",
+		Runtime:      "go",
+	})
 }

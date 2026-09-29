@@ -9,6 +9,7 @@ import (
 
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/client"
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/effects"
+	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/emit"
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/resume"
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/sandbox"
 )
@@ -248,4 +249,46 @@ func TestResumeTenantIsolation(t *testing.T) {
 	if !strings.Contains(err.Error(), "no existing nodes") {
 		t.Fatalf("expected 'no existing nodes' error, got: %v", err)
 	}
+}
+
+func TestSealHashIgnoresSink(t *testing.T) {
+	plan := map[string]any{"tool_calls": []any{map[string]any{"name": "echo", "args": map[string]any{}}}}
+	off := decisionID(t, nil, plan)
+	on := decisionID(t, emit.SinkFunc(func(emit.Event) error {
+		return errors.New("sink down")
+	}), plan)
+	panicID := decisionID(t, emit.SinkFunc(func(emit.Event) error {
+		panic("sink panic")
+	}), plan)
+	if off == "" || off != on || off != panicID {
+		t.Fatalf("decision ids off=%s on=%s panic=%s", off, on, panicID)
+	}
+}
+
+func decisionID(t *testing.T, sink emit.Sink, plan map[string]any) string {
+	t.Helper()
+	dir := t.TempDir()
+	tr, err := client.OpenTrajectory("demo", "same-traj", client.Options{WorkDir: dir, ConsoleSink: sink})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tr.Close()
+	if _, err := tr.Project(1, map[string]any{"k": "v"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tr.SealDecision(1, plan); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := tr.Log().ListNodes("same-traj", "demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range rows {
+		if row["kind"] == "DECISION" {
+			id, _ := row["id"].(string)
+			return id
+		}
+	}
+	t.Fatal("missing DECISION")
+	return ""
 }

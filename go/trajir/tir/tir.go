@@ -110,6 +110,9 @@ type ExportOptions struct {
 	// length fails closed; it does not silently produce an unsigned package.
 	SignKey    ed25519.PrivateKey
 	SignerMeta SignerMeta
+	// OnExported, when set, runs after the package file is written.
+	// A panic in the observer is logged. It does not change the export result.
+	OnExported func(ExportNotice)
 	// Redacted, when true, strips thoughts and fields that match a secret-like
 	// key name or value shape before export (matches export_tir(redacted=True)
 	// in the Python reference). This is a keyword/pattern heuristic, not a
@@ -118,6 +121,18 @@ type ExportOptions struct {
 	// tenant. Fat mode is forced down to thin in redacted output since
 	// embedded artifact bytes may themselves hold secrets.
 	Redacted bool
+}
+
+// ExportNotice describes one finished Export for an optional observer.
+type ExportNotice struct {
+	Path        string
+	Mode        string
+	Redacted    bool
+	Bytes       int64
+	MemberCount int
+	NodeCount   int
+	OK          bool
+	Error       string
 }
 
 // contentHash returns SHA-256 hex of data.
@@ -575,12 +590,46 @@ func Export(nodeLog *nodelog.NodeLog, trajectoryID, dest string, opts ExportOpti
 	}
 	fileClosed = true
 
+	memberCount := 5
+	if mode == ModeFat {
+		memberCount += len(artifactBytes)
+	}
+	notice := ExportNotice{
+		Path:        destPath,
+		Mode:        string(mode),
+		Redacted:    opts.Redacted,
+		MemberCount: memberCount,
+		NodeCount:   len(nodeList),
+	}
 	if len(opts.SignKey) != 0 {
 		if err := Sign(destPath, opts.SignKey, opts.SignerMeta); err != nil {
+			notice.OK = false
+			notice.Error = err.Error()
+			if st, statErr := os.Stat(destPath); statErr == nil {
+				notice.Bytes = st.Size()
+			}
+			notifyExport(opts.OnExported, notice)
 			return "", err
 		}
 	}
+	if st, err := os.Stat(destPath); err == nil {
+		notice.Bytes = st.Size()
+	}
+	notice.OK = true
+	notifyExport(opts.OnExported, notice)
 	return destPath, nil
+}
+
+func notifyExport(fn func(ExportNotice), n ExportNotice) {
+	if fn == nil {
+		return
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("tir: export observer: %v", r)
+		}
+	}()
+	fn(n)
 }
 
 // Load reads and verifies a .tir zip without writing to a NodeLog.

@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from drivers.durable_backend.dbos.adapter import init_backend
+from trajectory_ir.console_emit import note_node, note_seal
 from trajectory_ir.effects import requires_block_and_gate
 from trajectory_ir.resume.gate import make_gated_tool_call, make_plain_tool_call
 from trajectory_ir.runtime.log import NodeLog
@@ -28,6 +29,7 @@ class Trajectory:
     tenant_id: str
     db_path: str
     mode: RunMode = RunMode.LIVE
+    console_sink: Any = None
     _log: NodeLog = field(init=False, repr=False, compare=False)
     _closed: bool = field(init=False, repr=False, compare=False, default=False)
 
@@ -72,6 +74,7 @@ def open_trajectory(
     db_path: str = "trajectory.sqlite",
     *,
     mode: RunMode | str = RunMode.LIVE,
+    console_sink: Any = None,
 ) -> Trajectory:
     """Open a trajectory.
 
@@ -84,6 +87,7 @@ def open_trajectory(
         tenant_id=tenant_id,
         db_path=db_path,
         mode=normalize_run_mode(mode),
+        console_sink=console_sink,
     )
 
 
@@ -94,7 +98,7 @@ def project(trajectory: Trajectory, step_n: int, context: dict) -> ProjectContex
     ``trajectory_ir.runtime.project_context`` first, then pass its
     ``ProjectResult.context`` here.
     """
-    trajectory._log.append(
+    node = trajectory._log.append(
         "PROJECT_CONTEXT",
         step_n,
         context,
@@ -102,17 +106,37 @@ def project(trajectory: Trajectory, step_n: int, context: dict) -> ProjectContex
         trajectory.tenant_id,
         seq=0,
     )
+    note_node(
+        trajectory.console_sink,
+        trajectory_id=trajectory.trajectory_id,
+        tenant_id=trajectory.tenant_id,
+        node=node,
+    )
     return ProjectContext(step_n=step_n, context=context)
 
 
 def seal_decision(trajectory: Trajectory, step_n: int, plan: dict) -> Decision:
-    trajectory._log.append(
+    node = trajectory._log.append(
         "DECISION",
         step_n,
         {"plan": plan},
         trajectory.trajectory_id,
         trajectory.tenant_id,
         seq=1,
+    )
+    note_node(
+        trajectory.console_sink,
+        trajectory_id=trajectory.trajectory_id,
+        tenant_id=trajectory.tenant_id,
+        node=node,
+    )
+    note_seal(
+        trajectory.console_sink,
+        trajectory_id=trajectory.trajectory_id,
+        tenant_id=trajectory.tenant_id,
+        node=node,
+        step_n=step_n,
+        plan=plan,
     )
     return Decision(step_n=step_n, plan=plan)
 
@@ -171,13 +195,19 @@ def commit_step(trajectory: Trajectory, step_n: int, seq: int) -> None:
         seq: Sequence number for commit (should be 2 + 2*num_tool_calls to follow
             after all tool calls)
     """
-    trajectory._log.append(
+    node = trajectory._log.append(
         "COMMIT_STEP",
         step_n,
         {},
         trajectory.trajectory_id,
         trajectory.tenant_id,
         seq=seq,
+    )
+    note_node(
+        trajectory.console_sink,
+        trajectory_id=trajectory.trajectory_id,
+        tenant_id=trajectory.tenant_id,
+        node=node,
     )
 
 

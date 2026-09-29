@@ -18,7 +18,9 @@ import (
 
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/durable"
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/effects"
+	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/emit"
 	nodelog "github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/log"
+	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/nodes"
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/resume"
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/sandbox"
 )
@@ -37,6 +39,9 @@ type Options struct {
 	Backend durable.Backend
 	// Mode is live (default) or sandbox (R06: reject NON_IDEMPOTENT_WRITE, AGENT_SPAWN, SENSITIVE).
 	Mode sandbox.Mode
+	// ConsoleSink receives console events after a successful append.
+	// Nil skips telemetry. Sink errors are logged and do not fail the call.
+	ConsoleSink emit.Sink
 }
 
 // Trajectory is an open IR run handle.
@@ -50,6 +55,7 @@ type Trajectory struct {
 	backend     durable.Backend
 	ownsBackend bool
 	ownsLog     bool
+	sink        emit.Sink
 }
 
 // ProjectContext is returned by Project.
@@ -115,6 +121,7 @@ func OpenTrajectory(tenantID, trajectoryID string, opts Options) (*Trajectory, e
 		backend:      backend,
 		ownsBackend:  ownsBackend,
 		ownsLog:      true,
+		sink:         opts.ConsoleSink,
 	}, nil
 }
 
@@ -168,16 +175,18 @@ func (t *Trajectory) Project(stepN int, context map[string]any) (*ProjectContext
 		context = map[string]any{}
 	}
 	step := stepN
-	if _, err := t.log.Append(
+	node, err := t.log.Append(
 		"PROJECT_CONTEXT",
 		&step,
 		context,
 		t.TrajectoryID,
 		t.TenantID,
 		0,
-	); err != nil {
+	)
+	if err != nil {
 		return nil, err
 	}
+	t.emitNode(node)
 	return &ProjectContext{StepN: stepN, Context: context}, nil
 }
 
@@ -187,16 +196,19 @@ func (t *Trajectory) SealDecision(stepN int, plan map[string]any) (*Decision, er
 		plan = map[string]any{}
 	}
 	step := stepN
-	if _, err := t.log.Append(
+	node, err := t.log.Append(
 		"DECISION",
 		&step,
 		map[string]any{"plan": plan},
 		t.TrajectoryID,
 		t.TenantID,
 		1,
-	); err != nil {
+	)
+	if err != nil {
 		return nil, err
 	}
+	t.emitNode(node)
+	t.emitSeal(node, stepN, plan)
 	return &Decision{StepN: stepN, Plan: plan}, nil
 }
 
@@ -245,7 +257,7 @@ func (t *Trajectory) ExecTool(stepN, seq int, tool resume.Tool, args map[string]
 // CommitStep appends COMMIT_STEP at seq (typically 2+2*numTools).
 func (t *Trajectory) CommitStep(stepN, seq int) error {
 	step := stepN
-	_, err := t.log.Append(
+	node, err := t.log.Append(
 		"COMMIT_STEP",
 		&step,
 		map[string]any{},
@@ -253,7 +265,11 @@ func (t *Trajectory) CommitStep(stepN, seq int) error {
 		t.TenantID,
 		seq,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	t.emitNode(node)
+	return nil
 }
 
 // RunStepOpts are optional hooks for RunStep (demo and tests).
@@ -287,6 +303,70 @@ func (t *Trajectory) RunStep(
 
 // Log exposes the underlying NodeLog for advanced tests.
 func (t *Trajectory) Log() *nodelog.NodeLog { return t.log }
+
+func (t *Trajectory) emitNode(n *nodes.Node) {
+	if t == nil || n == nil {
+		return
+	}
+	payload := map[string]any{
+		"node_id":      n.ID,
+		"kind":         n.Kind,
+		"seq":          n.Seq,
+		"content_hash": n.PHash,
+	}
+	if n.StepN != nil {
+		payload["step_n"] = *n.StepN
+	}
+	emit.SafeEmit(t.sink, emit.Event{
+		Kind:         emit.KindNodeAppended,
+		Source:       "go",
+		Runtime:      "go",
+		TrajectoryID: t.TrajectoryID,
+		TenantID:     t.TenantID,
+		Payload:      payload,
+	})
+}
+
+func (t *Trajectory) emitSeal(n *nodes.Node, stepN int, plan map[string]any) {
+	if t == nil || n == nil {
+		return
+	}
+	payload := map[string]any{
+		"node_id":      n.ID,
+		"step_n":       stepN,
+		"content_hash": n.PHash,
+	}
+	if names := toolNames(plan); len(names) > 0 {
+		payload["tool_names"] = names
+	}
+	emit.SafeEmit(t.sink, emit.Event{
+		Kind:         emit.KindSealCreated,
+		Source:       "go",
+		Runtime:      "go",
+		TrajectoryID: t.TrajectoryID,
+		TenantID:     t.TenantID,
+		Payload:      payload,
+	})
+}
+
+func toolNames(plan map[string]any) []string {
+	raw, ok := plan["tool_calls"].([]any)
+	if !ok {
+		return nil
+	}
+	names := make([]string, 0, len(raw))
+	for _, item := range raw {
+		call, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		name, _ := call["name"].(string)
+		if name != "" {
+			names = append(names, name)
+		}
+	}
+	return names
+}
 
 // Backend exposes the durable backend for advanced tests.
 func (t *Trajectory) Backend() durable.Backend { return t.backend }

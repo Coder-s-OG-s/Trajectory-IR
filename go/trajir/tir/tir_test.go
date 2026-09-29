@@ -873,3 +873,26 @@ func TestExportThinWithoutCASSkipsValidation(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestExportObserverDoesNotFailExport(t *testing.T) {
+	src := openLog(t, "obs.sqlite")
+	seedSample(t, src)
+	out := filepath.Join(t.TempDir(), "run.tir")
+	called := 0
+	path, err := tir.Export(src, "t-export", out, tir.ExportOptions{
+		Mode: tir.ModeThin,
+		OnExported: func(n tir.ExportNotice) {
+			called++
+			if !n.OK || n.Bytes <= 0 || n.NodeCount != 5 || n.MemberCount != 5 {
+				t.Errorf("notice %+v", n)
+			}
+			panic("observer down")
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if called != 1 || path == "" {
+		t.Fatalf("called=%d path=%s", called, path)
+	}
+}

@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"archive/zip"
 	"context"
 	"errors"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/client"
+	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/emit"
 	nodelog "github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/log"
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/tir"
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/workdir"
@@ -132,9 +134,11 @@ func toolExportTIR(ctx context.Context, _ *mcp.CallToolRequest, in exportIn) (*m
 		return nil, zero, err
 	}
 
+	sink := emit.FromEnv()
 	tr, err := client.OpenTrajectory(in.TenantID, in.TrajectoryID, client.Options{
-		NodesPath: nodesPath,
-		MemoPath:  memoPath,
+		NodesPath:   nodesPath,
+		MemoPath:    memoPath,
+		ConsoleSink: sink,
 	})
 	if err != nil {
 		return nil, zero, err
@@ -144,6 +148,25 @@ func toolExportTIR(ctx context.Context, _ *mcp.CallToolRequest, in exportIn) (*m
 	path, err := tir.Export(tr.Log(), in.TrajectoryID, dest, tir.ExportOptions{
 		Mode:     mode,
 		TenantID: &in.TenantID,
+		OnExported: func(n tir.ExportNotice) {
+			redacted := n.Redacted
+			ok := n.OK
+			emit.NotePackage(sink, emit.PackageFact{
+				Kind:         emit.KindExportCompleted,
+				TrajectoryID: in.TrajectoryID,
+				TenantID:     in.TenantID,
+				Path:         n.Path,
+				Mode:         n.Mode,
+				Redacted:     &redacted,
+				Bytes:        n.Bytes,
+				MemberCount:  n.MemberCount,
+				NodeCount:    n.NodeCount,
+				OK:           &ok,
+				Error:        n.Error,
+				Source:       "go",
+				Runtime:      "go",
+			})
+		},
 	})
 	if err != nil {
 		return nil, zero, err
@@ -252,6 +275,7 @@ func toolImportTIR(ctx context.Context, _ *mcp.CallToolRequest, in pathIn) (*mcp
 	mode, _ := pkg.Manifest["mode"].(string)
 	traj, _ := pkg.Manifest["trajectory_id"].(string)
 	tenant, _ := pkg.Manifest["tenant_id"].(string)
+	noteMCPImport(f, st.Size(), pkg)
 	return nil, importOut{
 		Path:         f.Name(),
 		Mode:         mode,
@@ -261,6 +285,39 @@ func toolImportTIR(ctx context.Context, _ *mcp.CallToolRequest, in pathIn) (*mcp
 		SealCount:    len(pkg.Seals),
 		Signed:       pkg.Signature != nil,
 	}, nil
+}
+
+func noteMCPImport(f *os.File, size int64, pkg *tir.Package) {
+	if pkg == nil || f == nil {
+		return
+	}
+	sink := emit.FromEnv()
+	if sink == nil {
+		return
+	}
+	members := 0
+	if zr, err := zip.NewReader(f, size); err == nil {
+		members = len(zr.File)
+	}
+	mode, _ := pkg.Manifest["mode"].(string)
+	traj, _ := pkg.Manifest["trajectory_id"].(string)
+	tenant, _ := pkg.Manifest["tenant_id"].(string)
+	redacted, _ := pkg.Manifest["redacted"].(bool)
+	ok := true
+	emit.NotePackage(sink, emit.PackageFact{
+		Kind:         emit.KindImportCompleted,
+		TrajectoryID: traj,
+		TenantID:     tenant,
+		Path:         f.Name(),
+		Mode:         mode,
+		Redacted:     &redacted,
+		Bytes:        size,
+		MemberCount:  members,
+		NodeCount:    len(pkg.Nodes),
+		OK:           &ok,
+		Source:       "go",
+		Runtime:      "go",
+	})
 }
 
 type verifyIn struct {

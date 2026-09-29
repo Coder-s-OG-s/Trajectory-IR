@@ -244,6 +244,7 @@ def export_tir(
     cas: Any | None = None,
     sign_key: bytes | None = None,
     signer_meta: SignerMeta | None = None,
+    on_exported: Any | None = None,
 ) -> Path:
     """Export a trajectory from ``node_log`` to a ``.tir`` zip at ``dest``.
 
@@ -260,6 +261,8 @@ def export_tir(
         sign_key: Optional full 64 byte Ed25519 private key. When set, writes
             SIGNATURE after export (README 9.1). Wrong length fails closed.
         signer_meta: Optional signer id / timestamp for SIGNATURE.
+        on_exported: Optional callback after the package file is written.
+            Exceptions are logged and do not fail the export.
     """
     if mode not in ("thin", "fat"):
         raise TirError(f"unsupported mode {mode!r}; use thin or fat")
@@ -374,17 +377,48 @@ def export_tir(
             os.unlink(tmp_name)
         raise
 
+    member_count = 5 + (len(artifact_bytes) if mode == "fat" else 0)
     if sign_key is not None:
         try:
             sign_package(dest_path, sign_key, signer_meta)
-        except Exception:
+        except Exception as exc:
             # Any failure after the unsigned zip is on disk (crypto, IO, disk full)
             # must not leave a half signed package behind.
+            _notify_observer(on_exported, {
+                "path": str(dest_path),
+                "mode": mode,
+                "redacted": bool(redacted),
+                "bytes": dest_path.stat().st_size if dest_path.exists() else 0,
+                "member_count": member_count,
+                "node_count": len(nodes),
+                "ok": False,
+                "error": type(exc).__name__,
+            })
             with contextlib.suppress(OSError):
                 dest_path.unlink()
             raise
 
+    _notify_observer(on_exported, {
+        "path": str(dest_path),
+        "mode": mode,
+        "redacted": bool(redacted),
+        "bytes": dest_path.stat().st_size,
+        "member_count": member_count,
+        "node_count": len(nodes),
+        "ok": True,
+    })
     return dest_path
+
+
+def _notify_observer(cb, info: dict) -> None:
+    if cb is None:
+        return
+    try:
+        cb(info)
+    except Exception:
+        logging.getLogger("trajectory_ir.package.tir").warning(
+            "package observer failed", exc_info=True
+        )
 
 
 def load_tir(path: str | Path, *, verify: bool = True) -> TirPackage:
@@ -529,6 +563,7 @@ def import_tir(
     verify: bool = True,
     cas: Any | None = None,
     rehydrate: bool = False,
+    on_imported: Any | None = None,
 ) -> TirPackage:
     """Verify a package and append its nodes into ``node_log`` (idempotent by id).
 
@@ -542,6 +577,8 @@ def import_tir(
             after thin transport).
         rehydrate: Load artifact bytes from ``cas`` into the returned package.
             Requires ``cas``.
+        on_imported: Optional callback after a successful import. Exceptions
+            are logged and do not roll back the node log.
     """
     if not verify:
         raise TirError(
@@ -578,4 +615,22 @@ def import_tir(
             node.tenant_id,
             node.seq,
         )
+    if on_imported is not None:
+        member_count = 0
+        size = 0
+        try:
+            with zipfile.ZipFile(path) as zf:
+                member_count = len(zf.namelist())
+            size = Path(path).stat().st_size
+        except OSError:
+            pass
+        _notify_observer(on_imported, {
+            "path": str(path),
+            "mode": pkg.manifest.get("mode") or "",
+            "redacted": bool(pkg.manifest.get("redacted")),
+            "bytes": size,
+            "member_count": member_count,
+            "node_count": len(pkg.nodes),
+            "verify_ok": True,
+        })
     return pkg

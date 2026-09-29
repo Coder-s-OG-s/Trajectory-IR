@@ -24,6 +24,7 @@ import json
 import os
 import sys
 import tempfile
+import zipfile
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -36,6 +37,7 @@ from client.python.trajectory_client import (
     project,
     seal_decision,
 )
+from trajectory_ir.console_emit import from_env, note_package
 from trajectory_ir.effects import EffectClass
 from trajectory_ir.package import export_tir, load_tir
 from trajectory_ir.runtime.log import NodeLog
@@ -157,6 +159,7 @@ def run_host_step(
         trajectory_id,
         db_path=db_path,
         mode=mode,
+        console_sink=from_env(),
     )
     project(traj, step_n=step_n, context=ctx)
 
@@ -218,6 +221,24 @@ def export_thin_package(
     ref = put_artifact(store, payload, logical_path=logical_path)
 
     log = NodeLog(db_path)
+    sink = from_env()
+
+    def _on_export(info: dict) -> None:
+        note_package(
+            sink,
+            kind="export.completed",
+            trajectory_id=trajectory_id,
+            tenant_id=tenant_id,
+            path=str(info["path"]),
+            mode=str(info["mode"]),
+            redacted=bool(info["redacted"]),
+            nbytes=int(info["bytes"]),
+            member_count=int(info["member_count"]),
+            node_count=int(info["node_count"]),
+            ok=bool(info["ok"]),
+            error=str(info.get("error") or ""),
+        )
+
     try:
         tir_path = export_tir(
             log,
@@ -227,11 +248,28 @@ def export_thin_package(
             artifacts=[ref],
             tenant_id=tenant_id,
             cas=store,
+            on_exported=_on_export,
         )
     finally:
         log.close()
 
     pkg = load_tir(tir_path)
+    if sink is not None:
+        with zipfile.ZipFile(tir_path) as zf:
+            members = len(zf.namelist())
+        note_package(
+            sink,
+            kind="import.completed",
+            trajectory_id=trajectory_id,
+            tenant_id=tenant_id,
+            path=str(tir_path),
+            mode=str(pkg.manifest.get("mode") or "thin"),
+            redacted=bool(pkg.manifest.get("redacted")),
+            nbytes=tir_path.stat().st_size,
+            member_count=members,
+            node_count=int(pkg.manifest["node_count"]),
+            ok=True,
+        )
     rehydrated = rehydrate_artifacts(store, pkg.artifacts_manifest)
     if ref.content_hash not in rehydrated:
         raise RuntimeError(f"rehydrate missed content_hash={ref.content_hash}")
