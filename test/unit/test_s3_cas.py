@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from drivers.s3.cas import S3CAS
+import pytest
+
+from drivers.s3.cas import S3CAS, build_s3_client_from_env
 from trajectory_ir.storage.cas import CAS, CASIntegrityError, CASNotFoundError, content_hash
 from trajectory_ir.storage.rehydrate import rehydrate_artifacts
 
@@ -37,6 +39,26 @@ class FakeS3Client:
         if (Bucket, Key) not in self.objects:
             raise KeyError("NoSuchKey")
         return {}
+
+
+def test_build_s3_client_sets_timeouts(monkeypatch: pytest.MonkeyPatch):
+    pytest.importorskip("boto3")
+    monkeypatch.delenv("TRAJIR_S3_ENDPOINT_URL", raising=False)
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "test")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "test")
+    monkeypatch.setenv("AWS_REGION", "us-east-1")
+    client = build_s3_client_from_env()
+    assert client.meta.config.connect_timeout == 10
+    assert client.meta.config.read_timeout == 60
+    assert client.meta.endpoint_url.startswith("https://")
+
+    monkeypatch.setenv("TRAJIR_S3_ENDPOINT_URL", "http://127.0.0.1:9000")
+    client = build_s3_client_from_env()
+    assert client.meta.config.connect_timeout == 10
+    assert client.meta.config.read_timeout == 60
+    assert client.meta.config.signature_version == "s3v4"
+    assert client.meta.config.s3["addressing_style"] == "path"
+    assert client.meta.endpoint_url == "http://127.0.0.1:9000"
 
 
 def test_put_get_roundtrip():

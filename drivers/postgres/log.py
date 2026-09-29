@@ -25,6 +25,7 @@ import json
 import os
 import threading
 from typing import Any
+from urllib.parse import parse_qsl, urlparse
 
 from trajectory_ir.runtime.log import SlotConflictError
 from trajectory_ir.runtime.nodes import Node
@@ -370,13 +371,51 @@ class PostgresNodeLog:
             self._conn.close()
 
 
-def open_postgres_node_log(dsn: str | None = None) -> PostgresNodeLog:
+_DEFAULT_PG_CONNECT_TIMEOUT = 10
+
+
+def _positive_seconds(raw: str, *, label: str) -> int:
+    text = raw.strip()
+    try:
+        value = int(text)
+    except ValueError as exc:
+        raise ValueError(f"{label} must be a positive integer number of seconds") from exc
+    if value <= 0:
+        raise ValueError(f"{label} must be a positive integer number of seconds")
+    return value
+
+
+def _dsn_has_connect_timeout(dsn: str) -> bool:
+    if "://" in dsn:
+        query = urlparse(dsn).query
+        for key, _ in parse_qsl(query, keep_blank_values=True):
+            if key.lower() == "connect_timeout":
+                return True
+        return False
+    for part in dsn.split():
+        key, sep, _value = part.partition("=")
+        if sep and key.lower() == "connect_timeout":
+            return True
+    return False
+
+
+def open_postgres_node_log(
+    dsn: str | None = None,
+    *,
+    connect_timeout: int | None = None,
+) -> PostgresNodeLog:
     """Open a :class:`PostgresNodeLog` from a DSN or environment.
 
-    Resolution order:
+    Resolution order for the DSN:
     1. Explicit ``dsn`` argument
     2. ``TRAJIR_DATABASE_URL``
     3. ``DATABASE_URL``
+
+    Connection timeout, in seconds:
+    1. ``connect_timeout`` argument
+    2. ``TRAJIR_PG_CONNECT_TIMEOUT``
+    3. ``connect_timeout`` already present in the DSN
+    4. 10 seconds
     """
     psycopg, _tuple_row = _require_psycopg()
     resolved = dsn or os.environ.get("TRAJIR_DATABASE_URL") or os.environ.get("DATABASE_URL")
@@ -384,5 +423,17 @@ def open_postgres_node_log(dsn: str | None = None) -> PostgresNodeLog:
         raise ValueError(
             "PostgreSQL DSN required: pass dsn= or set TRAJIR_DATABASE_URL / DATABASE_URL"
         )
-    conn = psycopg.connect(resolved)
+    if connect_timeout is not None and connect_timeout <= 0:
+        raise ValueError("connect_timeout must be a positive integer number of seconds")
+    chosen = connect_timeout
+    if chosen is None:
+        env_raw = os.environ.get("TRAJIR_PG_CONNECT_TIMEOUT")
+        if env_raw is not None and env_raw.strip() != "":
+            chosen = _positive_seconds(env_raw, label="TRAJIR_PG_CONNECT_TIMEOUT")
+    kwargs: dict[str, Any] = {}
+    if chosen is not None:
+        kwargs["connect_timeout"] = chosen
+    elif not _dsn_has_connect_timeout(resolved):
+        kwargs["connect_timeout"] = _DEFAULT_PG_CONNECT_TIMEOUT
+    conn = psycopg.connect(resolved, **kwargs)
     return PostgresNodeLog(conn)

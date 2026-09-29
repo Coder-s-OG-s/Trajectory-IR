@@ -5,9 +5,83 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 )
+
+func TestResolvePGConnectTimeout(t *testing.T) {
+	t.Setenv("TRAJIR_PG_CONNECT_TIMEOUT", "")
+	dsn := "postgres://trajir:trajir@127.0.0.1:5432/trajir?sslmode=disable"
+	got, err := resolvePGConnectTimeout(dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != 10*time.Second {
+		t.Fatalf("timeout=%s", got)
+	}
+	effective, err := dsnWithConnectTimeout(dsn, got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(effective, "connect_timeout=10") {
+		t.Fatalf("dsn=%s", effective)
+	}
+
+	withTimeout := dsn + "&connect_timeout=4"
+	got, err = resolvePGConnectTimeout(withTimeout)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != 4*time.Second {
+		t.Fatalf("dsn timeout=%s", got)
+	}
+	same, err := dsnWithConnectTimeout(withTimeout, got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if same != withTimeout {
+		t.Fatalf("rewrote unchanged dsn: %s", same)
+	}
+
+	t.Setenv("TRAJIR_PG_CONNECT_TIMEOUT", "6")
+	got, err = resolvePGConnectTimeout(withTimeout)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != 6*time.Second {
+		t.Fatalf("env timeout=%s", got)
+	}
+	overridden, err := dsnWithConnectTimeout(withTimeout, got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(overridden, "connect_timeout=6") || strings.Contains(overridden, "connect_timeout=4") {
+		t.Fatalf("overridden=%s", overridden)
+	}
+
+	keyword := "host=127.0.0.1 user=trajir password=trajir dbname=trajir sslmode=disable"
+	t.Setenv("TRAJIR_PG_CONNECT_TIMEOUT", "")
+	got, err = resolvePGConnectTimeout(keyword)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != 10*time.Second {
+		t.Fatalf("keyword timeout=%s", got)
+	}
+	kw, err := dsnWithConnectTimeout(keyword, got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasSuffix(kw, "connect_timeout=10") {
+		t.Fatalf("keyword dsn=%s", kw)
+	}
+
+	t.Setenv("TRAJIR_PG_CONNECT_TIMEOUT", "nope")
+	if _, err := resolvePGConnectTimeout(dsn); err == nil {
+		t.Fatal("expected invalid env error")
+	}
+}
 
 func TestOpenDBNil(t *testing.T) {
 	_, err := OpenDB(nil)
