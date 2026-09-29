@@ -96,6 +96,12 @@ code { font-family: ui-monospace, Consolas, monospace; font-size: 0.9em; }
 .stat .value { font-size: 1.15rem; font-weight: 600; margin-top: 0.2rem; }
 .stat .value.ok { color: var(--ok); }
 .stat .value.bad { color: var(--bad); }
+td.ok { color: var(--ok); }
+td.bad { color: var(--bad); font-weight: 600; }
+.badge {
+  display: inline-block; margin-left: 0.35rem; padding: 0.05rem 0.4rem;
+  border-radius: 999px; border: 1px solid var(--border); color: var(--focus); font-size: 0.75rem;
+}
 
 table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
 th, td { text-align: left; padding: 0.45rem 0.4rem; border-bottom: 1px solid var(--border); vertical-align: top; }

@@ -35,6 +35,8 @@ type Summary struct {
 	LastPackageNodes   int    `json:"last_package_nodes,omitempty"`
 	LastPackageRedacted *bool `json:"last_package_redacted,omitempty"`
 	TransferVerifyOK   *bool  `json:"transfer_verify_ok,omitempty"`
+
+	Transfers TransfersView `json:"transfers"`
 }
 
 // Summarize builds aggregates from an ordered event list.
@@ -87,6 +89,7 @@ func Summarize(trajectoryID string, events []Event) Summary {
 			applyPackage(&s, e.Payload)
 		}
 	}
+	s.Transfers = deriveTransfers(events, s)
 	return s
 }
 

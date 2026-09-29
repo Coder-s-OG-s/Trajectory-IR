@@ -160,42 +160,47 @@
   }
 
   function renderTransfers() {
-    const xfer = filteredEvents().filter(
-      (e) =>
-        e.kind === "export.started" ||
-        e.kind === "export.completed" ||
-        e.kind === "import.completed"
-    );
     const s = state.summary || {};
-    const verify =
-      s.transfer_verify_ok === true ? "ok" : s.transfer_verify_ok === false ? "fail" : "—";
+    const view = s.transfers || {};
+    const handoffs = Array.isArray(view.handoffs) ? view.handoffs : [];
+    const rows = handoffs.filter((h) => inRange(h.export_ts || h.import_ts));
     $("panel-transfers").innerHTML = `
       <div class="stats">
-        ${stat("Last mode", s.last_package_mode || "—")}
-        ${stat("Last bytes", s.last_package_bytes || "—")}
-        ${stat("Members", s.last_package_members || "—")}
-        ${stat("Verify", verify, verify === "ok" ? "ok" : verify === "fail" ? "bad" : "")}
+        ${stat("Exports OK", view.exports_ok)}
+        ${stat("Imports OK", view.imports_ok)}
+        ${stat("Handoffs", rows.length)}
       </div>
       <table>
-        <thead><tr><th>Time</th><th>Kind</th><th>Detail</th></tr></thead>
+        <thead>
+          <tr>
+            <th>Status</th><th>Mode</th><th>Package</th><th>Bytes</th>
+            <th>Members</th><th>Nodes</th><th>Verify</th><th>From / to</th>
+          </tr>
+        </thead>
         <tbody>
-          ${xfer
-            .map((e) => {
-              const p = e.payload || {};
-              const detail = [
-                p.mode && `mode=${p.mode}`,
-                p.redacted !== undefined && `redacted=${p.redacted}`,
-                p.bytes !== undefined && `bytes=${p.bytes}`,
-                p.path && `path=${p.path}`,
-                p.ok !== undefined && `ok=${p.ok}`,
-                p.verify_ok !== undefined && `verify_ok=${p.verify_ok}`,
-                p.error && `error=${p.error}`,
-              ]
-                .filter(Boolean)
-                .join(" ");
-              return `<tr><td>${esc(e.ts)}</td><td><code>${esc(e.kind)}</code></td><td><code>${esc(detail)}</code></td></tr>`;
+          ${rows
+            .map((h) => {
+              const status = h.status || "";
+              const cls = status === "failed" ? "bad" : status === "connected" ? "ok" : "";
+              const label = h.redacted === true ? '<span class="badge">redacted</span>' : "";
+              const path = h.export_path || h.import_path || "";
+              const verify = h.verify_ok === true ? "ok" : h.verify_ok === false ? "fail" : "";
+              const verifyText = [verify, h.error || ""].filter(Boolean).join(" ");
+              const ends = [h.export_source, h.import_source].filter(Boolean).join(" -> ");
+              const who = [ends, h.runtime || ""].filter(Boolean).join(" ");
+              const bad = h.verify_ok === false || status === "failed" ? "bad" : "";
+              return `<tr>
+                <td class="${cls}">${esc(status)}</td>
+                <td>${esc(h.mode || "")} ${label}</td>
+                <td><code>${esc(path)}</code></td>
+                <td>${esc(fmt(h.bytes))}</td>
+                <td>${esc(fmt(h.member_count))}</td>
+                <td>${esc(fmt(h.node_count))}</td>
+                <td class="${bad}">${esc(verifyText)}</td>
+                <td>${esc(who)}</td>
+              </tr>`;
             })
-            .join("") || `<tr><td colspan="3" class="muted">No transfer events in range.</td></tr>`}
+            .join("") || `<tr><td colspan="8" class="muted">No transfer handoffs in range.</td></tr>`}
         </tbody>
       </table>`;
   }

@@ -227,6 +227,16 @@ A **handoff** in the Transfers view is an `export.completed` followed by an
 `import.completed` that shares `trajectory_id` (and optionally matching
 content hashes). The UI may draw them as one edge; the event log stays flat.
 
+### 4.1 Reader object (`summary.transfers`)
+
+| Field | Definition |
+|-------|------------|
+| `exports_ok`, `imports_ok` | Same counts as the summary rollup |
+| `handoffs[].status` | `connected` when an import attaches and `verify_ok` is true. `failed` when export `ok` is false or import `verify_ok` is false. `export_only` / `import_only` when the other side is missing |
+| pairing | Same `path` wins. Otherwise the oldest open export in that trajectory is used. Events are already scoped to one trajectory id |
+
+The panel copies `error` and `redacted` from those events. It does not read thought bodies.
+
 ---
 
 ## 5. Offline derivation from `.tir`
