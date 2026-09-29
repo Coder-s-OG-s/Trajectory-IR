@@ -210,6 +210,23 @@ estimated_tokens(char_len) = ceil(char_len / 4)
 If `raw_char_len` is missing, set `tokens_avoided_estimated` to `null` and show
 size-unit savings (`raw_size_units - size_units`) when those fields exist.
 
+### 3.3 Reader object (`summary.economy`)
+
+The reader copies the §3.2 headline onto `economy` so the panel does not
+estimate tokens itself.
+
+| Field | Definition |
+|-------|------------|
+| `raw_estimated_tokens`, `projected_estimated_tokens`, `tokens_avoided_estimated` | Same values as §3.2 (latest usable projection) |
+| `projection_hits` | Count of `context.projected` events |
+| `redaction_collapses` | Same sum as §3.2 |
+| `size_units_saved` | `max(0, raw_size_units - size_units)` on that latest projection, or null |
+| `lifetime_raw_estimated_tokens`, `lifetime_projected_estimated_tokens`, `lifetime_tokens_avoided_estimated` | Sum across projection events that carried the needed char lengths. Null when none did. This is not the latest headline |
+| `steps` | Projection and redaction events in append order, with per-event estimates |
+| `largest` | Projection steps ordered by raw estimated tokens, then size units |
+
+`steps` does not include thought bodies. CSV and JSON export use this object.
+
 ---
 
 ## 4. Transfer metrics

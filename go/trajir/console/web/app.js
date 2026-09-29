@@ -200,36 +200,138 @@
       </table>`;
   }
 
+  function economyCSV(steps) {
+    const header = [
+      "id",
+      "ts",
+      "kind",
+      "step_n",
+      "mode",
+      "raw_estimated_tokens",
+      "projected_estimated_tokens",
+      "tokens_avoided_estimated",
+      "dropped",
+      "thought_collapses",
+      "secret_field_hits",
+    ];
+    const lines = [header.join(",")];
+    (steps || []).forEach((row) => {
+      const cells = [
+        row.id,
+        row.ts,
+        row.kind,
+        row.step_n,
+        row.mode,
+        row.raw_estimated_tokens,
+        row.projected_estimated_tokens,
+        row.tokens_avoided_estimated,
+        row.dropped,
+        row.thought_collapses,
+        row.secret_field_hits,
+      ].map((v) => {
+        if (v === null || v === undefined) return "";
+        const s = String(v);
+        return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+      });
+      lines.push(cells.join(","));
+    });
+    return lines.join("\n") + "\n";
+  }
+
+  function downloadText(name, text, type) {
+    const blob = new Blob([text], { type: type });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
   function renderEconomy() {
     const s = state.summary || {};
-    const note =
-      s.tokens_avoided_estimated === null || s.tokens_avoided_estimated === undefined
-        ? "Token avoidance is null when raw/projected char lengths were not emitted."
-        : "estimated_tokens = ceil(chars/4). Not provider billing.";
+    const economy = s.economy || {};
+    const steps = (economy.steps || []).filter((row) => inRange(row.ts));
+    const largest = (economy.largest || []).filter((row) => inRange(row.ts));
+    const noProjection = !economy.projection_hits;
+    const empty = steps.length === 0
+      ? (noProjection ? "No projection events yet." : "No economy events in range.")
+      : "";
+    const projectionNote = noProjection && steps.length > 0 ? "No projection events yet." : "";
+    const saved =
+      economy.size_units_saved === null || economy.size_units_saved === undefined
+        ? "Size-unit savings unknown (raw_size_units was not emitted)."
+        : `Latest size-unit savings: ${economy.size_units_saved}.`;
     $("panel-economy").innerHTML = `
       <div class="stats">
-        ${stat("Projection units", s.projection_size_units)}
-        ${stat("Budget", s.projection_budget)}
-        ${stat("Nodes dropped", s.nodes_dropped)}
-        ${stat("Raw est. tokens", s.raw_estimated_tokens)}
-        ${stat("Projected est. tokens", s.projected_estimated_tokens)}
-        ${stat("Tokens avoided (est.)", s.tokens_avoided_estimated)}
-        ${stat("Redaction collapses", s.redaction_collapses)}
+        ${stat("Latest raw est. tokens", economy.raw_estimated_tokens)}
+        ${stat("Latest projected est. tokens", economy.projected_estimated_tokens)}
+        ${stat("Latest tokens avoided (est.)", economy.tokens_avoided_estimated)}
+        ${stat("Lifetime tokens avoided (est.)", economy.lifetime_tokens_avoided_estimated)}
+        ${stat("Projection hits", economy.projection_hits)}
+        ${stat("Redaction collapses", economy.redaction_collapses)}
       </div>
-      <p class="muted">${esc(note)}</p>
-      <table>
-        <thead><tr><th>Time</th><th>Kind</th><th>Detail</th></tr></thead>
-        <tbody>
-          ${filteredEvents()
-            .filter((e) => e.kind === "context.projected" || e.kind === "redaction.applied")
-            .map((e) => {
-              const p = e.payload || {};
-              const detail = JSON.stringify(p);
-              return `<tr><td>${esc(e.ts)}</td><td><code>${esc(e.kind)}</code></td><td><code>${esc(detail)}</code></td></tr>`;
-            })
-            .join("") || `<tr><td colspan="3" class="muted">No economy events in range.</td></tr>`}
-        </tbody>
-      </table>`;
+      <p class="muted">estimated_tokens uses ceil(chars/4) on the server. This is not a provider invoice.</p>
+      <p class="muted">${esc(saved)}</p>
+      ${projectionNote ? `<p class="empty-economy" role="status">${esc(projectionNote)}</p>` : ""}
+      <div class="economy-actions">
+        <button type="button" class="btn" id="economy-json">Download JSON</button>
+        <button type="button" class="btn" id="economy-csv">Download CSV</button>
+      </div>
+      ${
+        empty
+          ? `<p class="empty-economy" role="status">${esc(empty)}</p>`
+          : `<table>
+              <thead><tr><th>Time</th><th>Kind</th><th>Step</th><th>Raw est.</th><th>Projected est.</th><th>Avoided est.</th><th>Dropped</th><th>Redaction</th></tr></thead>
+              <tbody>${steps
+                .map((row) => {
+                  const redaction =
+                    row.kind === "redaction.applied"
+                      ? `thoughts ${fmt(row.thought_collapses)}, fields ${fmt(row.secret_field_hits)}${row.mode ? ", " + row.mode : ""}`
+                      : "—";
+                  return `<tr>
+                    <td>${esc(row.ts)}</td>
+                    <td><code>${esc(row.kind)}</code></td>
+                    <td>${esc(fmt(row.step_n))}</td>
+                    <td>${esc(fmt(row.raw_estimated_tokens))}</td>
+                    <td>${esc(fmt(row.projected_estimated_tokens))}</td>
+                    <td>${esc(fmt(row.tokens_avoided_estimated))}</td>
+                    <td>${esc(fmt(row.dropped))}</td>
+                    <td>${esc(redaction)}</td>
+                  </tr>`;
+                })
+                .join("")}</tbody>
+            </table>
+            <h3>Largest context payloads</h3>
+            <table>
+              <thead><tr><th>Time</th><th>Step</th><th>Raw est.</th><th>Size units</th><th>Dropped</th></tr></thead>
+              <tbody>${
+                largest
+                  .map(
+                    (row) => `<tr>
+                      <td>${esc(row.ts)}</td>
+                      <td>${esc(fmt(row.step_n))}</td>
+                      <td>${esc(fmt(row.raw_estimated_tokens))}</td>
+                      <td>${esc(fmt(row.size_units))}</td>
+                      <td>${esc(fmt(row.dropped))}</td>
+                    </tr>`
+                  )
+                  .join("") || `<tr><td colspan="5" class="muted">No projection rows in range.</td></tr>`
+              }</tbody>
+            </table>`
+      }`;
+    const id = state.id || "trajectory";
+    const jsonBtn = $("economy-json");
+    const csvBtn = $("economy-csv");
+    if (jsonBtn) {
+      jsonBtn.addEventListener("click", () => {
+        downloadText(`${id}-economy.json`, JSON.stringify(economy, null, 2) + "\n", "application/json");
+      });
+    }
+    if (csvBtn) {
+      csvBtn.addEventListener("click", () => {
+        downloadText(`${id}-economy.csv`, economyCSV(economy.steps), "text/csv");
+      });
+    }
   }
 
   function renderPanels() {
