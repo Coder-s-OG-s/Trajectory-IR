@@ -15,7 +15,7 @@ Board: [Milestones](https://github.com/Coder-s-OG-s/Trajectory-IR/milestones)
 | **Phase 1B Go primary SDK** | Closed | Complete; released as **v0.2.0**. |
 | **Phase 1C harden and adopt** | Closed | Complete at **v0.2.1** (protection, live stack docs, release assets). |
 | **Phase CI/CD harden** | Open | Scorecard, CodeQL, security scan, SBOM, race, CODEOWNERS. See [CI_HARDENING.md](CI_HARDENING.md). |
-| **Trajectory console** | Open | Operator console: seals, transfers, context economy. Event vocab in [CONSOLE_EVENTS.md](CONSOLE_EVENTS.md). |
+| **Trajectory console** | Open | Operator console: seals, transfers, context economy. Event vocab in [CONSOLE_EVENTS.md](CONSOLE_EVENTS.md). Boot steps in [CONSOLE_RUNBOOK.md](CONSOLE_RUNBOOK.md). |
 | **CNCF Sandbox prep** | Open | Process readiness only (not product features). See [CNCF_SANDBOX_APPLICATION_OUTLINE.md](CNCF_SANDBOX_APPLICATION_OUTLINE.md). |
 | **Future deferred product** | Open | Signatures, Fluid, SaaS, etc. Park only. |
 

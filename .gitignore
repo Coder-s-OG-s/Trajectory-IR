@@ -94,4 +94,5 @@ website/site/
 
 # Local demo capture workdirs
 go/_demo_capture*/
+.console-data/
 
