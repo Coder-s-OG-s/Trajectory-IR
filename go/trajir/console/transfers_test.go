@@ -125,11 +125,15 @@ func TestTransfersUITrustsServerHandoffs(t *testing.T) {
 	}
 	src := string(b)
 	start := strings.Index(src, "function renderTransfers")
-	end := strings.Index(src, "function renderEconomy")
-	if start < 0 || end < start {
+	if start < 0 {
 		t.Fatal("renderTransfers block missing")
 	}
-	fn := src[start:end]
+	rest := src[start:]
+	next := strings.Index(rest[len("function renderTransfers"):], "\n  function ")
+	fn := rest
+	if next >= 0 {
+		fn = rest[:len("function renderTransfers")+next]
+	}
 	for _, want := range []string{"s.transfers", "handoffs", "redacted", "No transfer handoffs"} {
 		if !strings.Contains(fn, want) {
 			t.Fatalf("missing %q", want)
