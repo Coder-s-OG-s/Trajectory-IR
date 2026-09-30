@@ -65,6 +65,10 @@ func (s *Server) mountUI() {
 	s.Mux.HandleFunc("GET /ui", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/", http.StatusFound)
 	})
+	s.Mux.HandleFunc("GET /favicon.ico", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		http.ServeFileFS(w, r, sub, "logo.png")
+	})
 }
 
 func (s *Server) Handler() http.Handler { return s.Mux }

@@ -90,6 +90,10 @@ func TestDashboardUIShell(t *testing.T) {
 		"Show data folder",
 		"Open PowerShell here",
 		"Light mode",
+		`rel="icon"`,
+		"/ui/logo.png",
+		"/ui/logo_transparent.png",
+		`alt="Trajectory IR"`,
 	} {
 		if !strings.Contains(html, want) {
 			t.Fatalf("missing %q in html", want)
