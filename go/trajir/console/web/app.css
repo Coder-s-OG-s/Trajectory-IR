@@ -378,7 +378,7 @@ td.bad { color: var(--bad); font-weight: 600; }
   margin-top: 1rem;
 }
 .help div {
-  border: 1px dashed var(--border); border-radius: var(--radius-sm); padding: 0.75rem;
+  border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0.75rem;
 }
 .help h3 { margin: 0 0 0.3rem; font-size: 0.88rem; }
 .help p { margin: 0; font-size: 0.8rem; color: var(--muted); }

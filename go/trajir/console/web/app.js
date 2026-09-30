@@ -145,12 +145,12 @@
   }
 
   function fmt(n) {
-    if (n === null || n === undefined) return "—";
+    if (n === null || n === undefined) return "none";
     return String(n);
   }
 
   function fmtTime(ts) {
-    if (!ts) return "—";
+    if (!ts) return "none";
     return String(ts).replace("T", " ").replace("Z", " UTC");
   }
 
@@ -199,7 +199,7 @@
     if (!el) return;
     const s = state.savings || {};
     const n = s.tokens_avoided_estimated;
-    el.textContent = n === null || n === undefined ? "—" : String(n);
+    el.textContent = n === null || n === undefined ? "none" : String(n);
     el.classList.toggle("ok", n !== null && n !== undefined);
   }
 
@@ -215,7 +215,7 @@
       btn.dataset.id = run.trajectory_id;
       if (run.trajectory_id === state.id) btn.setAttribute("aria-current", "true");
       const saved = run.tokens_avoided_estimated;
-      btn.innerHTML = `<span class="name">${esc(run.trajectory_id)}</span><span class="meta">${esc(fmt(run.event_count))} events · saved ${esc(fmt(saved))}</span>`;
+      btn.innerHTML = `<span class="name">${esc(run.trajectory_id)}</span><span class="meta">${esc(fmt(run.event_count))} events, saved ${esc(fmt(saved))}</span>`;
       btn.addEventListener("click", () => selectTrajectory(run.trajectory_id));
       list.appendChild(btn);
     });
@@ -316,7 +316,7 @@
         ${stat("Events in view", ev.length)}
         ${stat("Steps logged", s.node_count)}
       </div>
-      <p class="muted lede">Newest first. Words are for people; the log still uses the real event names. Tokens saved is estimated_tokens (ceil chars/4), not a provider invoice.</p>
+      <p class="muted lede">Newest first. Words are for people; the log still uses the real event names. Tokens saved is estimated_tokens (ceil of chars divided by 4), not a provider invoice.</p>
       <ol class="timeline">
         ${
           ev.length
@@ -328,7 +328,7 @@
                     <span class="dot ${cls}"></span>
                     <div>
                       <div class="what">${esc(kindLabel(e.kind))}</div>
-                      <div class="when">${esc(fmtTime(e.ts))} · <code>${esc(e.kind)}</code></div>
+                      <div class="when">${esc(fmtTime(e.ts))} <code>${esc(e.kind)}</code></div>
                       <div class="detail">${esc(eventDetail(e))}</div>
                     </div>
                   </li>`;
@@ -416,7 +416,7 @@
         <thead>
           <tr>
             <th>Status</th><th>Mode</th><th>Package</th><th>Bytes</th>
-            <th>Members</th><th>Nodes</th><th>Verify</th><th>From / to</th>
+            <th>Members</th><th>Nodes</th><th>Verify</th><th>Source dest</th>
           </tr>
         </thead>
         <tbody>
@@ -430,7 +430,7 @@
               const verifyText = [verify, h.error || ""].filter(Boolean).join(" ");
               const sources = [h.export_source, h.import_source].filter(Boolean);
               const runtime = h.runtime || "";
-              const ends = sources.join(" -> ");
+              const ends = sources.join(" to ");
               const who = !runtime || sources.indexOf(runtime) >= 0 ? ends || runtime : [ends, runtime].filter(Boolean).join(" ");
               const bad = h.verify_ok === false || status === "failed" ? "bad" : "";
               const statusWord =
@@ -521,13 +521,13 @@
     const projectionNote = noProjection && steps.length > 0 ? "No projection events yet." : "";
     const saved =
       economy.size_units_saved === null || economy.size_units_saved === undefined
-        ? "Size-unit savings unknown (raw_size_units was not emitted)."
-        : `Latest size-unit savings: ${economy.size_units_saved}.`;
+        ? "Size unit savings unknown (raw_size_units was not emitted)."
+        : `Latest size unit savings: ${economy.size_units_saved}.`;
     const raw = economy.raw_estimated_tokens;
     const proj = economy.projected_estimated_tokens;
     const whole = raw || 0;
     $("panel-economy").innerHTML = `
-      <p class="lede muted">We count how much context we dropped before calling the model. estimated_tokens uses ceil(chars/4) on the server. This is not a provider invoice.</p>
+      <p class="lede muted">We count how much context we dropped before calling the model. estimated_tokens uses ceil of chars divided by 4 on the server. This is not a provider invoice.</p>
       <div class="stats">
         ${stat("Before trim", economy.raw_estimated_tokens)}
         ${stat("After trim", economy.projected_estimated_tokens)}
@@ -569,7 +569,7 @@
                   const redaction =
                     row.kind === "redaction.applied"
                       ? `thoughts ${fmt(row.thought_collapses)}, fields ${fmt(row.secret_field_hits)}${row.mode ? ", " + row.mode : ""}`
-                      : "—";
+                      : "none";
                   return `<tr>
                     <td>${esc(fmtTime(row.ts))}</td>
                     <td>${esc(kindLabel(row.kind))} <code>${esc(row.kind)}</code></td>
@@ -585,7 +585,7 @@
             </table>
             <h3>Largest context payloads</h3>
             <table>
-              <thead><tr><th>Time</th><th>Step</th><th>Raw est.</th><th>Size units</th><th>Dropped</th></tr></thead>
+              <thead><tr><th>Time</th><th>Step</th><th>Raw estimate</th><th>Size units</th><th>Dropped</th></tr></thead>
               <tbody>${
                 largest
                   .map(

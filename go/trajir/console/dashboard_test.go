@@ -99,9 +99,17 @@ func TestDashboardUIShell(t *testing.T) {
 	rr2 := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rr2, req2)
 	js := rr2.Body.String()
-	for _, want := range []string{"/v1/dashboard", "renderHome", "kindLabel", "applyTheme", "tickLive"} {
+	for _, want := range []string{"/v1/dashboard", "renderHome", "kindLabel", "applyTheme", "tickLive", `return "none"`} {
 		if !strings.Contains(js, want) {
 			t.Fatalf("missing %q in js", want)
+		}
+	}
+	for _, src := range []string{html, js} {
+		if strings.Contains(src, "\u2014") || strings.Contains(src, "\u2013") {
+			t.Fatal("dashboard copy must not use em or en dashes")
+		}
+		if strings.Contains(src, "\u00b7") {
+			t.Fatal("dashboard copy must not use middle dots")
 		}
 	}
 }
