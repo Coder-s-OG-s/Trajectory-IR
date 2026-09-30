@@ -51,6 +51,9 @@ code { font-family: ui-monospace, Consolas, monospace; font-size: 0.9em; }
 }
 .btn:hover, [role="tab"]:hover { border-color: var(--accent); }
 .row { display: flex; gap: 0.5rem; }
+.row.wrap { flex-wrap: wrap; }
+.tiny { font-size: 0.75rem; line-height: 1.35; }
+.pkg-actions { display: flex; gap: 0.35rem; flex-wrap: wrap; }
 
 .traj-list { display: flex; flex-direction: column; gap: 0.35rem; overflow: auto; flex: 1; }
 .traj-item {

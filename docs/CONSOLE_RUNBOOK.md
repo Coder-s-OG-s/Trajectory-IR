@@ -10,8 +10,10 @@ The fixture `go/trajir/console/testdata/console_demo.ndjson` is trajectory
 `console-demo`. It has one seal create, one seal verify, one projection
 (`raw_char_len` 400, `projected_char_len` 100, so the reader reports 75
 estimated tokens avoided), one redaction count, and one `.tir` export followed
-by an import of `demo.tir`. The UI copies those summary fields. It does not
-recompute hashes or token estimates.
+by an import of `demo.tir`. The demo script also copies
+`testdata/sample_thin.tir` to `packages/console-demo/demo.tir` so Transfers can
+download the file and Show in folder can open it. The UI copies summary fields.
+It does not recompute hashes or token estimates.
 
 ## Prepare the data
 
@@ -45,6 +47,8 @@ Open `http://127.0.0.1:8787/?id=console-demo`.
 2. Seals shows `seal.created` then `seal.verified` with `ok=true`.
 3. Transfers shows the export and the import of `demo.tir` (mode thin, redacted).
 4. Economy shows the projection. Tokens avoided (est.) is 75. That figure is `ceil(chars/4)`, not a provider invoice.
+5. Transfers lists the local `demo.tir` copy. Download and Show in folder only work on this machine.
+6. Sidebar Show data folder / Open PowerShell here talk to `POST /v1/local/*` on loopback. The browser does not spawn a shell itself.
 
 Stop the process with Ctrl+C. Nothing here phones home.
 

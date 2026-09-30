@@ -33,6 +33,10 @@ func NewServer(store *Store, token string) *Server {
 	s.Mux.HandleFunc("GET /v1/trajectories", s.handleList)
 	s.Mux.HandleFunc("GET /v1/trajectories/{id}/events", s.handleEvents)
 	s.Mux.HandleFunc("GET /v1/trajectories/{id}/summary", s.handleSummary)
+	s.Mux.HandleFunc("GET /v1/trajectories/{id}/packages", s.handleListPackages)
+	s.Mux.HandleFunc("GET /v1/trajectories/{id}/packages/{name}", s.handleGetPackage)
+	s.Mux.HandleFunc("POST /v1/local/reveal", s.handleReveal)
+	s.Mux.HandleFunc("POST /v1/local/open-shell", s.handleOpenShell)
 	s.Mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok\n"))
@@ -144,6 +148,35 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 		"trajectory_id": id,
 		"events":        events,
 	})
+}
+
+func (s *Server) handleListPackages(w http.ResponseWriter, r *http.Request) {
+	if !s.authorize(w, r) {
+		return
+	}
+	id := r.PathValue("id")
+	items, err := s.Store.ListPackages(id)
+	if err != nil {
+		writeErr(w, statusForRead(err), err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"packages": items})
+}
+
+func (s *Server) handleGetPackage(w http.ResponseWriter, r *http.Request) {
+	if !s.authorize(w, r) {
+		return
+	}
+	id := r.PathValue("id")
+	name := r.PathValue("name")
+	path, err := s.Store.PackagePath(id, name)
+	if err != nil {
+		writeErr(w, statusForRead(err), err.Error())
+		return
+	}
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", `attachment; filename="`+name+`"`)
+	http.ServeFile(w, r, path)
 }
 
 func (s *Server) handleSummary(w http.ResponseWriter, r *http.Request) {

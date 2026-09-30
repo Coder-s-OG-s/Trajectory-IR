@@ -161,6 +161,7 @@ observational.
 | `node_count` | integer | yes | |
 | `ok` | boolean | yes | |
 | `error` | string | no | |
+| `console_path` | string | no | Slash-relative copy under `TRAJIR_CONSOLE_DATA` (`packages/<id>/<name>.tir`) when the console staged a local file |
 
 #### `import.completed`
 
@@ -253,6 +254,8 @@ content hashes). The UI may draw them as one edge; the event log stays flat.
 | pairing | Same `path` wins. Otherwise the oldest open export in that trajectory is used. Events are already scoped to one trajectory id |
 
 The panel copies `error` and `redacted` from those events. It does not read thought bodies.
+
+When `console_path` is present, the Transfers panel prefers that path for display. Local copies are listed from `GET /v1/trajectories/{id}/packages`, not by reading the host temp path.
 
 ---
 

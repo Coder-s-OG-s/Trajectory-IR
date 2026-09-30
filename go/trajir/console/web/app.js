@@ -4,6 +4,7 @@
     id: null,
     events: [],
     summary: null,
+    packages: [],
     tab: "overview",
   };
 
@@ -165,12 +166,36 @@
     const view = s.transfers || {};
     const handoffs = Array.isArray(view.handoffs) ? view.handoffs : [];
     const rows = handoffs.filter((h) => inRange(h.export_ts || h.import_ts));
+    const packs = state.packages || [];
     $("panel-transfers").innerHTML = `
       <div class="stats">
         ${stat("Exports OK", view.exports_ok)}
         ${stat("Imports OK", view.imports_ok)}
         ${stat("Handoffs", rows.length)}
+        ${stat("Local .tir copies", packs.length)}
       </div>
+      <p class="muted">Local copies live under <code>TRAJIR_CONSOLE_DATA/packages/</code>. Host temp paths are not the console store.</p>
+      ${
+        packs.length
+          ? `<table>
+              <thead><tr><th>Local package</th><th>Bytes</th><th></th></tr></thead>
+              <tbody>
+                ${packs
+                  .map(
+                    (p) => `<tr>
+                      <td><code>${esc(p.name)}</code></td>
+                      <td>${esc(fmt(p.bytes))}</td>
+                      <td class="pkg-actions">
+                        <button type="button" class="btn" data-dl="${esc(p.name)}">Download</button>
+                        <button type="button" class="btn" data-reveal="${esc(p.name)}">Show in folder</button>
+                      </td>
+                    </tr>`
+                  )
+                  .join("")}
+              </tbody>
+            </table>`
+          : `<p class="muted">No local .tir copy yet. Export with a file sink, or run the demo script.</p>`
+      }
       <table>
         <thead>
           <tr>
@@ -184,7 +209,7 @@
               const status = h.status || "";
               const cls = status === "failed" ? "bad" : status === "connected" ? "ok" : "";
               const label = h.redacted === true ? '<span class="badge">redacted</span>' : "";
-              const path = h.export_path || h.import_path || "";
+              const path = h.console_path || h.export_path || h.import_path || "";
               const verify = h.verify_ok === true ? "ok" : h.verify_ok === false ? "fail" : "";
               const verifyText = [verify, h.error || ""].filter(Boolean).join(" ");
               const sources = [h.export_source, h.import_source].filter(Boolean);
@@ -206,6 +231,15 @@
             .join("") || `<tr><td colspan="8" class="muted">No transfer handoffs in range.</td></tr>`}
         </tbody>
       </table>`;
+    $("panel-transfers").querySelectorAll("[data-dl]").forEach((btn) => {
+      btn.addEventListener("click", () => downloadPackage(btn.getAttribute("data-dl")));
+    });
+    $("panel-transfers").querySelectorAll("[data-reveal]").forEach((btn) => {
+      btn.addEventListener("click", () => postLocal("/v1/local/reveal", {
+        trajectory_id: state.id,
+        name: btn.getAttribute("data-reveal"),
+      }));
+    });
   }
 
   function economyCSV(steps) {
@@ -398,23 +432,72 @@
     });
     showBanner("");
     try {
-      const [ev, sum] = await Promise.all([
+      const [ev, sum, packs] = await Promise.all([
         api(`/v1/trajectories/${encodeURIComponent(id)}/events`),
         api(`/v1/trajectories/${encodeURIComponent(id)}/summary`),
+        api(`/v1/trajectories/${encodeURIComponent(id)}/packages`).catch(() => ({ packages: [] })),
       ]);
       state.events = (ev.events || []).map((e) => ({
         ...e,
         payload: typeof e.payload === "string" ? safeParse(e.payload) : e.payload || {},
       }));
       state.summary = sum;
+      state.packages = packs.packages || [];
       renderPanels();
       selectTab(state.tab);
     } catch (err) {
       state.events = [];
       state.summary = null;
+      state.packages = [];
       ["overview", "seals", "transfers", "economy"].forEach((n) => {
         $("panel-" + n).innerHTML = `<p class="empty-seals" role="status">Could not load this trajectory.</p>`;
       });
+      showBanner(String(err.message || err), true);
+    }
+  }
+
+  async function postLocal(path, body) {
+    showBanner("");
+    try {
+      const res = await fetch(path, {
+        method: "POST",
+        headers: { ...headers(), "Content-Type": "application/json" },
+        body: JSON.stringify(body || { root: true }),
+      });
+      const text = await res.text();
+      let data = null;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch (_) {
+        data = { error: text };
+      }
+      if (!res.ok) {
+        throw new Error((data && data.error) || res.statusText);
+      }
+      showBanner("Opened " + ((data && data.path) || "local path"));
+    } catch (err) {
+      showBanner(String(err.message || err), true);
+    }
+  }
+
+  async function downloadPackage(name) {
+    if (!state.id || !name) return;
+    try {
+      const res = await fetch(
+        `/v1/trajectories/${encodeURIComponent(state.id)}/packages/${encodeURIComponent(name)}`,
+        { headers: headers() }
+      );
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || res.statusText);
+      }
+      const blob = await res.blob();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = name;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch (err) {
       showBanner(String(err.message || err), true);
     }
   }
@@ -431,6 +514,8 @@
     loadToken();
     $("token").addEventListener("change", saveToken);
     $("refresh").addEventListener("click", loadList);
+    $("open-folder").addEventListener("click", () => postLocal("/v1/local/reveal", { root: true }));
+    $("open-shell").addEventListener("click", () => postLocal("/v1/local/open-shell", { root: true }));
     $("from").addEventListener("change", () => state.id && renderPanels());
     $("to").addEventListener("change", () => state.id && renderPanels());
     document.querySelectorAll('[role="tab"]').forEach((btn) => {
