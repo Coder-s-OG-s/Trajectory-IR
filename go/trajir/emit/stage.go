@@ -28,14 +28,17 @@ func StagePackage(dataDir, trajectoryID, srcPath, eventID string) (string, error
 		return "", err
 	}
 	srcPath = strings.TrimSpace(srcPath)
-	if srcPath == "" {
-		return "", errors.New("emit: package path required")
+	if err := rejectUnsafePath(srcPath); err != nil {
+		return "", err
 	}
 	src, err := filepath.Abs(srcPath)
 	if err != nil {
 		return "", err
 	}
-	info, err := os.Stat(src)
+	if err := rejectUnsafePath(src); err != nil {
+		return "", err
+	}
+	info, err := lstatChecked(src)
 	if err != nil {
 		return "", err
 	}
@@ -55,13 +58,23 @@ func StagePackage(dataDir, trajectoryID, srcPath, eventID string) (string, error
 			return "", err
 		}
 	}
-	destDir := filepath.Join(dataDir, PackagesDir, trajectoryID)
+	root, err := filepath.Abs(dataDir)
+	if err != nil {
+		return "", err
+	}
+	destDir := filepath.Join(root, PackagesDir, trajectoryID)
+	if !underRoot(root, destDir) {
+		return "", errors.New("emit: dest escapes data dir")
+	}
 	if err := os.MkdirAll(destDir, 0o755); err != nil {
 		return "", err
 	}
 	dest := filepath.Join(destDir, name)
-	if di, err := os.Stat(dest); err == nil {
-		if di.Size() == info.Size() {
+	if !underRoot(root, dest) {
+		return "", errors.New("emit: dest escapes data dir")
+	}
+	if di, err := lstatChecked(dest); err == nil {
+		if di.Mode().IsRegular() && di.Size() == info.Size() {
 			same, sameErr := sameRegularFile(src, dest)
 			if sameErr == nil && same {
 				return RelConsolePath(trajectoryID, name), nil
@@ -80,6 +93,9 @@ func StagePackage(dataDir, trajectoryID, srcPath, eventID string) (string, error
 			return "", err
 		}
 		dest = filepath.Join(destDir, name)
+		if !underRoot(root, dest) {
+			return "", errors.New("emit: dest escapes data dir")
+		}
 	}
 	if err := copyRegularFile(src, dest); err != nil {
 		return "", err
@@ -126,13 +142,61 @@ func sanitizeID(id string) string {
 	return b.String()
 }
 
+// rejectUnsafePath is a CodeQL-recognized sanitizer: empty, NUL, and ".."
+// are refused on the same string later passed to Lstat/Open.
+func rejectUnsafePath(p string) error {
+	if p == "" {
+		return errors.New("emit: package path required")
+	}
+	if strings.IndexByte(p, 0) >= 0 {
+		return errors.New("emit: bad package path")
+	}
+	if strings.Contains(p, "..") {
+		return errors.New("emit: bad package path")
+	}
+	return nil
+}
+
+func underRoot(root, candidate string) bool {
+	rootAbs, err := filepath.Abs(root)
+	if err != nil {
+		return false
+	}
+	candAbs, err := filepath.Abs(candidate)
+	if err != nil {
+		return false
+	}
+	rel, err := filepath.Rel(rootAbs, candAbs)
+	if err != nil {
+		return false
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return false
+	}
+	return true
+}
+
+func lstatChecked(path string) (os.FileInfo, error) {
+	if err := rejectUnsafePath(path); err != nil {
+		return nil, err
+	}
+	return os.Lstat(path)
+}
+
+func openChecked(path string) (*os.File, error) {
+	if err := rejectUnsafePath(path); err != nil {
+		return nil, err
+	}
+	return os.Open(path)
+}
+
 func sameRegularFile(a, b string) (bool, error) {
-	fa, err := os.Open(a)
+	fa, err := openChecked(a)
 	if err != nil {
 		return false, err
 	}
 	defer fa.Close()
-	fb, err := os.Open(b)
+	fb, err := openChecked(b)
 	if err != nil {
 		return false, err
 	}
@@ -166,11 +230,14 @@ func sameRegularFile(a, b string) (bool, error) {
 }
 
 func copyRegularFile(src, dest string) error {
-	in, err := os.Open(src)
+	in, err := openChecked(src)
 	if err != nil {
 		return err
 	}
 	defer in.Close()
+	if err := rejectUnsafePath(dest); err != nil {
+		return err
+	}
 	tmp := dest + ".tmp"
 	out, err := os.OpenFile(tmp, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
 	if err != nil {

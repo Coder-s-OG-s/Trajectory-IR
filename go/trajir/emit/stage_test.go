@@ -43,17 +43,137 @@ func TestStagePackageRejectsBadIDAndMissing(t *testing.T) {
 	if _, err := emit.StagePackage(dir, "t1", filepath.Join(dir, "missing.tir"), ""); err == nil {
 		t.Fatal("expected missing")
 	}
+	if _, err := emit.StagePackage("", "t1", filepath.Join(dir, "x.tir"), ""); err == nil {
+		t.Fatal("expected empty data dir")
+	}
+	if _, err := emit.StagePackage(dir, "", filepath.Join(dir, "x.tir"), ""); err == nil {
+		t.Fatal("expected empty trajectory id")
+	}
+	if _, err := emit.StagePackage(dir, "t1", "", "evt"); err == nil {
+		t.Fatal("expected empty src")
+	}
+}
+
+func TestStagePackageRejectsTraversalAndDir(t *testing.T) {
+	dir := t.TempDir()
+	traversal := dir + string(filepath.Separator) + ".." + string(filepath.Separator) + "secret.tir"
+	if _, err := emit.StagePackage(dir, "t1", traversal, "e"); err == nil {
+		t.Fatal("expected .. reject")
+	}
+	if _, err := emit.StagePackage(dir, "t1", dir, "e"); err == nil {
+		t.Fatal("expected directory reject")
+	}
+	if _, err := emit.StagePackage(dir, "t1", "foo\x00bar.tir", "e"); err == nil {
+		t.Fatal("expected NUL reject")
+	}
+}
+
+func TestStagePackageBadNameFallsBackToEventID(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "bad name.tir")
+	if err := os.WriteFile(src, []byte("pkg"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rel, err := emit.StagePackage(dir, "t1", src, "evt99")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rel != "packages/t1/evt99.tir" {
+		t.Fatalf("rel=%s", rel)
+	}
+	if _, err := emit.StagePackage(dir, "t1", src, ""); err == nil {
+		t.Fatal("expected fail without event id")
+	}
+}
+
+func TestStagePackageDuplicateDifferentContent(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "run.tir")
+	if err := os.WriteFile(src, []byte("first!!"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rel, err := emit.StagePackage(dir, "t1", src, "evt1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rel != "packages/t1/run.tir" {
+		t.Fatalf("rel=%s", rel)
+	}
+	if err := os.WriteFile(src, []byte("second!"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rel2, err := emit.StagePackage(dir, "t1", src, "evt2-extra")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rel2 != "packages/t1/run-evt2extra.tir" {
+		t.Fatalf("rel2=%s", rel2)
+	}
+	got, err := os.ReadFile(filepath.Join(dir, "packages", "t1", "run-evt2extra.tir"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "second!" {
+		t.Fatalf("copied %q", got)
+	}
+}
+
+func TestStagePackageDuplicateNoEventID(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "run.tir")
+	if err := os.WriteFile(src, []byte("aaaa"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := emit.StagePackage(dir, "t1", src, ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(src, []byte("bbbb"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rel, err := emit.StagePackage(dir, "t1", src, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rel != "packages/t1/run-dup.tir" {
+		t.Fatalf("rel=%s", rel)
+	}
 }
 
 func TestSafeTirName(t *testing.T) {
 	if _, err := emit.SafeTirName("ok.tir"); err != nil {
 		t.Fatal(err)
 	}
+	if got, err := emit.SafeTirName("ok.TIR"); err != nil || got != "ok.TIR" {
+		t.Fatalf("case: %s %v", got, err)
+	}
 	if _, err := emit.SafeTirName("../x.tir"); err == nil {
 		t.Fatal("expected reject")
 	}
 	if _, err := emit.SafeTirName("nope.zip"); err == nil {
 		t.Fatal("expected reject")
+	}
+	if _, err := emit.SafeTirName(""); err == nil {
+		t.Fatal("expected empty")
+	}
+	if _, err := emit.SafeTirName("a/b.tir"); err == nil {
+		t.Fatal("expected slash")
+	}
+	if _, err := emit.SafeTirName("bad name.tir"); err == nil {
+		t.Fatal("expected space")
+	}
+	long := strings.Repeat("a", 177) + ".tir"
+	if _, err := emit.SafeTirName(long); err == nil {
+		t.Fatal("expected too long")
+	}
+	okLen := strings.Repeat("a", 176) + ".tir"
+	if _, err := emit.SafeTirName(okLen); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRelConsolePath(t *testing.T) {
+	if got := emit.RelConsolePath("t1", "run.tir"); got != "packages/t1/run.tir" {
+		t.Fatalf("got %s", got)
 	}
 }
 
