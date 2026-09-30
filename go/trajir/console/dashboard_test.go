@@ -82,11 +82,14 @@ func TestDashboardUIShell(t *testing.T) {
 	html := rr.Body.String()
 	for _, want := range []string{
 		`id="home"`,
+		`id="theme-toggle"`,
+		`id="live-toggle"`,
 		"Find a run",
 		"All runs",
 		"Tokens saved (est.)",
 		"Show data folder",
 		"Open PowerShell here",
+		"Light mode",
 	} {
 		if !strings.Contains(html, want) {
 			t.Fatalf("missing %q in html", want)
@@ -96,7 +99,7 @@ func TestDashboardUIShell(t *testing.T) {
 	rr2 := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rr2, req2)
 	js := rr2.Body.String()
-	for _, want := range []string{"/v1/dashboard", "renderHome", "kindLabel"} {
+	for _, want := range []string{"/v1/dashboard", "renderHome", "kindLabel", "applyTheme", "tickLive"} {
 		if !strings.Contains(js, want) {
 			t.Fatalf("missing %q in js", want)
 		}

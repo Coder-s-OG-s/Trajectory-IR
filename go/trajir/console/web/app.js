@@ -1,5 +1,6 @@
 (() => {
   const $ = (id) => document.getElementById(id);
+  const LIVE_MS = 4000;
   const state = {
     id: null,
     events: [],
@@ -9,6 +10,8 @@
     runs: [],
     query: "",
     tab: "overview",
+    live: true,
+    inflight: false,
   };
 
   const KIND_LABELS = {
@@ -21,6 +24,49 @@
     "export.completed": "File sent",
     "import.completed": "File received",
   };
+
+  function sameJSON(a, b) {
+    try {
+      return JSON.stringify(a) === JSON.stringify(b);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function currentTheme() {
+    return document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
+  }
+
+  function applyTheme(theme) {
+    const next = theme === "light" ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", next);
+    try {
+      localStorage.setItem("trajir_console_theme", next);
+    } catch (_) {}
+    const btn = $("theme-toggle");
+    if (btn) {
+      btn.textContent = next === "light" ? "Dark mode" : "Light mode";
+      btn.setAttribute("aria-pressed", next === "light" ? "true" : "false");
+    }
+  }
+
+  function applyLive(on) {
+    state.live = !!on;
+    try {
+      localStorage.setItem("trajir_console_live", state.live ? "on" : "off");
+    } catch (_) {}
+    const btn = $("live-toggle");
+    const label = $("live-label");
+    if (btn) btn.setAttribute("aria-pressed", state.live ? "true" : "false");
+    if (label) label.textContent = state.live ? "Live" : "Paused";
+  }
+
+  function stampLive(ok) {
+    const el = $("live-stamp");
+    if (!el) return;
+    const t = new Date().toISOString().slice(11, 19);
+    el.textContent = ok ? "Updated " + t + " UTC" : "Update failed " + t + " UTC";
+  }
 
   function token() {
     return ($("token").value || "").trim();
@@ -591,12 +637,20 @@
     });
   }
 
-  async function loadSavings() {
+  async function loadSavings(quiet) {
     try {
       const dash = await api("/v1/dashboard");
+      if (quiet && sameJSON(state.savings, dash.savings) && sameJSON(state.runs, dash.runs)) {
+        stampLive(true);
+        return;
+      }
       state.savings = dash.savings || null;
       state.runs = dash.runs || [];
     } catch (_) {
+      if (quiet) {
+        stampLive(false);
+        return;
+      }
       try {
         state.savings = await api("/v1/savings");
       } catch (err) {
@@ -607,13 +661,14 @@
     renderRunList();
     if (!state.id) renderHome();
     if (state.id) renderOverview();
+    stampLive(true);
   }
 
   async function loadList() {
     saveToken();
     showBanner("");
     try {
-      await loadSavings();
+      await loadSavings(false);
     } catch (err) {
       showBanner(String(err.message || err), true);
       $("traj-list").innerHTML = "";
@@ -621,6 +676,45 @@
       state.savings = null;
       state.runs = [];
       renderSavings();
+    }
+  }
+
+  async function loadTrajectory(id, quiet) {
+    try {
+      const [ev, sum, packs] = await Promise.all([
+        api(`/v1/trajectories/${encodeURIComponent(id)}/events`),
+        api(`/v1/trajectories/${encodeURIComponent(id)}/summary`),
+        api(`/v1/trajectories/${encodeURIComponent(id)}/packages`).catch(() => ({ packages: [] })),
+      ]);
+      if (state.id !== id) return;
+      const events = (ev.events || []).map((e) => ({
+        ...e,
+        payload: typeof e.payload === "string" ? safeParse(e.payload) : e.payload || {},
+      }));
+      const packages = packs.packages || [];
+      if (quiet && sameJSON(state.events, events) && sameJSON(state.summary, sum) && sameJSON(state.packages, packages)) {
+        stampLive(true);
+        return;
+      }
+      state.events = events;
+      state.summary = sum;
+      state.packages = packages;
+      renderPanels();
+      selectTab(state.tab);
+      if (!quiet) loadSavings(true);
+      stampLive(true);
+    } catch (err) {
+      if (quiet) {
+        stampLive(false);
+        return;
+      }
+      state.events = [];
+      state.summary = null;
+      state.packages = [];
+      ["overview", "seals", "transfers", "economy"].forEach((n) => {
+        $("panel-" + n).innerHTML = `<p class="empty-seals" role="status">Could not load this trajectory.</p>`;
+      });
+      showBanner(String(err.message || err), true);
     }
   }
 
@@ -637,29 +731,17 @@
       el.setAttribute("aria-current", el.dataset.id === id ? "true" : "false");
     });
     showBanner("");
+    await loadTrajectory(id, false);
+  }
+
+  async function tickLive() {
+    if (!state.live || document.hidden || state.inflight) return;
+    state.inflight = true;
     try {
-      const [ev, sum, packs] = await Promise.all([
-        api(`/v1/trajectories/${encodeURIComponent(id)}/events`),
-        api(`/v1/trajectories/${encodeURIComponent(id)}/summary`),
-        api(`/v1/trajectories/${encodeURIComponent(id)}/packages`).catch(() => ({ packages: [] })),
-      ]);
-      state.events = (ev.events || []).map((e) => ({
-        ...e,
-        payload: typeof e.payload === "string" ? safeParse(e.payload) : e.payload || {},
-      }));
-      state.summary = sum;
-      state.packages = packs.packages || [];
-      renderPanels();
-      selectTab(state.tab);
-      loadSavings();
-    } catch (err) {
-      state.events = [];
-      state.summary = null;
-      state.packages = [];
-      ["overview", "seals", "transfers", "economy"].forEach((n) => {
-        $("panel-" + n).innerHTML = `<p class="empty-seals" role="status">Could not load this trajectory.</p>`;
-      });
-      showBanner(String(err.message || err), true);
+      await loadSavings(true);
+      if (state.id) await loadTrajectory(state.id, true);
+    } finally {
+      state.inflight = false;
     }
   }
 
@@ -719,6 +801,21 @@
 
   function boot() {
     loadToken();
+    try {
+      state.live = localStorage.getItem("trajir_console_live") !== "off";
+    } catch (_) {
+      state.live = true;
+    }
+    applyTheme(currentTheme());
+    applyLive(state.live);
+    $("theme-toggle").addEventListener("click", () => {
+      applyTheme(currentTheme() === "light" ? "dark" : "light");
+    });
+    $("live-toggle").addEventListener("click", () => applyLive(!state.live));
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden && state.live) tickLive();
+    });
+    setInterval(tickLive, LIVE_MS);
     $("token").addEventListener("change", saveToken);
     $("refresh").addEventListener("click", loadList);
     $("open-folder").addEventListener("click", () => postLocal("/v1/local/reveal", { root: true }));

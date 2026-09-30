@@ -50,7 +50,11 @@ all `/v1/*` routes. The UI has a token field (sessionStorage) for local demos.
 `POST /v1/local/reveal` and `POST /v1/local/open-shell` also require a loopback
 client. They never take a shell command from the browser.
 
-Open `http://127.0.0.1:8787/?id=<trajectory_id>` for a deep link.
+Open `http://127.0.0.1:8787/` for the home dashboard, or
+`http://127.0.0.1:8787/?id=<trajectory_id>` for a deep link.
+The UI can Light/Dark itself (saved in the browser) and Live-refresh
+`GET /v1/dashboard` plus the open run every few seconds. Pause Live if you
+want the page still. This is the same local data. It is not a remote stream.
 
 ## Library
 

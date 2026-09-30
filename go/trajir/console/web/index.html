@@ -1,9 +1,22 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Trajectory console</title>
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem("trajir_console_theme");
+        if (t !== "light" && t !== "dark") {
+          t = window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+        }
+        document.documentElement.setAttribute("data-theme", t);
+      } catch (e) {
+        document.documentElement.setAttribute("data-theme", "dark");
+      }
+    })();
+  </script>
   <link rel="stylesheet" href="/ui/app.css" />
 </head>
 <body>
@@ -64,6 +77,12 @@
           <p id="detail-sub" class="muted">Pick a run to see locks, files, and tokens saved.</p>
         </div>
         <div class="head-actions">
+          <button type="button" id="theme-toggle" class="btn ghost" aria-pressed="false">Light mode</button>
+          <button type="button" id="live-toggle" class="btn ghost live-btn" aria-pressed="true">
+            <span class="live-dot" aria-hidden="true"></span>
+            <span id="live-label">Live</span>
+          </button>
+          <span id="live-stamp" class="muted tiny">Waiting for data</span>
           <button type="button" id="back-home" class="btn ghost hidden">All runs</button>
           <div class="filters" aria-label="Time range, UTC">
             <label class="field inline">

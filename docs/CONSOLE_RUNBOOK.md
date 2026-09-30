@@ -52,6 +52,7 @@ Open `http://127.0.0.1:8787/` for the home dashboard, or
 6. **Tokens** shows the projection. Saved last time is 75. Same estimator as the sidebar.
 7. Download and Show in folder only work on this machine.
 8. Sidebar Show data folder / Open PowerShell here talk to `POST /v1/local/*` on loopback. The browser does not spawn a shell itself. Press `/` to search runs.
+9. Top right: **Light mode** / **Dark mode** remembers your choice. **Live** refreshes every 4 seconds. Pause it if you want the page still.
 
 Stop the process with Ctrl+C. Nothing here phones home.
 
