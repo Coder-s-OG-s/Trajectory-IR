@@ -14,7 +14,7 @@ Trajectory IR sits **on top of** durable execution engines. It does not replace 
 | Sealed decisions | Resume does not silently re-ask the model for a sealed step. The world may still have moved. |
 | Effect classes | Fail-closed mapping for tools (including MCP-aligned hints). `bash`/`python`/`sql` stay dangerous by name. |
 | Block-and-gate | At-most-one automatic retry of a non-idempotent tool. Not exactly-once in the world. |
-| Idempotency key | `trajectory_id:step_n:seq` on `TOOL_CALL`; host forwards it to the remote API. |
+| Idempotency key | Hashed seal-derived key on `TOOL_CALL`, exposed to the tool body; host forwards `Idempotency-Key` to the remote API. |
 | `.tir` packages | Thin or fat portable evidence with hash verification. This is the product. |
 | Dual SDK | **Go primary**, Python reference / parity |
 

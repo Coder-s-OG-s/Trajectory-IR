@@ -233,13 +233,25 @@ Tools registered from MCP (or any other source) must be mapped into this table b
 
 `AGENT_SPAWN` and `SENSITIVE` have no MCP equivalent, they are the two distinctions this project adds on top of MCP's four hints, driven by what the resume matrix (§8.2) and redaction (§9, R08) need that MCP has no reason to define. **If a tool's effect metadata is missing or ambiguous, it is classified as `NON_IDEMPOTENT_WRITE` by default.** This is a deliberate fail closed posture. An operator may explicitly override a tool to a safer class, but the default must never silently assume safety.
 
-**Open-world primitives.** Tools whose *arguments* are an arbitrary command, query, or UI action (`bash`, `shell`, `python` / `python_interpreter`, `sql_query`, `browser_action`, and the non-exhaustive list in `ClassifyTool` / `classify_tool`) cannot be classified from static MCP hints on the tool definition. `bash("cat file")` is a read; `bash("rm -rf /")` is a catastrophic write; `bash("curl …/spawn")` is a spawn. Trajectory IR does **not** parse those bodies. `ClassifyTool(name, annotations)` fail-closes known primitive names to `NON_IDEMPOTENT_WRITE` even if `readOnlyHint` is true. An operator who still wants a safer class must set `Tool.Effect` / `Tool.effect_class` explicitly and own that lie. R06 sandbox is an effect-class gate, not a process sandbox and not an AST analyzer.
+**Open-world primitives.** Tools whose *arguments* are an arbitrary command, query, or UI action (`bash`, `shell`, `python` / `python_interpreter`, `sql_query`, `browser_action`, and the non-exhaustive list in `ClassifyTool` / `classify_tool`) cannot be classified from static MCP hints on the tool definition. `bash("cat file")` is a read; `bash("rm -rf /")` is a catastrophic write; `bash("curl …/spawn")` is a spawn. Trajectory IR does **not** parse those bodies. `ClassifyTool(name, annotations)` fail-closes known primitive names to `NON_IDEMPOTENT_WRITE` even if `readOnlyHint` is true.
+
+`ClassifyTool` is not the whole gate. `ExecTool` / `RunStep` **must** refuse a `Tool` whose *name* is an open-world primitive and whose effect class is `PURE`, `READ_ONLY`, or `IDEMPOTENT_WRITE`, unless the operator set `AllowOpenWorldOverride` / `allow_open_world_override` on that `Tool` and owns that lie. Tagging `bash` as `NON_IDEMPOTENT_WRITE` (the honest default) does not require the flag. R06 sandbox is an effect-class gate, not a process sandbox and not an AST analyzer.
 
 ### 7.3 Idempotency keys
 
-`idempotency_key = trajectory_id:step_n:stable_call_id`
+```
+idempotency_key = hex(sha256(
+    "trajir-idempotency-v1" || 0x00 ||
+    utf8(tenant_id) || 0x00 ||
+    utf8(trajectory_id) || 0x00 ||
+    utf8(decimal(step_n)) || 0x00 ||
+    utf8(decimal(seq))
+))
+```
 
-`stable_call_id` is the sealed tool slot `seq` (typically `2 + 2*i` from the sealed `DECISION` tool list), never a fresh id minted after a crash. Implementations **must** record this string on the `TOOL_CALL` payload as `idempotency_key`. They **must not** inject it into the tool's user arguments (Python tools use explicit kwargs).
+Lowercase hex, 64 characters. `seq` is the sealed tool slot (typically `2 + 2*i` from the sealed `DECISION` tool list), never a fresh id minted after a crash. The colon form `trajectory_id:step_n:seq` is **withdrawn**: it omitted tenant, leaked identifiers into HTTP headers, and was longer than many callees accept.
+
+Implementations **must** record this string on the `TOOL_CALL` payload as `idempotency_key`. They **must not** inject it into the tool's user arguments (Python tools use explicit kwargs). They **must** expose it to the tool body so it can leave the process: Python via `current_call_meta()` / `current_idempotency_key()` (a contextvar), Go via `Tool.FnWithMeta`. `IdempotencyKeyHeader(key)` returns `{"Idempotency-Key": key}` for hosts to merge onto outbound HTTP.
 
 The host **must** forward that string to the remote API as `Idempotency-Key` or the vendor equivalent (Stripe, cloud control planes, a database unique constraint). The IR log is not the server. A client-side claim that "this slot was attempted" cannot tell you whether the packet reached the far side. That is Two Generals; we do not pretend to have solved it.
 
@@ -274,6 +286,7 @@ This table describes what the trajectory log should show at each state; the "act
 |---|---|---|
 | No `DECISION` for step `n` | Start fresh: new `PROJECT_CONTEXT`, new inference is allowed | Trajectory IR |
 | `DECISION` sealed, tool results incomplete | Replay the sealed tools. **Do not re invoke the model.** If a tool now fails because the world moved, record the failure; do not re-infer this step. Re-plan is a new step (§8.4). | Durable execution backend (replay guarantee) |
+| `DECISION` sealed with `world_snapshot`, host observation diverges | Fail `WORLD_DRIFT`. Do not re-infer. Host aborts or starts a new step. | Trajectory IR (`CheckWorld`, opt-in) |
 | All tool results present, no `COMMIT_STEP` | Finish any remaining state/artifact writes, then commit | Trajectory IR |
 | Step already committed | Move on; never reopen a committed step | Trajectory IR |
 | Crash mid tool on a `NON_IDEMPOTENT_WRITE` | Block and gate, see §8.3 | Trajectory IR (policy), backend (crash detection) |
@@ -309,7 +322,11 @@ The protocol distinguishes three different acts:
 
 Preconditions belong in observation, not in a second inference of the sealed step. A host that needs "is the node still there?" runs a `READ_ONLY` check in this step if it was already in the sealed list, or aborts and starts a new step if it was not. Embedding a hidden conditional planner inside resume is out of scope.
 
-This is a documented limitation, not an accident. The alternative, silently re-inferring after every crash, is the divergence bug seals exist to stop.
+**Optional fail-loud snapshot.** A host that *does* know which world facts the sealed plan depends on may put a string-to-string `world_snapshot` on the `DECISION` payload at seal time (same node kind, no new kind). `CheckWorld(observed)` compares only the sealed keys. Extra observed keys are ignored. Missing or changed sealed keys raise `WORLD_DRIFT`. An empty or absent snapshot is a no-op: Trajectory IR will not invent what "the world" is. `RunStep` may take a host `ObserveWorld` callback and run it *after* the seal exists (including on resume) so the comparison uses the original sealed map, not a newly sealed one.
+
+This does **not** pause AWS, auctions, or users. It does **not** re-infer. It is fail-loud, host-declared, and opt-in. Honest resume remains the default.
+
+This is a documented limitation plus an optional alarm, not an accident. The alternative, silently re-inferring after every crash, is the divergence bug seals exist to stop.
 
 ---
 
@@ -654,7 +671,7 @@ Treat every numbered rule below as an immutable constraint, not a suggestion:
 3. **Do not create parallel schemas.** The node kinds in §6.2 are the complete set for this phase. Do not add new node kinds, rename existing ones, or introduce an alternative representation (e.g. a "simplified" event format) for convenience.
 4. **Hashing must be exact and cross language stable.** Any node identity or content hash computation must follow §6.3 precisely, using a conformant RFC 8785 JCS implementation. Do not substitute a custom "sorted keys" JSON serialization, this is the single most likely source of silent, hard to debug divergence between components written by different agents or sessions.
 5. **Respect the linear known args rule (§8.1).** Do not implement, suggest, or work around it with symbolic argument references, speculative execution, or a hidden dependency graph. If a task seems to require it, stop and raise it as an issue rather than solving it locally.
-6. **Effect classification defaults to fail closed (§7.2).** Never write code that defaults an unclassified or ambiguous tool to anything other than `NON_IDEMPOTENT_WRITE`. Use `ClassifyTool` / `classify_tool` for named tools so open-world primitives cannot be tagged `READ_ONLY` by MCP hint alone. Do not implement a command AST.
+6. **Effect classification defaults to fail closed (§7.2).** Never write code that defaults an unclassified or ambiguous tool to anything other than `NON_IDEMPOTENT_WRITE`. Use `ClassifyTool` / `classify_tool` for named tools so open-world primitives cannot be tagged `READ_ONLY` by MCP hint alone. `ExecTool` / `RunStep` must still refuse an open-world `Tool` tagged `PURE` / `READ_ONLY` / `IDEMPOTENT_WRITE` unless `AllowOpenWorldOverride` is set. Do not implement a command AST.
 7. **Never make correctness depend on a cache.** Any code path touching Fluid, or any other caching layer, must have a working fallback to the durable source of truth with hash verification, per §11.3. Code review (automated or human) should treat a cache dependent correctness path as a blocking defect.
 8. **Stay inside declared scope (§5).** Do not implement anything listed under "out of scope for this phase," even if it seems like a natural extension, without an approved issue first. This includes Kubernetes provisioning, plan DAGs, a second backend adapter, and Fluid integration outside of the `k8s-fluid` profile.
 9. **One module, one clear owner in the code, even without a manually assigned task.** Before modifying a directory under `pkg/`, `drivers/`, or `conformance/`, check whether existing code in that directory implies an established pattern (naming, error handling, data structures) and follow it exactly rather than introducing a second convention. If two implementations of the same responsibility already exist, that is a defect to be reported, not a choice to pick one arbitrarily.
@@ -669,7 +686,7 @@ Trajectory IR deliberately does not attempt to:
 
 - **Reimplement durable execution.** Crash safe replay, retries, and lease/heartbeat coordination are Temporal/Restate/DBOS territory (§3.1); this project consumes one of them and does not compete with any of them.
 - **Solve Two Generals on the client.** Block-and-gate is at-most-one automatic attempt. Exactly-once remote mutation requires a server that honors §7.3's key.
-- **Freeze or re-validate the physical world** when a worker dies. Honest resume is not world-valid resume (§8.4).
+- **Automatically freeze or re-validate the physical world** when a worker dies. Honest resume is not world-valid resume (§8.4). Hosts may opt into a sealed `WORLD_SNAPSHOT`; `CheckWorld` is fail-loud, not a pause of AWS.
 - **Parse open-world tool bodies** (`bash`, `python`, `sql`, browser). Effect class is a tag, plus a name denylist. Not an AST.
 - **Be a process / syscall sandbox.** R06 is a demo/CI effect-class gate.
 - **Be a compiler IR** in the LLVM sense. No ahead-of-time lowering of prompts, no DCE, no instruction selection.
@@ -734,6 +751,7 @@ Trajectory IR deliberately does not attempt to:
 | 1.5 | 2026-08-28 | Records shipped Go and Python `trajir-pkg-sig-v1` APIs and marks conformance R09–R11 runnable. Sigstore / `sigstore-bundle` stays Future (Phase D of [#149](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/149)). |
 | 1.6 | 2026-09-15 | Moves the normative master specification from the repository root to `docs/MASTER_SPECIFICATION.md`. The root `README.md` becomes a landing page for users, students, and contributors while this file remains authoritative. |
 | 1.7 | 2026-09-30 | Honest resume vs world validity (§8.4). Block-and-gate restated as at-most-one automatic attempt, not exactly-once (Two Generals). Idempotency keys recorded on `TOOL_CALL` and required to be forwarded by the host (§7.3). Open-world primitives fail closed by name; no command AST (§7.2). R06 described as an effect-class gate, not a process sandbox. "IR" defined as a runtime trajectory IR, not a compiler (§1, §16). |
+| 1.8 | 2026-09-30 | Hashed §7.3 keys (`sha256` domain-separated, tenant included) exposed via CallMeta / contextvar / `Idempotency-Key` helper, still never injected into tool args. Optional `world_snapshot` on `DECISION` with fail-loud `CheckWorld` / `WORLD_DRIFT` (§8.4). `ExecTool` / `RunStep` refuse open-world primitives tagged safer than `NON_IDEMPOTENT_WRITE` unless `AllowOpenWorldOverride` (§7.2). |
 
 ---
 

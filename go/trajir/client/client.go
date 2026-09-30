@@ -66,8 +66,14 @@ type ProjectContext struct {
 
 // Decision is returned by SealDecision.
 type Decision struct {
-	StepN int
-	Plan  map[string]any
+	StepN         int
+	Plan          map[string]any
+	WorldSnapshot map[string]string
+}
+
+// SealDecisionOpts is optional input for SealDecision.
+type SealDecisionOpts struct {
+	WorldSnapshot map[string]string
 }
 
 // ToolResult is returned by ExecTool.
@@ -191,15 +197,20 @@ func (t *Trajectory) Project(stepN int, context map[string]any) (*ProjectContext
 }
 
 // SealDecision appends DECISION at seq 1 for the step.
-func (t *Trajectory) SealDecision(stepN int, plan map[string]any) (*Decision, error) {
+// Pass SealDecisionOpts.WorldSnapshot to opt into fail-loud CheckWorld.
+func (t *Trajectory) SealDecision(stepN int, plan map[string]any, opts ...SealDecisionOpts) (*Decision, error) {
 	if plan == nil {
 		plan = map[string]any{}
+	}
+	var snap map[string]string
+	if len(opts) > 0 {
+		snap = opts[0].WorldSnapshot
 	}
 	step := stepN
 	node, err := t.log.Append(
 		"DECISION",
 		&step,
-		map[string]any{"plan": plan},
+		resume.DecisionPayload(plan, snap),
 		t.TrajectoryID,
 		t.TenantID,
 		1,
@@ -209,7 +220,13 @@ func (t *Trajectory) SealDecision(stepN int, plan map[string]any) (*Decision, er
 	}
 	t.emitNode(node)
 	t.emitSeal(node, stepN, plan)
-	return &Decision{StepN: stepN, Plan: plan}, nil
+	return &Decision{StepN: stepN, Plan: plan, WorldSnapshot: resume.NormalizeWorldSnapshot(snap)}, nil
+}
+
+// CheckWorld compares observed values against a sealed WORLD_SNAPSHOT.
+// No-op when the DECISION has no snapshot. Error if this step has no DECISION.
+func (t *Trajectory) CheckWorld(stepN int, observed map[string]string) error {
+	return resume.CheckWorld(t.log, t.TrajectoryID, t.TenantID, stepN, observed)
 }
 
 // ExecTool runs one tool at the given seq (caller supplies unique seq; 2+2*i is typical).
@@ -219,9 +236,14 @@ func (t *Trajectory) ExecTool(stepN, seq int, tool resume.Tool, args map[string]
 	if args == nil {
 		args = map[string]any{}
 	}
+	if err := effects.AssertOpenWorldEffect(tool.Name, tool.Effect, tool.AllowOpenWorldOverride); err != nil {
+		return nil, err
+	}
 	if err := sandbox.AssertToolAllowed(t.Mode, tool.Name, tool.Effect); err != nil {
 		return nil, err
 	}
+	meta := resume.NewCallMeta(t.TenantID, t.TrajectoryID, stepN, seq)
+	bound := resume.BoundToolFn(tool, meta)
 	if effects.RequiresBlockAndGate(tool.Effect) {
 		fn := resume.MakeGatedToolCall(
 			t.log,
@@ -230,7 +252,7 @@ func (t *Trajectory) ExecTool(stepN, seq int, tool resume.Tool, args map[string]
 			stepN,
 			seq,
 			tool.Name,
-			tool.Fn,
+			bound,
 		)
 		result, err := fn(args)
 		if err != nil {
@@ -245,7 +267,7 @@ func (t *Trajectory) ExecTool(stepN, seq int, tool resume.Tool, args map[string]
 		stepN,
 		seq,
 		tool.Name,
-		tool.Fn,
+		bound,
 	)
 	result, err := fn(args)
 	if err != nil {
