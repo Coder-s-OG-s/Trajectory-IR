@@ -53,6 +53,7 @@ Open `http://127.0.0.1:8787/` for the home dashboard, or
 7. Download and Show in folder only work on this machine.
 8. Sidebar Show data folder / Open PowerShell here talk to `POST /v1/local/*` on loopback. The browser does not spawn a shell itself. Press `/` to search runs.
 9. Top right: **Light mode** / **Dark mode** remembers your choice. **Live** refreshes every 4 seconds. Pause it if you want the page still.
+10. Sidebar **License** opens Apache License 2.0 plus facts about this computer (data folder, health, run and package counts). There is no product key and no expiry. This is not object storage IAM.
 
 Stop the process with Ctrl+C. Nothing here phones home.
 

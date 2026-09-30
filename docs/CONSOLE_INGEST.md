@@ -35,6 +35,7 @@ go run ./cmd/trajir-console -addr 127.0.0.1:8787
 | `GET` | `/v1/trajectories` | List trajectory ids |
 | `GET` | `/v1/savings` | Cross-trajectory tokens saved (est.). Sum of lifetime avoided |
 | `GET` | `/v1/dashboard` | Home rollup: savings plus one card per run |
+| `GET` | `/v1/about` | License (Apache 2.0, no expiry) plus local data dir, counts, health |
 | `GET` | `/v1/trajectories/{id}/events` | Append-ordered events |
 | `GET` | `/v1/trajectories/{id}/summary` | Seal / economy / transfer rollup |
 | `GET` | `/v1/trajectories/{id}/packages` | Local `.tir` copies for that id |

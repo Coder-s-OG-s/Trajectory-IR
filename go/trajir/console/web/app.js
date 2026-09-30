@@ -12,6 +12,8 @@
     tab: "overview",
     live: true,
     inflight: false,
+    about: null,
+    aboutOpen: false,
   };
 
   const KIND_LABELS = {
@@ -259,6 +261,7 @@
         <div><h3>Locked decisions</h3><p>Seals freeze a plan before tools that change the world.</p></div>
         <div><h3>Files</h3><p>.tir packages stored on this PC. Open the folder. No MinIO.</p></div>
         <div><h3>Tokens</h3><p>How much context we trimmed. Guess from text size, not a bill.</p></div>
+        <div><h3>License</h3><p>Apache License 2.0. No product key. No expiry.</p></div>
       </div>`;
     $("home").querySelectorAll(".run-card").forEach((btn) => {
       btn.addEventListener("click", () => selectTrajectory(btn.getAttribute("data-id")));
@@ -616,6 +619,55 @@
     }
   }
 
+  function showAbout(on) {
+    state.aboutOpen = !!on;
+    const el = $("about");
+    if (!el) return;
+    el.classList.toggle("hidden", !state.aboutOpen);
+    if (state.aboutOpen) loadAbout(false);
+  }
+
+  function renderAbout() {
+    const el = $("about-body");
+    if (!el) return;
+    const a = state.about || {};
+    const lic = a.license || {};
+    const auth = a.auth_required ? "API token is required" : "API token is not set (open on this machine)";
+    const tools = a.loopback_tools ? "Folder and PowerShell only work from this machine" : "none";
+    el.innerHTML = `
+      <h3>License</h3>
+      <p>${esc(lic.name || "Apache License 2.0")}. SPDX ${esc(lic.spdx || "Apache-2.0")}.</p>
+      <p>No product key. No expiry. This is not a paid support contract.</p>
+      <p><a href="https://www.apache.org/licenses/LICENSE-2.0" target="_blank" rel="noopener noreferrer">Read Apache License 2.0</a></p>
+      <p><a href="https://github.com/Coder-s-OG-s/Trajectory-IR" target="_blank" rel="noopener noreferrer">Source on GitHub</a></p>
+      <h3>This computer</h3>
+      <div class="about-facts">
+        ${stat("Health", a.health || "none", a.health === "ok" ? "ok" : "")}
+        ${stat("Runs", a.run_count)}
+        ${stat("Events", a.event_count)}
+        ${stat("Packages", a.package_count)}
+        ${stat("Bytes on disk", a.data_bytes)}
+      </div>
+      <p>Data folder: <code>${esc(a.data_dir || "none")}</code></p>
+      <p>${esc(auth)}</p>
+      <p>${esc(tools)}</p>
+      <p class="tiny">This page is local observation. It is not object storage, IAM, or a remote control plane.</p>`;
+  }
+
+  async function loadAbout(quiet) {
+    try {
+      const about = await api("/v1/about");
+      if (quiet && sameJSON(state.about, about)) return;
+      state.about = about;
+      renderAbout();
+    } catch (err) {
+      if (quiet) return;
+      state.about = null;
+      renderAbout();
+      showBanner(String(err.message || err), true);
+    }
+  }
+
   function renderPanels() {
     renderSavings();
     renderRunList();
@@ -740,6 +792,7 @@
     try {
       await loadSavings(true);
       if (state.id) await loadTrajectory(state.id, true);
+      if (state.aboutOpen) await loadAbout(true);
     } finally {
       state.inflight = false;
     }
@@ -820,6 +873,14 @@
     $("refresh").addEventListener("click", loadList);
     $("open-folder").addEventListener("click", () => postLocal("/v1/local/reveal", { root: true }));
     $("open-shell").addEventListener("click", () => postLocal("/v1/local/open-shell", { root: true }));
+    $("open-about").addEventListener("click", () => showAbout(true));
+    $("about-close").addEventListener("click", () => showAbout(false));
+    $("about").addEventListener("click", (ev) => {
+      if (ev.target === $("about")) showAbout(false);
+    });
+    document.addEventListener("keydown", (ev) => {
+      if (ev.key === "Escape" && state.aboutOpen) showAbout(false);
+    });
     $("from").addEventListener("change", () => state.id && renderPanels());
     $("to").addEventListener("change", () => state.id && renderPanels());
     $("back-home").addEventListener("click", showHome);

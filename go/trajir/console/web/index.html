@@ -60,6 +60,7 @@
         <div class="row wrap">
           <button type="button" id="open-folder" class="btn">Show data folder</button>
           <button type="button" id="open-shell" class="btn">Open PowerShell here</button>
+          <button type="button" id="open-about" class="btn">License</button>
         </div>
         <label class="field">
           <span>API token</span>
@@ -115,6 +116,18 @@
         <section id="panel-economy" class="panel hidden" role="tabpanel" aria-labelledby="tab-economy"></section>
       </div>
     </main>
+  </div>
+  <div id="about" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="about-title">
+    <div class="overlay-card">
+      <header>
+        <h2 id="about-title">About and license</h2>
+        <button type="button" id="about-close" class="btn ghost">Close</button>
+      </header>
+      <div id="about-body">
+        <h3>License</h3>
+        <p>Apache License 2.0. No product key. No expiry.</p>
+      </div>
+    </div>
   </div>
   <script src="/ui/app.js"></script>
 </body>

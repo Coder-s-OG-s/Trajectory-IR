@@ -393,6 +393,46 @@ tr:hover td { background: var(--hover-row); }
 .empty-economy { margin: 0; }
 .lede { margin: 0 0 1rem; max-width: 44rem; }
 
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 10, 14, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 30;
+  padding: 1rem;
+}
+.overlay.hidden { display: none; }
+.overlay-card {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  max-width: 38rem;
+  width: 100%;
+  max-height: 90vh;
+  overflow: auto;
+  padding: 1.1rem 1.2rem 1.3rem;
+}
+.overlay-card header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.85rem;
+}
+.overlay-card h2 { margin: 0; font-size: 1.2rem; }
+.overlay-card h3 { margin: 0.9rem 0 0.35rem; font-size: 0.92rem; }
+.overlay-card p { margin: 0 0 0.45rem; color: var(--muted); font-size: 0.88rem; }
+.about-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.55rem;
+  margin: 0.7rem 0 0.4rem;
+}
+
 @media (max-width: 860px) {
   .app { grid-template-columns: 1fr; }
   .sidebar { border-right: none; border-bottom: 1px solid var(--border); }
