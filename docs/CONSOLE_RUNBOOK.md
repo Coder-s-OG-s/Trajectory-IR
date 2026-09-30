@@ -41,15 +41,17 @@ cd go
 go run ./cmd/trajir-console -addr 127.0.0.1:8787
 ```
 
-Open `http://127.0.0.1:8787/?id=console-demo`.
+Open `http://127.0.0.1:8787/` for the home dashboard, or
+`http://127.0.0.1:8787/?id=console-demo` for one run.
 
-1. Overview shows the event count, the seal / package rollup, and Tokens saved (est.) for this trajectory plus the all-trajectories total.
-2. The sidebar Tokens saved (est.) is `GET /v1/savings`. For this fixture it is 75. That figure is `ceil(chars/4)`, not a provider invoice.
-3. Seals shows `seal.created` then `seal.verified` with `ok=true`.
-4. Transfers shows the export and the import of `demo.tir` (mode thin, redacted).
-5. Economy shows the projection. Tokens avoided (est.) is 75. Same estimator as the sidebar.
-6. Transfers lists the local `demo.tir` copy. Download and Show in folder only work on this machine.
-7. Sidebar Show data folder / Open PowerShell here talk to `POST /v1/local/*` on loopback. The browser does not spawn a shell itself.
+1. Home shows every run as a card, plus Tokens saved (est.) for all of them. Click a card to open it.
+2. The sidebar Tokens saved (est.) is `GET /v1/dashboard` (same numbers as `GET /v1/savings`). For this fixture it is 75. That figure is `ceil(chars/4)`, not a provider invoice.
+3. **What happened** is a plain-language timeline. The log names stay on each row.
+4. **Locked decisions** shows `seal.created` then `seal.verified` with `ok=true`.
+5. **Files** shows the export and the import of `demo.tir` (mode thin, redacted), plus the local copy.
+6. **Tokens** shows the projection. Saved last time is 75. Same estimator as the sidebar.
+7. Download and Show in folder only work on this machine.
+8. Sidebar Show data folder / Open PowerShell here talk to `POST /v1/local/*` on loopback. The browser does not spawn a shell itself. Press `/` to search runs.
 
 Stop the process with Ctrl+C. Nothing here phones home.
 

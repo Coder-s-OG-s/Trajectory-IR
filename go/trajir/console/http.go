@@ -32,6 +32,7 @@ func NewServer(store *Store, token string) *Server {
 	s.Mux.HandleFunc("POST /v1/events", s.handlePostEvent)
 	s.Mux.HandleFunc("GET /v1/trajectories", s.handleList)
 	s.Mux.HandleFunc("GET /v1/savings", s.handleSavings)
+	s.Mux.HandleFunc("GET /v1/dashboard", s.handleDashboard)
 	s.Mux.HandleFunc("GET /v1/trajectories/{id}/events", s.handleEvents)
 	s.Mux.HandleFunc("GET /v1/trajectories/{id}/summary", s.handleSummary)
 	s.Mux.HandleFunc("GET /v1/trajectories/{id}/packages", s.handleListPackages)
@@ -140,6 +141,18 @@ func (s *Server) handleSavings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	view, err := s.Store.Savings()
+	if err != nil {
+		writeErr(w, statusForRead(err), err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, view)
+}
+
+func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
+	if !s.authorize(w, r) {
+		return
+	}
+	view, err := s.Store.Dashboard()
 	if err != nil {
 		writeErr(w, statusForRead(err), err.Error())
 		return

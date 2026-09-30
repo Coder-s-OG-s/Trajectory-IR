@@ -245,6 +245,10 @@ recompute `estimated_tokens`.
 Re-projecting the same step counts again in the lifetime sum. That matches
 §3.3. This is still `ceil(char_len / 4)`, not a provider invoice.
 
+`GET /v1/dashboard` returns the same savings object plus `runs[]` cards
+(event counts, last timestamp, lock failures, lifetime avoided). The home
+UI copies these fields. It does not recompute estimates.
+
 ---
 
 ## 4. Transfer metrics

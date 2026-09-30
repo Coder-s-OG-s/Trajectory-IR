@@ -9,82 +9,91 @@
 <body>
   <a class="skip" href="#main">Skip to content</a>
   <div class="app">
-    <aside class="sidebar" aria-label="Trajectories">
+    <aside class="sidebar" aria-label="Runs">
       <header class="brand">
-        <h1>Trajectory console</h1>
-        <p class="muted">Local operator view</p>
+        <svg class="mark" viewBox="0 0 32 32" aria-hidden="true">
+          <circle cx="6" cy="18" r="3.2" />
+          <circle cx="16" cy="8" r="3.2" />
+          <circle cx="26" cy="22" r="3.2" />
+          <path d="M8.6 16.2 L13.6 9.8 M18.4 10.2 L23.6 19.6" />
+        </svg>
+        <div>
+          <h1>Trajectory console</h1>
+          <p class="muted">This computer only</p>
+        </div>
       </header>
 
-      <label class="field">
-        <span>API token</span>
-        <input id="token" type="password" autocomplete="off" placeholder="optional Bearer token" />
-      </label>
-
-      <div class="row">
-        <button type="button" id="refresh" class="btn">Refresh list</button>
-      </div>
-      <div class="row wrap">
-        <button type="button" id="open-folder" class="btn">Show data folder</button>
-        <button type="button" id="open-shell" class="btn">Open PowerShell here</button>
-      </div>
-      <p class="muted tiny">Folder and shell only work on this machine (127.0.0.1). The browser does not run commands.</p>
-
-      <div id="savings" class="savings" aria-live="polite">
+      <div id="savings" class="hero" aria-live="polite">
         <div class="label">Tokens saved (est.)</div>
         <div id="savings-total" class="value">—</div>
-        <p class="muted tiny">ceil(chars/4). Not billed. Sum of lifetime projection savings.</p>
+        <p class="muted tiny">Guess from text size (chars/4). Not a bill.</p>
       </div>
 
+      <label class="field search">
+        <span>Find a run</span>
+        <input id="run-search" type="search" placeholder="Type a name" autocomplete="off" />
+      </label>
+
+      <div class="list-head">
+        <span>Runs</span>
+        <button type="button" id="refresh" class="btn ghost">Refresh</button>
+      </div>
       <nav id="traj-list" class="traj-list" aria-label="Trajectory list"></nav>
       <p id="traj-empty" class="empty muted hidden">
-        No trajectories yet. Emit events into
-        <code>TRAJIR_CONSOLE_DATA</code> or
-        <code>POST /v1/events</code>. See
-        <code>docs/CONSOLE_INGEST.md</code>.
+        No runs yet. Start a host with the console sink, or run the demo script.
       </p>
+
+      <div class="side-foot">
+        <div class="row wrap">
+          <button type="button" id="open-folder" class="btn">Show data folder</button>
+          <button type="button" id="open-shell" class="btn">Open PowerShell here</button>
+        </div>
+        <label class="field">
+          <span>API token</span>
+          <input id="token" type="password" autocomplete="off" placeholder="optional, if you set one" />
+        </label>
+        <p class="muted tiny">Folder and terminal only work on this machine (127.0.0.1). The browser does not run commands.</p>
+      </div>
     </aside>
 
     <main id="main" class="main">
       <header class="main-head">
         <div>
-          <h2 id="detail-title">Select a trajectory</h2>
-          <p id="detail-sub" class="muted">Deep link: <code>?id=&lt;trajectory_id&gt;</code></p>
+          <p id="crumb" class="crumb">All runs</p>
+          <h2 id="detail-title">Operator home</h2>
+          <p id="detail-sub" class="muted">Pick a run to see locks, files, and tokens saved.</p>
         </div>
-        <div class="filters" aria-label="Time range, UTC">
-          <label class="field inline">
-            <span>From (UTC)</span>
-            <input id="from" type="datetime-local" />
-          </label>
-          <label class="field inline">
-            <span>To (UTC)</span>
-            <input id="to" type="datetime-local" />
-          </label>
+        <div class="head-actions">
+          <button type="button" id="back-home" class="btn ghost hidden">All runs</button>
+          <div class="filters" aria-label="Time range, UTC">
+            <label class="field inline">
+              <span>From</span>
+              <input id="from" type="datetime-local" />
+            </label>
+            <label class="field inline">
+              <span>To</span>
+              <input id="to" type="datetime-local" />
+            </label>
+          </div>
         </div>
       </header>
 
       <div id="banner" class="banner hidden" role="status"></div>
 
+      <section id="home" class="home" aria-label="All runs"></section>
+
       <div id="panels" class="hidden">
         <div class="tabs" role="tablist" aria-label="Views">
-          <button type="button" role="tab" aria-selected="true" data-tab="overview" id="tab-overview">Overview</button>
-          <button type="button" role="tab" aria-selected="false" data-tab="seals" id="tab-seals">Seals</button>
-          <button type="button" role="tab" aria-selected="false" data-tab="transfers" id="tab-transfers">Transfers</button>
-          <button type="button" role="tab" aria-selected="false" data-tab="economy" id="tab-economy">Context economy</button>
+          <button type="button" role="tab" aria-selected="true" data-tab="overview" id="tab-overview">What happened</button>
+          <button type="button" role="tab" aria-selected="false" data-tab="seals" id="tab-seals">Locked decisions</button>
+          <button type="button" role="tab" aria-selected="false" data-tab="transfers" id="tab-transfers">Files</button>
+          <button type="button" role="tab" aria-selected="false" data-tab="economy" id="tab-economy">Tokens</button>
         </div>
 
         <section id="panel-overview" class="panel" role="tabpanel" aria-labelledby="tab-overview"></section>
         <section id="panel-seals" class="panel hidden" role="tabpanel" aria-labelledby="tab-seals"></section>
         <section id="panel-transfers" class="panel hidden" role="tabpanel" aria-labelledby="tab-transfers"></section>
         <section id="panel-economy" class="panel hidden" role="tabpanel" aria-labelledby="tab-economy"></section>
-      </div>
-
-      <div id="placeholder" class="placeholder">
-        <h3>No trajectory selected</h3>
-        <p class="muted">
-          Pick an id on the left, or open
-          <code>?id=your-trajectory</code>.
-          Estimates use <code>estimated_tokens</code> (chars/4) — not provider invoices.
-        </p>
       </div>
     </main>
   </div>

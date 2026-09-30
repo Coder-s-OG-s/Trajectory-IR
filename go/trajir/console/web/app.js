@@ -6,7 +6,20 @@
     summary: null,
     packages: [],
     savings: null,
+    runs: [],
+    query: "",
     tab: "overview",
+  };
+
+  const KIND_LABELS = {
+    "node.appended": "Step logged",
+    "seal.created": "Decision locked",
+    "seal.verified": "Lock checked",
+    "context.projected": "Context trimmed",
+    "redaction.applied": "Secrets hidden",
+    "export.started": "File send started",
+    "export.completed": "File sent",
+    "import.completed": "File received",
   };
 
   function token() {
@@ -66,7 +79,6 @@
 
   function parseLocal(dt) {
     if (!dt) return null;
-    // Tables show RFC3339 Zulu. The picker has no zone, so read it as UTC.
     const d = new Date(dt.endsWith("Z") ? dt : dt + "Z");
     return Number.isNaN(d.getTime()) ? null : d;
   }
@@ -91,6 +103,11 @@
     return String(n);
   }
 
+  function fmtTime(ts) {
+    if (!ts) return "—";
+    return String(ts).replace("T", " ").replace("Z", " UTC");
+  }
+
   function esc(s) {
     return String(s)
       .replace(/&/g, "&amp;")
@@ -99,8 +116,36 @@
       .replace(/"/g, "&quot;");
   }
 
+  function kindLabel(kind) {
+    return KIND_LABELS[kind] || kind || "Event";
+  }
+
+  function dotClass(kind, payload) {
+    if (kind === "seal.verified" && payload && payload.ok === false) return "bad";
+    if (kind === "seal.created" || kind === "seal.verified") return "ok";
+    if (kind === "context.projected" || kind === "redaction.applied") return "gold";
+    return "";
+  }
+
+  function barPct(part, whole) {
+    if (part === null || part === undefined || !whole) return 0;
+    const n = (100 * Number(part)) / Number(whole);
+    if (n < 0) return 0;
+    if (n > 100) return 100;
+    return n;
+  }
+
   function stat(label, value, cls) {
     return `<div class="stat"><div class="label">${esc(label)}</div><div class="value ${cls || ""}">${esc(fmt(value))}</div></div>`;
+  }
+
+  function kpi(label, value, cls, tab) {
+    return `<button type="button" class="kpi" data-jump="${esc(tab || "")}"><div class="label">${esc(label)}</div><div class="value ${cls || ""}">${esc(fmt(value))}</div></button>`;
+  }
+
+  function visibleRuns() {
+    const q = (state.query || "").toLowerCase();
+    return (state.runs || []).filter((r) => !q || String(r.trajectory_id).toLowerCase().includes(q));
   }
 
   function renderSavings() {
@@ -112,38 +157,141 @@
     el.classList.toggle("ok", n !== null && n !== undefined);
   }
 
+  function renderRunList() {
+    const list = $("traj-list");
+    const runs = visibleRuns();
+    list.innerHTML = "";
+    $("traj-empty").classList.toggle("hidden", (state.runs || []).length > 0);
+    runs.forEach((run) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "traj-item";
+      btn.dataset.id = run.trajectory_id;
+      if (run.trajectory_id === state.id) btn.setAttribute("aria-current", "true");
+      const saved = run.tokens_avoided_estimated;
+      btn.innerHTML = `<span class="name">${esc(run.trajectory_id)}</span><span class="meta">${esc(fmt(run.event_count))} events · saved ${esc(fmt(saved))}</span>`;
+      btn.addEventListener("click", () => selectTrajectory(run.trajectory_id));
+      list.appendChild(btn);
+    });
+  }
+
+  function renderHome() {
+    const savings = state.savings || {};
+    const runs = visibleRuns();
+    const failed = (state.runs || []).reduce((n, r) => n + (r.seal_verified_fail || 0), 0);
+    const files = (state.runs || []).reduce((n, r) => n + (r.exports_ok || 0) + (r.imports_ok || 0), 0);
+    $("home").innerHTML = `
+      <p class="lede">Everything on this page lives on this computer. Click a card to open a run. Token numbers are estimates, not a provider invoice.</p>
+      <div class="stats">
+        ${kpi("Tokens saved (est.)", savings.tokens_avoided_estimated, savings.tokens_avoided_estimated != null ? "ok" : "", "")}
+        ${kpi("Runs", (state.runs || []).length, "", "")}
+        ${kpi("Failed lock checks", failed, failed ? "bad" : "", "seals")}
+        ${kpi("File moves", files, "", "transfers")}
+      </div>
+      <div class="run-grid">
+        ${
+          runs.length
+            ? runs
+                .map((run) => {
+                  const bad = run.seal_verified_fail ? "bad" : "ok";
+                  return `<button type="button" class="run-card" data-id="${esc(run.trajectory_id)}">
+                    <div class="name">${esc(run.trajectory_id)}</div>
+                    <div class="muted tiny">${esc(fmtTime(run.last_ts))}</div>
+                    <div class="chips">
+                      <span class="chip gold">saved ${esc(fmt(run.tokens_avoided_estimated))}</span>
+                      <span class="chip">steps ${esc(fmt(run.node_count))}</span>
+                      <span class="chip ${bad}">locks ${esc(fmt(run.seal_verified_fail))} failed</span>
+                    </div>
+                  </button>`;
+                })
+                .join("")
+            : `<p class="muted">No runs match that search.</p>`
+        }
+      </div>
+      <div class="help">
+        <div><h3>What happened</h3><p>The story of one run, newest first, in plain words.</p></div>
+        <div><h3>Locked decisions</h3><p>Seals freeze a plan before tools that change the world.</p></div>
+        <div><h3>Files</h3><p>.tir packages stored on this PC. Open the folder. No MinIO.</p></div>
+        <div><h3>Tokens</h3><p>How much context we trimmed. Guess from text size, not a bill.</p></div>
+      </div>`;
+    $("home").querySelectorAll(".run-card").forEach((btn) => {
+      btn.addEventListener("click", () => selectTrajectory(btn.getAttribute("data-id")));
+    });
+  }
+
+  function showHome() {
+    state.id = null;
+    setQueryId("");
+    $("crumb").textContent = "All runs";
+    $("detail-title").textContent = "Operator home";
+    $("detail-sub").textContent = "Pick a run to see locks, files, and tokens saved.";
+    $("back-home").classList.add("hidden");
+    $("home").classList.remove("hidden");
+    $("panels").classList.add("hidden");
+    document.querySelectorAll(".traj-item").forEach((el) => el.removeAttribute("aria-current"));
+    renderHome();
+  }
+
+  function eventDetail(e) {
+    const p = e.payload || {};
+    if (e.kind === "seal.verified") {
+      return p.ok === false ? `Check failed. ${p.error || ""}`.trim() : "Check passed.";
+    }
+    if (e.kind === "seal.created") return `Step ${fmt(p.step_n)} locked.`;
+    if (e.kind === "context.projected") return "Sent a smaller context to the model.";
+    if (e.kind === "redaction.applied") return `Hid thoughts ${fmt(p.thought_collapses)}, secret fields ${fmt(p.secret_field_hits)}.`;
+    if (e.kind === "export.completed" || e.kind === "import.completed") return p.path || p.console_path || "Package moved.";
+    if (e.kind === "node.appended") return p.kind || "Node written.";
+    return "";
+  }
+
+  function bindJumps(root) {
+    root.querySelectorAll("[data-jump]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const tab = btn.getAttribute("data-jump");
+        if (tab) selectTab(tab);
+      });
+    });
+  }
+
   function renderOverview() {
     const s = state.summary || {};
     const economy = s.economy || {};
     const savings = state.savings || {};
-    const ev = filteredEvents();
+    const ev = filteredEvents().slice().reverse();
     $("panel-overview").innerHTML = `
       <div class="stats">
-        ${stat("Events (filtered)", ev.length)}
-        ${stat("Nodes", s.node_count)}
-        ${stat("Last ts", s.last_ts ? String(s.last_ts).replace("T", " ") : "—")}
-        ${stat("Seals created", s.seal_created_count)}
-        ${stat("Verify fail", s.seal_verified_fail, s.seal_verified_fail ? "bad" : "")}
-        ${stat("Exports OK", s.exports_ok)}
-        ${stat("Imports OK", s.imports_ok)}
-        ${stat("Tokens saved (est.)", economy.lifetime_tokens_avoided_estimated, economy.lifetime_tokens_avoided_estimated != null ? "ok" : "")}
-        ${stat("All trajectories saved (est.)", savings.tokens_avoided_estimated, savings.tokens_avoided_estimated != null ? "ok" : "")}
+        ${kpi("Tokens saved (est.)", economy.lifetime_tokens_avoided_estimated, economy.lifetime_tokens_avoided_estimated != null ? "ok" : "", "economy")}
+        ${kpi("All runs saved (est.)", savings.tokens_avoided_estimated, savings.tokens_avoided_estimated != null ? "ok" : "", "")}
+        ${kpi("Locked decisions", s.seal_created_count, "", "seals")}
+        ${kpi("Failed checks", s.seal_verified_fail, s.seal_verified_fail ? "bad" : "", "seals")}
+        ${kpi("Files sent", s.exports_ok, "", "transfers")}
+        ${kpi("Files received", s.imports_ok, "", "transfers")}
+        ${stat("Events in view", ev.length)}
+        ${stat("Steps logged", s.node_count)}
       </div>
-      <p class="muted">Overview uses server summary plus the time filter on the event list below. Tokens saved is estimated_tokens (ceil chars/4), not a provider invoice.</p>
-      <table>
-        <thead><tr><th>Time</th><th>Kind</th><th>Source</th><th>Id</th></tr></thead>
-        <tbody>
-          ${ev
-            .slice()
-            .reverse()
-            .slice(0, 50)
-            .map(
-              (e) =>
-                `<tr><td>${esc(e.ts)}</td><td><code>${esc(e.kind)}</code></td><td>${esc(e.source)}</td><td><code>${esc(e.id)}</code></td></tr>`
-            )
-            .join("") || `<tr><td colspan="4" class="muted">No events in range.</td></tr>`}
-        </tbody>
-      </table>`;
+      <p class="muted lede">Newest first. Words are for people; the log still uses the real event names. Tokens saved is estimated_tokens (ceil chars/4), not a provider invoice.</p>
+      <ol class="timeline">
+        ${
+          ev.length
+            ? ev
+                .slice(0, 40)
+                .map((e) => {
+                  const cls = dotClass(e.kind, e.payload);
+                  return `<li>
+                    <span class="dot ${cls}"></span>
+                    <div>
+                      <div class="what">${esc(kindLabel(e.kind))}</div>
+                      <div class="when">${esc(fmtTime(e.ts))} · <code>${esc(e.kind)}</code></div>
+                      <div class="detail">${esc(eventDetail(e))}</div>
+                    </div>
+                  </li>`;
+                })
+                .join("")
+            : `<li><span class="dot"></span><div class="muted">No events in this time range.</div></li>`
+        }
+      </ol>`;
+    bindJumps($("panel-overview"));
   }
 
   function renderSeals() {
@@ -152,27 +300,38 @@
     );
     const s = state.summary || {};
     $("panel-seals").innerHTML = `
+      <p class="lede muted">A lock freezes the plan. It does not freeze the outside world.</p>
       <div class="stats">
-        ${stat("Created", s.seal_created_count)}
-        ${stat("Verified OK", s.seal_verified_ok, "ok")}
-        ${stat("Verified fail", s.seal_verified_fail, s.seal_verified_fail ? "bad" : "")}
+        ${stat("Decisions locked", s.seal_created_count)}
+        ${stat("Checks passed", s.seal_verified_ok, "ok")}
+        ${stat("Checks failed", s.seal_verified_fail, s.seal_verified_fail ? "bad" : "")}
       </div>
-      <table>
-        <thead><tr><th>Time</th><th>Kind</th><th>Payload</th></tr></thead>
-        <tbody>
-          ${seals
-            .map((e) => {
-              const p = e.payload || {};
-              const detail =
-                e.kind === "seal.verified"
-                  ? `ok=${p.ok} hash=${p.content_hash || ""}${p.error ? " err=" + p.error : ""}`
-                  : `step=${p.step_n} node=${p.node_id || ""} hash=${p.content_hash || ""}`;
-              const cls = e.kind === "seal.verified" && p.ok === false ? "bad" : "";
-              return `<tr><td>${esc(e.ts)}</td><td class="${cls}"><code>${esc(e.kind)}</code></td><td><code>${esc(detail)}</code></td></tr>`;
-            })
-            .join("") || `<tr><td colspan="3" class="muted">No seal events in range.</td></tr>`}
-        </tbody>
-      </table>`;
+      <ol class="timeline">
+        ${
+          seals.length
+            ? seals
+                .map((e) => {
+                  const p = e.payload || {};
+                  const cls = e.kind === "seal.verified" && p.ok === false ? "bad" : "ok";
+                  const detail =
+                    e.kind === "seal.verified"
+                      ? p.ok === false
+                        ? `Failed. ${p.error || ""} ${p.content_hash || ""}`.trim()
+                        : `Passed. ${p.content_hash || ""}`
+                      : `Step ${fmt(p.step_n)}. ${p.content_hash || ""}`;
+                  return `<li>
+                    <span class="dot ${cls}"></span>
+                    <div>
+                      <div class="what">${esc(kindLabel(e.kind))}</div>
+                      <div class="when">${esc(fmtTime(e.ts))}</div>
+                      <div class="detail"><code>${esc(detail)}</code></div>
+                    </div>
+                  </li>`;
+                })
+                .join("")
+            : `<li><span class="dot"></span><div class="muted">No lock events in this time range.</div></li>`
+        }
+      </ol>`;
   }
 
   function renderTransfers() {
@@ -182,32 +341,29 @@
     const rows = handoffs.filter((h) => inRange(h.export_ts || h.import_ts));
     const packs = state.packages || [];
     $("panel-transfers").innerHTML = `
+      <p class="lede muted">Packages live under TRAJIR_CONSOLE_DATA/packages/. Host temp paths are not the console store.</p>
       <div class="stats">
-        ${stat("Exports OK", view.exports_ok)}
-        ${stat("Imports OK", view.imports_ok)}
-        ${stat("Handoffs", rows.length)}
-        ${stat("Local .tir copies", packs.length)}
+        ${stat("Files sent", view.exports_ok)}
+        ${stat("Files received", view.imports_ok)}
+        ${stat("Moves", rows.length)}
+        ${stat("Copies on this PC", packs.length)}
       </div>
-      <p class="muted">Local copies live under <code>TRAJIR_CONSOLE_DATA/packages/</code>. Host temp paths are not the console store.</p>
       ${
         packs.length
-          ? `<table>
-              <thead><tr><th>Local package</th><th>Bytes</th><th></th></tr></thead>
-              <tbody>
-                ${packs
-                  .map(
-                    (p) => `<tr>
-                      <td><code>${esc(p.name)}</code></td>
-                      <td>${esc(fmt(p.bytes))}</td>
-                      <td class="pkg-actions">
-                        <button type="button" class="btn" data-dl="${esc(p.name)}">Download</button>
-                        <button type="button" class="btn" data-reveal="${esc(p.name)}">Show in folder</button>
-                      </td>
-                    </tr>`
-                  )
-                  .join("")}
-              </tbody>
-            </table>`
+          ? packs
+              .map(
+                (p) => `<div class="file-card">
+                  <div>
+                    <div class="name"><code>${esc(p.name)}</code></div>
+                    <div class="muted tiny">${esc(fmt(p.bytes))} bytes on this computer</div>
+                  </div>
+                  <div class="pkg-actions">
+                    <button type="button" class="btn primary" data-dl="${esc(p.name)}">Download</button>
+                    <button type="button" class="btn" data-reveal="${esc(p.name)}">Show in folder</button>
+                  </div>
+                </div>`
+              )
+              .join("")
           : `<p class="muted">No local .tir copy yet. Export with a file sink, or run the demo script.</p>`
       }
       <table>
@@ -222,17 +378,19 @@
             .map((h) => {
               const status = h.status || "";
               const cls = status === "failed" ? "bad" : status === "connected" ? "ok" : "";
-              const label = h.redacted === true ? '<span class="badge">redacted</span>' : "";
+              const label = h.redacted === true ? '<span class="chip gold">redacted</span>' : "";
               const path = h.console_path || h.export_path || h.import_path || "";
               const verify = h.verify_ok === true ? "ok" : h.verify_ok === false ? "fail" : "";
               const verifyText = [verify, h.error || ""].filter(Boolean).join(" ");
               const sources = [h.export_source, h.import_source].filter(Boolean);
               const runtime = h.runtime || "";
               const ends = sources.join(" -> ");
-              const who = !runtime || sources.indexOf(runtime) >= 0 ? (ends || runtime) : [ends, runtime].filter(Boolean).join(" ");
+              const who = !runtime || sources.indexOf(runtime) >= 0 ? ends || runtime : [ends, runtime].filter(Boolean).join(" ");
               const bad = h.verify_ok === false || status === "failed" ? "bad" : "";
+              const statusWord =
+                status === "connected" ? "linked" : status === "failed" ? "failed" : status === "export_only" ? "sent only" : status === "import_only" ? "received only" : status;
               return `<tr>
-                <td class="${cls}">${esc(status)}</td>
+                <td class="${cls}">${esc(statusWord)}</td>
                 <td>${esc(h.mode || "")} ${label}</td>
                 <td><code>${esc(path)}</code></td>
                 <td>${esc(fmt(h.bytes))}</td>
@@ -249,10 +407,12 @@
       btn.addEventListener("click", () => downloadPackage(btn.getAttribute("data-dl")));
     });
     $("panel-transfers").querySelectorAll("[data-reveal]").forEach((btn) => {
-      btn.addEventListener("click", () => postLocal("/v1/local/reveal", {
-        trajectory_id: state.id,
-        name: btn.getAttribute("data-reveal"),
-      }));
+      btn.addEventListener("click", () =>
+        postLocal("/v1/local/reveal", {
+          trajectory_id: state.id,
+          name: btn.getAttribute("data-reveal"),
+        })
+      );
     });
   }
 
@@ -317,16 +477,36 @@
       economy.size_units_saved === null || economy.size_units_saved === undefined
         ? "Size-unit savings unknown (raw_size_units was not emitted)."
         : `Latest size-unit savings: ${economy.size_units_saved}.`;
+    const raw = economy.raw_estimated_tokens;
+    const proj = economy.projected_estimated_tokens;
+    const whole = raw || 0;
     $("panel-economy").innerHTML = `
+      <p class="lede muted">We count how much context we dropped before calling the model. estimated_tokens uses ceil(chars/4) on the server. This is not a provider invoice.</p>
       <div class="stats">
-        ${stat("Latest raw est. tokens", economy.raw_estimated_tokens)}
-        ${stat("Latest projected est. tokens", economy.projected_estimated_tokens)}
-        ${stat("Latest tokens avoided (est.)", economy.tokens_avoided_estimated)}
-        ${stat("Lifetime tokens avoided (est.)", economy.lifetime_tokens_avoided_estimated)}
-        ${stat("Projection hits", economy.projection_hits)}
-        ${stat("Redaction collapses", economy.redaction_collapses)}
+        ${stat("Before trim", economy.raw_estimated_tokens)}
+        ${stat("After trim", economy.projected_estimated_tokens)}
+        ${stat("Saved last time", economy.tokens_avoided_estimated, "ok")}
+        ${stat("Saved so far", economy.lifetime_tokens_avoided_estimated, "ok")}
+        ${stat("Times trimmed", economy.projection_hits)}
+        ${stat("Hidden bits", economy.redaction_collapses)}
       </div>
-      <p class="muted">estimated_tokens uses ceil(chars/4) on the server. This is not a provider invoice.</p>
+      <div class="meter">
+        <div class="meter-row">
+          <span>Before</span>
+          <div class="meter-bar raw"><span style="width:${barPct(raw, whole)}%"></span></div>
+          <strong>${esc(fmt(raw))}</strong>
+        </div>
+        <div class="meter-row">
+          <span>After</span>
+          <div class="meter-bar"><span style="width:${barPct(proj, whole)}%"></span></div>
+          <strong>${esc(fmt(proj))}</strong>
+        </div>
+        <div class="meter-row">
+          <span>Saved</span>
+          <div class="meter-bar saved"><span style="width:${barPct(economy.tokens_avoided_estimated, whole)}%"></span></div>
+          <strong>${esc(fmt(economy.tokens_avoided_estimated))}</strong>
+        </div>
+      </div>
       <p class="muted">${esc(saved)}</p>
       ${projectionNote ? `<p class="empty-economy" role="status">${esc(projectionNote)}</p>` : ""}
       <div class="economy-actions">
@@ -337,7 +517,7 @@
         empty
           ? `<p class="empty-economy" role="status">${esc(empty)}</p>`
           : `<table>
-              <thead><tr><th>Time</th><th>Kind</th><th>Step</th><th>Raw est.</th><th>Projected est.</th><th>Avoided est.</th><th>Dropped</th><th>Redaction</th></tr></thead>
+              <thead><tr><th>Time</th><th>What</th><th>Step</th><th>Before</th><th>After</th><th>Saved</th><th>Dropped</th><th>Hidden</th></tr></thead>
               <tbody>${steps
                 .map((row) => {
                   const redaction =
@@ -345,8 +525,8 @@
                       ? `thoughts ${fmt(row.thought_collapses)}, fields ${fmt(row.secret_field_hits)}${row.mode ? ", " + row.mode : ""}`
                       : "—";
                   return `<tr>
-                    <td>${esc(row.ts)}</td>
-                    <td><code>${esc(row.kind)}</code></td>
+                    <td>${esc(fmtTime(row.ts))}</td>
+                    <td>${esc(kindLabel(row.kind))} <code>${esc(row.kind)}</code></td>
                     <td>${esc(fmt(row.step_n))}</td>
                     <td>${esc(fmt(row.raw_estimated_tokens))}</td>
                     <td>${esc(fmt(row.projected_estimated_tokens))}</td>
@@ -364,7 +544,7 @@
                 largest
                   .map(
                     (row) => `<tr>
-                      <td>${esc(row.ts)}</td>
+                      <td>${esc(fmtTime(row.ts))}</td>
                       <td>${esc(fmt(row.step_n))}</td>
                       <td>${esc(fmt(row.raw_estimated_tokens))}</td>
                       <td>${esc(fmt(row.size_units))}</td>
@@ -392,6 +572,8 @@
 
   function renderPanels() {
     renderSavings();
+    renderRunList();
+    renderHome();
     renderOverview();
     renderSeals();
     renderTransfers();
@@ -411,11 +593,19 @@
 
   async function loadSavings() {
     try {
-      state.savings = await api("/v1/savings");
+      const dash = await api("/v1/dashboard");
+      state.savings = dash.savings || null;
+      state.runs = dash.runs || [];
     } catch (_) {
-      state.savings = null;
+      try {
+        state.savings = await api("/v1/savings");
+      } catch (err) {
+        state.savings = null;
+      }
     }
     renderSavings();
+    renderRunList();
+    if (!state.id) renderHome();
     if (state.id) renderOverview();
   }
 
@@ -423,26 +613,13 @@
     saveToken();
     showBanner("");
     try {
-      const [data] = await Promise.all([api("/v1/trajectories"), loadSavings()]);
-      const ids = data.trajectories || [];
-      const list = $("traj-list");
-      list.innerHTML = "";
-      $("traj-empty").classList.toggle("hidden", ids.length > 0);
-      ids.forEach((id) => {
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = "traj-item";
-        btn.textContent = id;
-        btn.dataset.id = id;
-        if (id === state.id) btn.setAttribute("aria-current", "true");
-        btn.addEventListener("click", () => selectTrajectory(id));
-        list.appendChild(btn);
-      });
+      await loadSavings();
     } catch (err) {
       showBanner(String(err.message || err), true);
       $("traj-list").innerHTML = "";
       $("traj-empty").classList.add("hidden");
       state.savings = null;
+      state.runs = [];
       renderSavings();
     }
   }
@@ -450,9 +627,11 @@
   async function selectTrajectory(id) {
     state.id = id;
     setQueryId(id);
+    $("crumb").textContent = "Run";
     $("detail-title").textContent = id;
-    $("detail-sub").innerHTML = `Deep link: <code>?id=${esc(id)}</code>`;
-    $("placeholder").classList.add("hidden");
+    $("detail-sub").innerHTML = `Open again later with <code>?id=${esc(id)}</code>`;
+    $("back-home").classList.remove("hidden");
+    $("home").classList.add("hidden");
     $("panels").classList.remove("hidden");
     document.querySelectorAll(".traj-item").forEach((el) => {
       el.setAttribute("aria-current", el.dataset.id === id ? "true" : "false");
@@ -546,13 +725,27 @@
     $("open-shell").addEventListener("click", () => postLocal("/v1/local/open-shell", { root: true }));
     $("from").addEventListener("change", () => state.id && renderPanels());
     $("to").addEventListener("change", () => state.id && renderPanels());
+    $("back-home").addEventListener("click", showHome);
+    $("savings").addEventListener("click", showHome);
+    $("run-search").addEventListener("input", () => {
+      state.query = $("run-search").value || "";
+      renderRunList();
+      if (!state.id) renderHome();
+    });
     document.querySelectorAll('[role="tab"]').forEach((btn) => {
       btn.addEventListener("click", () => selectTab(btn.dataset.tab));
+    });
+    document.addEventListener("keydown", (ev) => {
+      if (ev.key === "/" && document.activeElement && document.activeElement.tagName !== "INPUT") {
+        ev.preventDefault();
+        $("run-search").focus();
+      }
     });
     const params = new URLSearchParams(window.location.search);
     const initial = params.get("id");
     loadList().then(() => {
       if (initial) selectTrajectory(initial);
+      else showHome();
     });
   }
 

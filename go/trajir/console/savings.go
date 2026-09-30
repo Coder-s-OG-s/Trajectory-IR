@@ -23,24 +23,39 @@ type SavingsRow struct {
 
 // Savings sums economy lifetime avoided across every trajectory on disk.
 func (s *Store) Savings() (SavingsView, error) {
-	ids, err := s.ListTrajectories()
+	sums, err := s.summarizeAll()
 	if err != nil {
 		return SavingsView{}, err
 	}
-	view := SavingsView{
-		ByTrajectory:    make([]SavingsRow, 0, len(ids)),
-		TrajectoryCount: len(ids),
+	return savingsFromSummaries(sums), nil
+}
+
+func (s *Store) summarizeAll() ([]Summary, error) {
+	ids, err := s.ListTrajectories()
+	if err != nil {
+		return nil, err
 	}
-	var life, latest, hits int
-	var sawLife, sawLatest bool
+	out := make([]Summary, 0, len(ids))
 	for _, id := range ids {
 		events, err := s.ReadEvents(id)
 		if err != nil {
-			return SavingsView{}, err
+			return nil, err
 		}
-		sum := Summarize(id, events)
+		out = append(out, Summarize(id, events))
+	}
+	return out, nil
+}
+
+func savingsFromSummaries(sums []Summary) SavingsView {
+	view := SavingsView{
+		ByTrajectory:    make([]SavingsRow, 0, len(sums)),
+		TrajectoryCount: len(sums),
+	}
+	var life, latest, hits int
+	var sawLife, sawLatest bool
+	for _, sum := range sums {
 		row := SavingsRow{
-			TrajectoryID:                 id,
+			TrajectoryID:                 sum.TrajectoryID,
 			TokensAvoidedEstimated:       copyInt(sum.Economy.LifetimeTokensAvoidedEstimated),
 			LatestTokensAvoidedEstimated: copyInt(sum.Economy.TokensAvoidedEstimated),
 			ProjectionHits:               sum.Economy.ProjectionHits,
@@ -64,5 +79,5 @@ func (s *Store) Savings() (SavingsView, error) {
 	if sawLatest {
 		view.LatestTokensAvoidedEstimated = copyInt(&latest)
 	}
-	return view, nil
+	return view
 }
