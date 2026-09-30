@@ -5,6 +5,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
@@ -13,8 +14,7 @@ import (
 
 // startLocal launches a local process and does not wait. Tests replace it.
 var startLocal = func(name string, args ...string) error {
-	cmd := exec.Command(name, args...)
-	return cmd.Start()
+	return startOS(name, args)
 }
 
 func isLoopback(r *http.Request) bool {
@@ -125,29 +125,70 @@ func (s *Server) handleOpenShell(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "opened", "path": path})
 }
 
+func isDir(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
+}
+
+func windowsSystemRoot() string {
+	root := os.Getenv("SystemRoot")
+	if root == "" {
+		root = os.Getenv("WINDIR")
+	}
+	return root
+}
+
+func windowsCmd() string {
+	root := windowsSystemRoot()
+	if root == "" {
+		return "cmd.exe"
+	}
+	return filepath.Join(root, "System32", "cmd.exe")
+}
+
+func windowsExplorer() string {
+	root := windowsSystemRoot()
+	if root == "" {
+		return "explorer.exe"
+	}
+	return filepath.Join(root, "explorer.exe")
+}
+
+func windowsPowerShell() string {
+	if p, err := exec.LookPath("pwsh"); err == nil {
+		return p
+	}
+	root := windowsSystemRoot()
+	if root == "" {
+		return "powershell.exe"
+	}
+	return filepath.Join(root, "System32", "WindowsPowerShell", "v1.0", "powershell.exe")
+}
+
 func revealArgs(path string) (string, []string) {
 	switch runtime.GOOS {
 	case "windows":
-		return "explorer.exe", []string{"/select," + path}
+		if isDir(path) {
+			// cmd start opens the folder in this session. explorer /select, on a
+			// dotted directory only highlights it in the parent and looks like a no-op.
+			return windowsCmd(), []string{"/c", "start", "", path}
+		}
+		return windowsExplorer(), []string{"/select," + path}
 	case "darwin":
+		if isDir(path) {
+			return "open", []string{path}
+		}
 		return "open", []string{"-R", path}
 	default:
 		return "xdg-open", []string{path}
 	}
 }
 
-func quotePS(path string) string {
-	return "'" + strings.ReplaceAll(path, "'", "''") + "'"
-}
-
 func openShellArgs(dir string) (string, []string) {
 	switch runtime.GOOS {
 	case "windows":
-		return "powershell.exe", []string{
-			"-NoLogo",
-			"-NoExit",
-			"-Command",
-			"Set-Location -LiteralPath " + quotePS(dir),
+		return windowsCmd(), []string{
+			"/c", "start", "", "/D", dir, windowsPowerShell(), "-NoLogo", "-NoExit",
 		}
 	case "darwin":
 		return "open", []string{"-a", "Terminal", dir}
