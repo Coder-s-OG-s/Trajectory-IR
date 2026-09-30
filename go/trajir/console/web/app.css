@@ -55,6 +55,17 @@ code { font-family: ui-monospace, Consolas, monospace; font-size: 0.9em; }
 .tiny { font-size: 0.75rem; line-height: 1.35; }
 .pkg-actions { display: flex; gap: 0.35rem; flex-wrap: wrap; }
 
+.savings {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.65rem 0.7rem;
+}
+.savings .label { color: var(--muted); font-size: 0.75rem; }
+.savings .value { font-size: 1.35rem; font-weight: 600; margin: 0.15rem 0 0.25rem; }
+.savings .value.ok { color: var(--ok); }
+.savings p { margin: 0; }
+
 .traj-list { display: flex; flex-direction: column; gap: 0.35rem; overflow: auto; flex: 1; }
 .traj-item {
   text-align: left; background: transparent; border: 1px solid transparent;

@@ -29,6 +29,12 @@
       </div>
       <p class="muted tiny">Folder and shell only work on this machine (127.0.0.1). The browser does not run commands.</p>
 
+      <div id="savings" class="savings" aria-live="polite">
+        <div class="label">Tokens saved (est.)</div>
+        <div id="savings-total" class="value">—</div>
+        <p class="muted tiny">ceil(chars/4). Not billed. Sum of lifetime projection savings.</p>
+      </div>
+
       <nav id="traj-list" class="traj-list" aria-label="Trajectory list"></nav>
       <p id="traj-empty" class="empty muted hidden">
         No trajectories yet. Emit events into

@@ -5,6 +5,7 @@
     events: [],
     summary: null,
     packages: [],
+    savings: null,
     tab: "overview",
   };
 
@@ -102,8 +103,19 @@
     return `<div class="stat"><div class="label">${esc(label)}</div><div class="value ${cls || ""}">${esc(fmt(value))}</div></div>`;
   }
 
+  function renderSavings() {
+    const el = $("savings-total");
+    if (!el) return;
+    const s = state.savings || {};
+    const n = s.tokens_avoided_estimated;
+    el.textContent = n === null || n === undefined ? "—" : String(n);
+    el.classList.toggle("ok", n !== null && n !== undefined);
+  }
+
   function renderOverview() {
     const s = state.summary || {};
+    const economy = s.economy || {};
+    const savings = state.savings || {};
     const ev = filteredEvents();
     $("panel-overview").innerHTML = `
       <div class="stats">
@@ -114,8 +126,10 @@
         ${stat("Verify fail", s.seal_verified_fail, s.seal_verified_fail ? "bad" : "")}
         ${stat("Exports OK", s.exports_ok)}
         ${stat("Imports OK", s.imports_ok)}
+        ${stat("Tokens saved (est.)", economy.lifetime_tokens_avoided_estimated, economy.lifetime_tokens_avoided_estimated != null ? "ok" : "")}
+        ${stat("All trajectories saved (est.)", savings.tokens_avoided_estimated, savings.tokens_avoided_estimated != null ? "ok" : "")}
       </div>
-      <p class="muted">Overview uses server summary plus the time filter on the event list below.</p>
+      <p class="muted">Overview uses server summary plus the time filter on the event list below. Tokens saved is estimated_tokens (ceil chars/4), not a provider invoice.</p>
       <table>
         <thead><tr><th>Time</th><th>Kind</th><th>Source</th><th>Id</th></tr></thead>
         <tbody>
@@ -377,6 +391,7 @@
   }
 
   function renderPanels() {
+    renderSavings();
     renderOverview();
     renderSeals();
     renderTransfers();
@@ -394,11 +409,21 @@
     });
   }
 
+  async function loadSavings() {
+    try {
+      state.savings = await api("/v1/savings");
+    } catch (_) {
+      state.savings = null;
+    }
+    renderSavings();
+    if (state.id) renderOverview();
+  }
+
   async function loadList() {
     saveToken();
     showBanner("");
     try {
-      const data = await api("/v1/trajectories");
+      const [data] = await Promise.all([api("/v1/trajectories"), loadSavings()]);
       const ids = data.trajectories || [];
       const list = $("traj-list");
       list.innerHTML = "";
@@ -417,6 +442,8 @@
       showBanner(String(err.message || err), true);
       $("traj-list").innerHTML = "";
       $("traj-empty").classList.add("hidden");
+      state.savings = null;
+      renderSavings();
     }
   }
 
@@ -445,6 +472,7 @@
       state.packages = packs.packages || [];
       renderPanels();
       selectTab(state.tab);
+      loadSavings();
     } catch (err) {
       state.events = [];
       state.summary = null;

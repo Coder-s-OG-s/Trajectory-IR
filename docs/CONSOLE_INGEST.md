@@ -33,6 +33,7 @@ go run ./cmd/trajir-console -addr 127.0.0.1:8787
 |--------|------|-------|
 | `POST` | `/v1/events` | Body = one event JSON; fail-closed on invalid envelope |
 | `GET` | `/v1/trajectories` | List trajectory ids |
+| `GET` | `/v1/savings` | Cross-trajectory tokens saved (est.). Sum of lifetime avoided |
 | `GET` | `/v1/trajectories/{id}/events` | Append-ordered events |
 | `GET` | `/v1/trajectories/{id}/summary` | Seal / economy / transfer rollup |
 | `GET` | `/v1/trajectories/{id}/packages` | Local `.tir` copies for that id |
