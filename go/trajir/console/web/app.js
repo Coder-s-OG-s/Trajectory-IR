@@ -223,38 +223,201 @@
     });
   }
 
+  function savedOf(run) {
+    const n = run && run.tokens_avoided_estimated;
+    return n === null || n === undefined ? null : Number(n);
+  }
+
+  function hexTone(saved, maxSaved, failed) {
+    if (failed) return "bad";
+    if (saved === null || saved === undefined) return "l1";
+    if (!maxSaved) return "l2";
+    const t = saved / maxSaved;
+    if (t >= 0.8) return "l5";
+    if (t >= 0.5) return "l4";
+    if (t >= 0.25) return "l3";
+    if (t > 0) return "l2";
+    return "l1";
+  }
+
+  function sparkPoints(values) {
+    const w = 280;
+    const h = 88;
+    if (!values.length) return { w, h, pts: "" };
+    const max = Math.max.apply(null, values.concat([1]));
+    const pts = values.map((v, i) => {
+      const x = values.length === 1 ? w / 2 : (i / (values.length - 1)) * w;
+      const y = h - 10 - (Number(v) / max) * (h - 20);
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    });
+    return { w, h, pts: pts.join(" ") };
+  }
+
+  function hexRows(runs, maxSaved) {
+    const pattern = [7, 7, 7, 7, 7];
+    const total = pattern.reduce((n, x) => n + x, 0);
+    const cells = [];
+    for (let i = 0; i < total; i++) {
+      const run = runs[i];
+      if (run) {
+        cells.push({
+          run,
+          tone: hexTone(savedOf(run), maxSaved, !!run.seal_verified_fail),
+        });
+      } else {
+        cells.push({ run: null, tone: "empty" });
+      }
+    }
+    const rows = [];
+    let offset = 0;
+    pattern.forEach((count, ri) => {
+      rows.push({ odd: ri % 2 === 1, cells: cells.slice(offset, offset + count) });
+      offset += count;
+    });
+    return { rows };
+  }
+
   function renderHome() {
     const savings = state.savings || {};
+    const about = state.about || {};
     const runs = visibleRuns();
-    const failed = (state.runs || []).reduce((n, r) => n + (r.seal_verified_fail || 0), 0);
-    const files = (state.runs || []).reduce((n, r) => n + (r.exports_ok || 0) + (r.imports_ok || 0), 0);
+    const all = state.runs || [];
+    const failed = all.reduce((n, r) => n + (r.seal_verified_fail || 0), 0);
+    const files = all.reduce((n, r) => n + (r.exports_ok || 0) + (r.imports_ok || 0), 0);
+    const events = all.reduce((n, r) => n + (r.event_count || 0), 0);
+    const savedNums = runs.map(savedOf).filter((n) => n !== null);
+    const maxSaved = savedNums.length ? Math.max.apply(null, savedNums) : 0;
+    const board = hexRows(runs, maxSaved);
+    const newest = runs[0] && runs[0].last_ts ? fmtTime(runs[0].last_ts) : "none";
+    const sparkRuns = runs.slice().sort((a, b) => String(a.last_ts || "").localeCompare(String(b.last_ts || "")));
+    const sparkVals = sparkRuns.map((r) => savedOf(r) || 0);
+    const spark = sparkPoints(sparkVals);
+    const shareTotal = savedNums.reduce((n, x) => n + x, 0);
+    const health = about.health || "none";
     $("home").innerHTML = `
-      <p class="lede">Everything on this page lives on this computer. Click a card to open a run. Token numbers are estimates, not a provider invoice.</p>
+      <p class="lede">Everything here is on this computer. Filled cells are real runs. Empty cells are empty. Token numbers are estimates, not a provider invoice.</p>
       <div class="stats">
         ${kpi("Tokens saved (est.)", savings.tokens_avoided_estimated, savings.tokens_avoided_estimated != null ? "ok" : "", "")}
-        ${kpi("Runs", (state.runs || []).length, "", "")}
+        ${kpi("Runs", all.length, "", "")}
         ${kpi("Failed lock checks", failed, failed ? "bad" : "", "seals")}
         ${kpi("File moves", files, "", "transfers")}
       </div>
-      <div class="run-grid">
-        ${
-          runs.length
-            ? runs
-                .map((run) => {
-                  const bad = run.seal_verified_fail ? "bad" : "ok";
-                  return `<button type="button" class="run-card" data-id="${esc(run.trajectory_id)}">
-                    <div class="name">${esc(run.trajectory_id)}</div>
-                    <div class="muted tiny">${esc(fmtTime(run.last_ts))}</div>
-                    <div class="chips">
-                      <span class="chip gold">saved ${esc(fmt(run.tokens_avoided_estimated))}</span>
-                      <span class="chip">steps ${esc(fmt(run.node_count))}</span>
-                      <span class="chip ${bad}">locks ${esc(fmt(run.seal_verified_fail))} failed</span>
-                    </div>
-                  </button>`;
-                })
-                .join("")
-            : `<p class="muted">No runs match that search.</p>`
-        }
+      <div class="home-board">
+        <section class="heat-card">
+          <div class="heat-head">
+            <div>
+              <h3>Run activity</h3>
+              <p class="muted tiny"><span class="live-dot" aria-hidden="true"></span> ${esc(all.length)} runs on this machine</p>
+            </div>
+            <div class="heat-meta muted tiny">
+              <div>Newest ${esc(newest)}</div>
+              <div>${esc(fmt(events))} events</div>
+            </div>
+          </div>
+          <div class="hex-wrap">
+            <div class="hex-grid">
+            ${board.rows
+              .map(
+                (row) => `<div class="hex-row ${row.odd ? "odd" : ""}">${row.cells
+                  .map((cell) => {
+                    if (!cell.run) {
+                      return `<span class="hex empty" title="empty"></span>`;
+                    }
+                    const id = cell.run.trajectory_id;
+                    return `<button type="button" class="hex ${cell.tone}" data-id="${esc(id)}" data-saved="${esc(fmt(savedOf(cell.run)))}" data-events="${esc(fmt(cell.run.event_count))}" data-failed="${esc(fmt(cell.run.seal_verified_fail))}" aria-label="${esc(id)}"></button>`;
+                  })
+                  .join("")}</div>`
+              )
+              .join("")}
+            </div>
+            <div id="heat-tip" class="heat-tip hidden" role="status"></div>
+          </div>
+          <div class="hex-legend" aria-hidden="true">
+            <span>Less saved</span>
+            <span class="hex l1"></span><span class="hex l2"></span><span class="hex l3"></span><span class="hex l4"></span><span class="hex l5"></span>
+            <span>More saved (est.)</span>
+            <span class="hex bad"></span>
+            <span>Failed lock</span>
+            <span class="hex empty"></span>
+            <span>Empty</span>
+          </div>
+          <div class="run-index-wrap">
+            <h3>Runs</h3>
+            ${
+              runs.length
+                ? `<table class="run-index">
+              <thead>
+                <tr>
+                  <th>Run</th>
+                  <th>Last event</th>
+                  <th>Events</th>
+                  <th>Saved (est.)</th>
+                  <th>Failed locks</th>
+                  <th>Files</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${runs
+                  .map((run) => {
+                    const fail = run.seal_verified_fail || 0;
+                    const moved = (run.exports_ok || 0) + (run.imports_ok || 0);
+                    return `<tr>
+                    <td><button type="button" class="share-name" data-id="${esc(run.trajectory_id)}">${esc(run.trajectory_id)}</button></td>
+                    <td>${esc(fmtTime(run.last_ts))}</td>
+                    <td>${esc(fmt(run.event_count))}</td>
+                    <td class="ok">${esc(fmt(savedOf(run)))}</td>
+                    <td class="${fail ? "bad" : ""}">${esc(fmt(fail))}</td>
+                    <td>${esc(fmt(moved))}</td>
+                  </tr>`;
+                  })
+                  .join("")}
+              </tbody>
+            </table>`
+                : `<p class="muted">No runs match that search.</p>`
+            }
+          </div>
+        </section>
+        <aside class="home-side">
+          <section class="side-card">
+            <h3>Tokens saved (est.)</h3>
+            <p class="muted tiny">Guess from text size. Not a bill. Ordered by last event time.</p>
+            <div class="side-hero ${savings.tokens_avoided_estimated != null ? "ok" : ""}">${esc(fmt(savings.tokens_avoided_estimated))}</div>
+            ${
+              spark.pts
+                ? `<svg class="spark" viewBox="0 0 ${spark.w} ${spark.h}" aria-hidden="true"><polyline fill="none" stroke="currentColor" stroke-width="2.4" points="${spark.pts}"></polyline></svg>`
+                : `<p class="muted tiny">No projection events yet.</p>`
+            }
+          </section>
+          <section class="side-card">
+            <h3>This machine</h3>
+            <ul class="health-list">
+              <li><span>Health</span><strong class="${health === "ok" ? "ok" : ""}">${esc(health)}</strong></li>
+              <li><span>Packages</span><strong>${esc(fmt(about.package_count))}</strong></li>
+              <li><span>Bytes on disk</span><strong>${esc(fmt(about.data_bytes))}</strong></li>
+              <li><span>API token</span><strong>${about.auth_required ? "required" : "not set"}</strong></li>
+              <li><span>Folder tools</span><strong>${about.loopback_tools ? "this machine only" : "none"}</strong></li>
+            </ul>
+          </section>
+          <section class="side-card">
+            <h3>Share of saved (est.)</h3>
+            <p class="muted tiny">Each bar is one run. No forecast. No parade.</p>
+            ${
+              runs.length
+                ? runs
+                    .map((run) => {
+                      const n = savedOf(run);
+                      const pct = n === null || !shareTotal ? 0 : barPct(n, shareTotal);
+                      return `<div class="share-row">
+                        <button type="button" class="share-name" data-id="${esc(run.trajectory_id)}">${esc(run.trajectory_id)}</button>
+                        <div class="meter-bar saved"><span style="width:${pct}%"></span></div>
+                        <span class="tiny">${esc(fmt(n))}</span>
+                      </div>`;
+                    })
+                    .join("")
+                : `<p class="muted tiny">No runs yet.</p>`
+            }
+          </section>
+        </aside>
       </div>
       <div class="help">
         <div><h3>What happened</h3><p>The story of one run, newest first, in plain words.</p></div>
@@ -263,9 +426,28 @@
         <div><h3>Tokens</h3><p>How much context we trimmed. Guess from text size, not a bill.</p></div>
         <div><h3>License</h3><p>Apache License 2.0. No product key. No expiry.</p></div>
       </div>`;
-    $("home").querySelectorAll(".run-card").forEach((btn) => {
+    bindHome();
+  }
+
+  function bindHome() {
+    const home = $("home");
+    const tip = $("heat-tip");
+    home.querySelectorAll(".hex[data-id], .run-card[data-id], .share-name[data-id], .run-index [data-id]").forEach((btn) => {
       btn.addEventListener("click", () => selectTrajectory(btn.getAttribute("data-id")));
     });
+    home.querySelectorAll(".hex[data-id]").forEach((btn) => {
+      btn.addEventListener("mouseenter", () => {
+        if (!tip) return;
+        tip.classList.remove("hidden");
+        tip.innerHTML = `<div class="name">${esc(btn.getAttribute("data-id"))}</div>
+          <div>saved ${esc(btn.getAttribute("data-saved"))} (est.)</div>
+          <div>${esc(btn.getAttribute("data-events"))} events, locks failed ${esc(btn.getAttribute("data-failed"))}</div>`;
+      });
+      btn.addEventListener("mouseleave", () => {
+        if (tip) tip.classList.add("hidden");
+      });
+    });
+    bindJumps(home);
   }
 
   function showHome() {
@@ -279,6 +461,7 @@
     $("panels").classList.add("hidden");
     document.querySelectorAll(".traj-item").forEach((el) => el.removeAttribute("aria-current"));
     renderHome();
+    loadAbout(true);
   }
 
   function eventDetail(e) {
@@ -660,6 +843,7 @@
       if (quiet && sameJSON(state.about, about)) return;
       state.about = about;
       renderAbout();
+      if (!state.id) renderHome();
     } catch (err) {
       if (quiet) return;
       state.about = null;

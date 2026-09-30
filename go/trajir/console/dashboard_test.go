@@ -103,9 +103,26 @@ func TestDashboardUIShell(t *testing.T) {
 	rr2 := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rr2, req2)
 	js := rr2.Body.String()
-	for _, want := range []string{"/v1/dashboard", "renderHome", "kindLabel", "applyTheme", "tickLive", `return "none"`} {
+	for _, want := range []string{
+		"/v1/dashboard",
+		"renderHome",
+		"kindLabel",
+		"applyTheme",
+		"tickLive",
+		`return "none"`,
+		"hex-grid",
+		"run-index",
+		"bindHome",
+		"barPct",
+		"Run activity",
+	} {
 		if !strings.Contains(js, want) {
 			t.Fatalf("missing %q in js", want)
+		}
+	}
+	for _, banned := range []string{"pctOf", "billed tokens", "city map"} {
+		if strings.Contains(js, banned) {
+			t.Fatalf("home js must not contain %q", banned)
 		}
 	}
 	for _, src := range []string{html, js} {

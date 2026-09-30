@@ -44,7 +44,7 @@ go run ./cmd/trajir-console -addr 127.0.0.1:8787
 Open `http://127.0.0.1:8787/` for the home dashboard, or
 `http://127.0.0.1:8787/?id=console-demo` for one run.
 
-1. Home shows every run as a card, plus Tokens saved (est.) for all of them. Click a card to open it.
+1. Home shows a run activity board (filled hexes are real runs, empty hexes are empty), a Runs table, Tokens saved (est.), and this-machine health. Click a hex or a run name to open it. Not a city map and not a forecast.
 2. The sidebar Tokens saved (est.) is `GET /v1/dashboard` (same numbers as `GET /v1/savings`). For this fixture it is 75. That figure is `ceil(chars/4)`, not a provider invoice.
 3. **What happened** is a plain-language timeline. The log names stay on each row.
 4. **Locked decisions** shows `seal.created` then `seal.verified` with `ok=true`.
