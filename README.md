@@ -34,7 +34,7 @@ Production agent stacks keep failing the same way. Crash replay is already Tempo
 | Failure | Who actually solves it | What Trajectory IR adds |
 |---|---|---|
 | **Crash mid-tool** | Durable backend memoization. **Exactly-once** still needs a server-side idempotency key the remote API honors. | Block-and-gate: at most one automatic attempt from this client. Unknown in-flight calls go to `BLOCKED_NEEDS_GATE` for a human, not a second LLM turn. The seal-derived key is recorded on `TOOL_CALL` so you can *forward* it. |
-| **Naive resume** | Do not re-call the model for a sealed step (backend replay + IR seal). | Honest resume of the sealed plan (R01). That freezes **the plan**, not **the world**. If the cluster changed while you were dead, re-observe (`READ_ONLY`) or abort and start a **new** step. Do not silently re-infer the sealed one. |
+| **Naive resume** | Do not re-call the model for a sealed step (backend replay + IR seal). | Honest resume of the sealed plan (R01). That freezes **the plan**, not **the world**. If the cluster changed while you were dead, re-observe (`READ_ONLY`) or abort and start a **new** step. Hosts that declared a `WORLD_SNAPSHOT` at seal time can `CheckWorld` and get fail-loud `WORLD_DRIFT`. Do not silently re-infer the sealed one. |
 | **Locked history** | Nobody else ships a runtime-independent unit. | Portable thin/fat `.tir` with hash-checked node IDs |
 | **Unsafe demos** | Host policy. | Sandbox mode is a **demo/CI effect-class gate** before the tool body (R06). It is not a process sandbox, not an AST of `bash`, and not a security boundary for arbitrary code. |
 
@@ -53,9 +53,9 @@ This is a **runtime trajectory IR**, not LLVM. You do not compile a prompt into 
 
 - **Sealed decisions** — freeze the model's plan (`DECISION`) before world-changing tools run. The world is not frozen with it.
 - **Effect classes** — fail-closed mapping from MCP tool hints, plus `AGENT_SPAWN` and `SENSITIVE`. Open-world primitives (`bash`, `python`, `sql`, browser) stay `NON_IDEMPOTENT_WRITE` unless an operator sets the class on the tool. No command parser.
-- **Honest resume** — a sealed step does not re-infer (R01). Re-observe is allowed; re-plan is a **new** step.
+- **Honest resume** — a sealed step does not re-infer (R01). Re-observe is allowed; re-plan is a **new** step. Optional `WORLD_SNAPSHOT` + `CheckWorld` is fail-loud when the host declared what it depends on.
 - **Block-and-gate** — non-idempotent tools are not blindly retried after interruption (R02). At-most-one automatic attempt, not exactly-once in the world.
-- **Seal-derived idempotency keys** — `trajectory_id:step_n:seq` on every `TOOL_CALL`. Hosts must forward that string to the remote API.
+- **Seal-derived idempotency keys** — hashed (`sha256` of tenant, trajectory, step, seq) on every `TOOL_CALL`, exposed to the tool body as CallMeta so you can send `Idempotency-Key`. Never stuffed into Python kwargs. Hosts must forward that string to the remote API.
 - **`.tir` packages** — thin or fat export/import with content-addressed identity; optional `trajir-pkg-sig-v1` signatures
 - **Sandbox mode** — demo/CI gate that rejects dangerous effect classes before the tool body. Not a security sandbox.
 - **Dual SDK** — **Go primary** (Temporal production backend), **Python reference** (DBOS local profile)
@@ -136,7 +136,7 @@ flowchart LR
 3. Tools execute under an effect class (fail closed if unknown)  
 4. Step commits; trajectory can be exported as `.tir`
 
-Same agent, two modes: **live** does the job; **sandbox** refuses dangerous *classified* effects and still keeps the sealed plan. Classify `bash` as read-only and sandbox will believe you. Don't.
+Same agent, two modes: **live** does the job; **sandbox** refuses dangerous *classified* effects and still keeps the sealed plan. Tag `bash` as read-only and `ExecTool` will refuse unless you set `AllowOpenWorldOverride` and own that lie.
 
 ---
 

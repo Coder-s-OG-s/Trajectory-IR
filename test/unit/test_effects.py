@@ -1,5 +1,9 @@
+import pytest
+
 from trajectory_ir.effects import (
     EffectClass,
+    OpenWorldOverrideRequired,
+    assert_open_world_effect,
     classify_from_mcp,
     classify_tool,
     is_forbidden_in_sandbox,
@@ -84,6 +88,23 @@ def test_is_open_world_primitive_is_case_insensitive():
     assert is_open_world_primitive("bash") is True
     assert is_open_world_primitive(" Shell ") is True
     assert is_open_world_primitive("echo") is False
+
+
+def test_assert_open_world_effect_refuses_safer_claim():
+    with pytest.raises(OpenWorldOverrideRequired, match="OPEN_WORLD_OVERRIDE_REQUIRED"):
+        assert_open_world_effect("bash", EffectClass.READ_ONLY)
+    with pytest.raises(OpenWorldOverrideRequired):
+        assert_open_world_effect("python", EffectClass.PURE)
+    with pytest.raises(OpenWorldOverrideRequired):
+        assert_open_world_effect("sql", EffectClass.IDEMPOTENT_WRITE)
+    assert_open_world_effect("bash", EffectClass.NON_IDEMPOTENT_WRITE)
+    assert_open_world_effect("bash", EffectClass.AGENT_SPAWN)
+    assert_open_world_effect("echo", EffectClass.READ_ONLY)
+    assert_open_world_effect(
+        "bash",
+        EffectClass.READ_ONLY,
+        allow_override=True,
+    )
 
 
 def test_is_forbidden_in_sandbox():
