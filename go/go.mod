@@ -1,8 +1,6 @@
 module github.com/Coder-s-OG-s/Trajectory-IR/go
 
-go 1.25.4
-
-toolchain go1.25.13
+go 1.26.0
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
@@ -15,7 +13,7 @@ require (
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	go.temporal.io/api v1.63.6
-	go.temporal.io/sdk v1.48.0
+	go.temporal.io/sdk v1.49.0
 	modernc.org/sqlite v1.58.0
 )
 
