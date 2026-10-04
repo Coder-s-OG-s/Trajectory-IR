@@ -179,6 +179,22 @@ def _verify_node_record(rec: dict[str, Any]) -> None:
         )
 
 
+def _verify_single_tenant(manifest: dict[str, Any], nodes: list[dict[str, Any]]) -> None:
+    tenant_ids = {n.get("tenant_id") for n in nodes}
+    if len(tenant_ids) > 1:
+        raise TirVerificationError("package contains mixed tenant_id values")
+    manifest_tenant = manifest.get("tenant_id")
+    if manifest_tenant:  # missing or "" => no opinion; align with Go
+        if not tenant_ids:
+            return
+        node_tenant = next(iter(tenant_ids))
+        if manifest_tenant != node_tenant:
+            raise TirVerificationError(
+                f"manifest tenant_id {manifest_tenant!r} does not match "
+                f"node tenant_id {node_tenant!r}"
+            )
+
+
 def _seals_from_nodes(nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """DECISION rows act as decision seals in the current runtime (content-addressed append)."""
     seals: list[dict[str, Any]] = []
@@ -524,6 +540,7 @@ def _load_tir_impl(path: str | Path, *, verify: bool) -> TirPackage:
                 raise TirVerificationError("package has no nodes")
             for n in nodes:
                 _verify_node_record(n)
+            _verify_single_tenant(manifest, nodes)
             expected_seals = _seals_from_nodes(nodes)
             by_id = {s["node_id"]: s for s in seals}
             for exp in expected_seals:

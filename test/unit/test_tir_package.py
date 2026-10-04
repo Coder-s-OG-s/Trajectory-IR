@@ -313,6 +313,95 @@ def test_export_tenant_scope(sample_log: NodeLog, tmp_path: Path) -> None:
         other.close()
 
 
+def test_import_rejects_mixed_tenants(tmp_path: Path) -> None:
+    acme_log = NodeLog(str(tmp_path / "acme.sqlite"))
+    beta_log = NodeLog(str(tmp_path / "beta.sqlite"))
+    try:
+        acme_log.append("PROJECT_CONTEXT", 1, {"goal": "a"}, "t-mix", "acme", 0)
+        beta_log.append("PROJECT_CONTEXT", 1, {"goal": "b"}, "t-mix", "beta", 1)
+        acme_path = tmp_path / "acme.tir"
+        beta_path = tmp_path / "beta.tir"
+        export_tir(acme_log, "t-mix", acme_path, mode="thin")
+        export_tir(beta_log, "t-mix", beta_path, mode="thin")
+    finally:
+        acme_log.close()
+        beta_log.close()
+
+    mixed = tmp_path / "mixed.tir"
+    with (
+        zipfile.ZipFile(acme_path, "r") as za,
+        zipfile.ZipFile(beta_path, "r") as zb,
+        zipfile.ZipFile(mixed, "w") as zout,
+    ):
+        beta_nodes = zb.read("nodes.ndjson")
+        for item in za.infolist():
+            data = za.read(item.filename)
+            if item.filename == "nodes.ndjson":
+                data = data + beta_nodes
+            zout.writestr(item, data)
+
+    dest = NodeLog(str(tmp_path / "dest.sqlite"))
+    try:
+        with pytest.raises(TirVerificationError):
+            import_tir(mixed, dest)
+        assert dest.list_nodes("t-mix", tenant_id="acme") == []
+        assert dest.list_nodes("t-mix", tenant_id="beta") == []
+    finally:
+        dest.close()
+
+
+def test_load_rejects_manifest_tenant_mismatch(tmp_path: Path) -> None:
+    acme_log = NodeLog(str(tmp_path / "acme.sqlite"))
+    beta_log = NodeLog(str(tmp_path / "beta.sqlite"))
+    try:
+        acme_log.append("PROJECT_CONTEXT", 1, {"goal": "a"}, "t-mismatch", "acme", 0)
+        beta_log.append("PROJECT_CONTEXT", 1, {"goal": "b"}, "t-mismatch", "beta", 1)
+        acme_path = tmp_path / "acme.tir"
+        beta_path = tmp_path / "beta.tir"
+        export_tir(acme_log, "t-mismatch", acme_path, mode="thin")
+        export_tir(beta_log, "t-mismatch", beta_path, mode="thin")
+    finally:
+        acme_log.close()
+        beta_log.close()
+
+    # acme manifest + beta nodes.ndjson
+    tampered = tmp_path / "tampered.tir"
+    with (
+        zipfile.ZipFile(acme_path, "r") as za,
+        zipfile.ZipFile(beta_path, "r") as zb,
+        zipfile.ZipFile(tampered, "w") as zout,
+    ):
+        beta_nodes = zb.read("nodes.ndjson")
+        for item in za.infolist():
+            data = za.read(item.filename)
+            if item.filename == "nodes.ndjson":
+                data = beta_nodes
+            zout.writestr(item, data)
+
+    with pytest.raises(TirVerificationError):
+        load_tir(tampered)
+
+
+def test_verify_single_tenant_empty_then_acme() -> None:
+    from trajectory_ir.package.tir import _verify_single_tenant
+
+    with pytest.raises(TirVerificationError, match="mixed tenant_id"):
+        _verify_single_tenant({}, [{"tenant_id": ""}, {"tenant_id": "acme"}])
+
+
+def test_verify_single_tenant_missing_key_then_acme() -> None:
+    from trajectory_ir.package.tir import _verify_single_tenant
+
+    with pytest.raises(TirVerificationError, match="mixed tenant_id"):
+        _verify_single_tenant({}, [{}, {"tenant_id": "acme"}])
+
+
+def test_verify_single_tenant_empty_manifest_no_opinion() -> None:
+    from trajectory_ir.package.tir import _verify_single_tenant
+
+    _verify_single_tenant({"tenant_id": ""}, [{"tenant_id": "acme"}])
+
+
 def test_load_tir_unverified_blocked_without_env(
     sample_log: NodeLog, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
