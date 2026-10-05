@@ -1,16 +1,14 @@
-# LangGraph evidence sidecar (local)
+# LangGraph evidence sidecar
 
-Copy-paste path for TURNING_POINT.md: wrap `execute_tool` so a `DECISION` is
-sealed **before** the tool mutates the world, then export a `.tir` and run
-`trajir verify`.
+Canonical install and honesty lock: **[docs/EVIDENCE_SIDECAR.md](../../docs/EVIDENCE_SIDECAR.md)**.
 
-This folder is local work on branch `local/evidence-sidecar`. It is not pushed.
+Wrap `execute_tool` so a `DECISION` is sealed **before** the tool mutates the
+world, then export a `.tir` and run `trajir verify`.
 
-## Quick smoke (no LangGraph install required)
-
-From the worktree root `H:\Trajectory-IR-wt-evidence`:
+## Quick smoke (no LangGraph install)
 
 ```powershell
+pwsh -File scripts\install_evidence_sidecar.ps1
 python integrations/langgraph/demo_stub.py
 go\trajir.exe verify .local-evidence\langgraph-demo.tir
 ```
@@ -18,12 +16,12 @@ go\trajir.exe verify .local-evidence\langgraph-demo.tir
 ## With LangGraph ToolNode
 
 ```powershell
-pip install langgraph langchain-core
+pip install -e ".[langgraph]"
 ```
 
 ```python
 from langgraph.prebuilt import ToolNode
-from integrations.langgraph.sidecar import TrajIRToolGuard
+from integrations.langgraph import TrajIRToolGuard
 from trajectory_ir.effects import EffectClass
 
 guard = TrajIRToolGuard(
@@ -33,18 +31,25 @@ guard = TrajIRToolGuard(
     effect_hints={"ship_release": EffectClass.NON_IDEMPOTENT_WRITE},
 )
 tools = ToolNode(my_tools, wrap_tool_call=guard.wrap_tool_call)
-# ... run graph ...
-guard.export_tir(".local-evidence/lg-live.tir")
+path = guard.export_tir(".local-evidence/lg-live.tir")
 guard.close()
 ```
 
-Optional console:
+## Console (8787 only)
 
 ```powershell
 $env:TRAJIR_CONSOLE_SINK = "http"
 $env:TRAJIR_CONSOLE_URL = "http://127.0.0.1:8787"
-# demo_stub also emits audit.completed after trajir verify → Evidence tab
+python integrations/langgraph/demo_stub.py
+# Evidence tab: http://127.0.0.1:8787/?id=langgraph-demo
 ```
+
+`demo_stub` emits `audit.completed` after verify when the sink is set.
+
+## Shared helpers
+
+- `TrajIRToolGuard` — seal / classify / exec / export
+- `run_verify` / `verify_and_note_audit` — `integrations.langgraph.verify_pack`
 
 ## What this proves
 

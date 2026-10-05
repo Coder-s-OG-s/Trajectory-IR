@@ -24,6 +24,10 @@ Pop-Location
 Write-Host "== unit: sidecar + otel =="
 & $py -m pytest integrations/langgraph/test_sidecar.py integrations/otel/test_correlate.py -q --tb=line
 
+Write-Host "== integration: evidence sidecar =="
+& $py -m pytest test/integration/test_evidence_sidecar.py -q --tb=line
+if ($LASTEXITCODE -ne 0) { throw "evidence integration tests failed" }
+
 Write-Host "== stub demo =="
 & $py integrations/langgraph/demo_stub.py
 if ($LASTEXITCODE -ne 0) { throw "demo_stub.py failed with exit $LASTEXITCODE" }

@@ -40,6 +40,16 @@ Production agent stacks keep failing the same way. Crash replay is already Tempo
 
 **One-line pitch:** portable semantics for *what the agent actually did*, on top of engines that already solve crash safety.
 
+### Evidence sidecar (wrap + verify)
+
+Drop an in-process wrap next to your host tool executor (LangGraph reference).
+Seal the `DECISION` before the tool runs, classify the effect, bind a hashed
+idempotency key, export `.tir`, and audit offline with `trajir verify`. Operator
+view: single console on port **8787**, Evidence tab.
+
+Start here: **[docs/EVIDENCE_SIDECAR.md](docs/EVIDENCE_SIDECAR.md)**  
+Install: `pwsh -File scripts/install_evidence_sidecar.ps1`
+
 ### What "IR" means here
 
 This is a **runtime trajectory IR**, not LLVM. You do not compile a prompt into `.tir` ahead of time. Hosts **lower** a live agent step into typed, content-addressed nodes; you can project, redact, graft, verify, and export that trace onto more than one backend. If you wanted a compiler, this is the wrong repo. If you wanted a vendor-neutral flight recorder for agent steps, this is the product.

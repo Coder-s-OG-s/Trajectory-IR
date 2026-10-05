@@ -1,5 +1,7 @@
 # OTel correlation (export only)
 
+Canonical product guide: **[docs/EVIDENCE_SIDECAR.md](../../docs/EVIDENCE_SIDECAR.md)**.
+
 Attach sealed TrajIR identifiers onto spans you already create.
 
 ## Rule
