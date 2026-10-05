@@ -103,3 +103,9 @@ go/trajir.exe
 go/trajir
 docs/LOCAL_EVIDENCE_SIDECAR.md
 
+
+# Local evidence sidecar work (TURNING_POINT local build)
+.local-evidence/
+go/trajir.exe
+go/cmd/trajir/trajir.exe
+docs/LOCAL_EVIDENCE_SIDECAR.md
