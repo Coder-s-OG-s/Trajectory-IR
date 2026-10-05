@@ -96,3 +96,10 @@ website/site/
 go/_demo_capture*/
 .console-data/
 
+
+# Local evidence sidecar work (TURNING_POINT local build)
+.local-evidence/
+go/trajir.exe
+go/trajir
+docs/LOCAL_EVIDENCE_SIDECAR.md
+
