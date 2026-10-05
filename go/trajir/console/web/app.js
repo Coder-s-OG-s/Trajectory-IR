@@ -288,7 +288,7 @@
         ${stat("trajir verify", boolLabel(ev.audit_ok), boolClass(ev.audit_ok))}
         ${stat("Open-world tools", openWorld.length || "—", openWorld.length ? "bad" : "")}
       </div>
-      <p class="muted">TURNING_POINT evidence: DECISION before TOOL_CALL, open-world flags, hashed idempotency keys, and offline <code>trajir verify</code>.</p>
+      <p class="muted">TURNING_POINT evidence: console Chain-of-Evidence requires a DECISION before every TOOL_CALL (stricter than <code>trajir verify</code>, which exempts some pure/read-only tools). Also shows open-world flags, hashed idempotency keys, and offline audit results.</p>
       ${ev.last_audit_path ? `<p class="muted">Last audit: <code>${esc(ev.last_audit_path)}</code>${ev.last_audit_ts ? " @ " + esc(ev.last_audit_ts) : ""}</p>` : ""}
       ${
         findings.length

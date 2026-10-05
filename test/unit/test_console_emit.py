@@ -3,11 +3,13 @@
 import json
 from pathlib import Path
 
-from client.python.trajectory_client import open_trajectory, seal_decision
+from client.python.trajectory_client import exec_tool, open_trajectory, seal_decision
 from trajectory_ir.console_emit import FileSink, emit, note_audit, note_node, note_package, note_seal
+from trajectory_ir.effects import EffectClass
 from trajectory_ir.package import export_tir
 from trajectory_ir.runtime.log import NodeLog
 from trajectory_ir.runtime.nodes import Node
+from trajectory_ir.runtime.tool import Tool
 
 KINDS = (
     "node.appended",
@@ -184,3 +186,37 @@ def test_export_observer_failure(tmp_path: Path):
         assert Path(path).is_file()
     finally:
         log.close()
+
+
+def test_exec_tool_emits_tool_call_console_fields(tmp_path: Path):
+    sink = _Capture()
+    traj = open_trajectory(
+        "demo",
+        "t-tool-emit",
+        db_path=str(tmp_path / "n.sqlite"),
+        console_sink=sink,
+    )
+    try:
+        seal_decision(traj, 1, {"tool_calls": [{"name": "echo", "args": {"msg": "hi"}}]})
+        exec_tool(
+            traj,
+            1,
+            {"args": {"msg": "hi"}},
+            Tool(name="echo", fn=lambda msg: msg, effect_class=EffectClass.PURE),
+            seq=2,
+        )
+    finally:
+        traj.close()
+
+    tool_events = [
+        e
+        for e in sink.events
+        if e["kind"] == "node.appended" and e["payload"].get("kind") == "TOOL_CALL"
+    ]
+    assert len(tool_events) == 1
+    payload = tool_events[0]["payload"]
+    assert payload["tool"] == "echo"
+    assert payload["effect_class"] == "PURE"
+    assert payload.get("idempotency_key")
+    assert payload["seq"] == 2
+    assert payload["step_n"] == 1

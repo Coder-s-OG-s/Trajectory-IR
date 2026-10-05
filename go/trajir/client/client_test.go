@@ -251,6 +251,62 @@ func TestResumeTenantIsolation(t *testing.T) {
 	}
 }
 
+func TestExecToolEmitsToolCallConsoleFields(t *testing.T) {
+	dir := t.TempDir()
+	var got []emit.Event
+	sink := emit.SinkFunc(func(e emit.Event) error {
+		got = append(got, e)
+		return nil
+	})
+	tr, err := client.OpenTrajectory("demo", "t-tool-emit", client.Options{WorkDir: dir, ConsoleSink: sink})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tr.Close()
+	if _, err := tr.Project(1, map[string]any{"k": "v"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tr.SealDecision(1, map[string]any{
+		"tool_calls": []any{map[string]any{"name": "echo", "args": map[string]any{"msg": "hi"}}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	tool := resume.Tool{
+		Name:   "echo",
+		Effect: effects.PURE,
+		Fn: func(args map[string]any) (any, error) {
+			return args["msg"], nil
+		},
+	}
+	if _, err := tr.ExecTool(1, 2, tool, map[string]any{"msg": "hi"}); err != nil {
+		t.Fatal(err)
+	}
+	var toolEv *emit.Event
+	for i := range got {
+		if got[i].Kind != emit.KindNodeAppended {
+			continue
+		}
+		kind, _ := got[i].Payload["kind"].(string)
+		if kind == "TOOL_CALL" {
+			toolEv = &got[i]
+			break
+		}
+	}
+	if toolEv == nil {
+		t.Fatalf("expected TOOL_CALL node.appended, events=%d", len(got))
+	}
+	if toolEv.Payload["tool"] != "echo" {
+		t.Fatalf("tool=%v", toolEv.Payload["tool"])
+	}
+	if toolEv.Payload["effect_class"] != "PURE" {
+		t.Fatalf("effect_class=%v", toolEv.Payload["effect_class"])
+	}
+	key, _ := toolEv.Payload["idempotency_key"].(string)
+	if key == "" {
+		t.Fatal("expected idempotency_key")
+	}
+}
+
 func TestSealHashIgnoresSink(t *testing.T) {
 	plan := map[string]any{"tool_calls": []any{map[string]any{"name": "echo", "args": map[string]any{}}}}
 	off := decisionID(t, nil, plan)

@@ -77,6 +77,32 @@ func TestDeriveEvidenceGapWhenToolBeforeDecision(t *testing.T) {
 	}
 }
 
+func TestDeriveEvidenceOrderIndependent(t *testing.T) {
+	t.Parallel()
+	ts := time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC).Format(time.RFC3339)
+	// TOOL_CALL event arrives before DECISION in the stream; seq still seals first.
+	events := []Event{
+		{
+			SchemaVersion: SchemaVersion, ID: "1", TS: ts, Kind: KindNodeAppended, Source: "python",
+			TrajectoryID: "ev",
+			Payload: json.RawMessage(`{
+				"node_id":"t1","kind":"TOOL_CALL","seq":2,"step_n":1,"tool":"echo","effect_class":"PURE"
+			}`),
+		},
+		{
+			SchemaVersion: SchemaVersion, ID: "2", TS: ts, Kind: KindNodeAppended, Source: "python",
+			TrajectoryID: "ev",
+			Payload: json.RawMessage(`{
+				"node_id":"d1","kind":"DECISION","seq":1,"step_n":1,"content_hash":"h"
+			}`),
+		},
+	}
+	view := deriveEvidence(events)
+	if view.SealBeforeExecuteOK == nil || !*view.SealBeforeExecuteOK {
+		t.Fatalf("expected ok despite stream order, gaps=%v", view.SealBeforeExecuteGaps)
+	}
+}
+
 func TestDeriveEvidenceOpenWorldAndAuditFindings(t *testing.T) {
 	t.Parallel()
 	ts := time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC).Format(time.RFC3339)

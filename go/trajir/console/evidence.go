@@ -46,14 +46,14 @@ type EvidenceToolCall struct {
 }
 
 // deriveEvidence builds EvidenceView from console events (live or derived).
+// Decision/seal indexes are collected first so seal-before-execute does not
+// depend on NDJSON/HTTP arrival order (mirrors audit.checkSealBeforeExecute).
 func deriveEvidence(events []Event) EvidenceView {
 	view := EvidenceView{}
 	decisionSeq := map[int]int{} // step -> earliest DECISION seq
 	decisionSteps := map[int]struct{}{}
 	sealCreated := 0
-	var gaps []EvidenceGap
 	openWorld := map[string]struct{}{}
-	var tools []EvidenceToolCall
 
 	for _, e := range events {
 		switch e.Kind {
@@ -80,46 +80,15 @@ func deriveEvidence(events []Event) EvidenceView {
 			}
 		case KindNodeAppended:
 			kind, _ := payloadString(e.Payload, "kind")
+			if kind != "DECISION" {
+				continue
+			}
 			step, hasStep := payloadIntOK(e.Payload, "step_n")
 			seq, hasSeq := payloadIntOK(e.Payload, "seq")
-			switch kind {
-			case "DECISION":
-				if hasStep && hasSeq {
-					decisionSteps[step] = struct{}{}
-					if prev, ok := decisionSeq[step]; !ok || seq < prev {
-						decisionSeq[step] = seq
-					}
-				}
-			case "TOOL_CALL":
-				name, _ := payloadString(e.Payload, "tool")
-				if name == "" {
-					name, _ = payloadString(e.Payload, "tool_name")
-				}
-				eff, _ := payloadString(e.Payload, "effect_class")
-				key, _ := payloadString(e.Payload, "idempotency_key")
-				nodeID, _ := payloadString(e.Payload, "node_id")
-				ow := effects.IsOpenWorldPrimitive(name)
-				if ow {
-					openWorld[name] = struct{}{}
-				}
-				tc := EvidenceToolCall{
-					TS:             e.TS,
-					StepN:          step,
-					Seq:            seq,
-					ToolName:       name,
-					EffectClass:    eff,
-					IdempotencyKey: key,
-					OpenWorld:      ow,
-					NodeID:         nodeID,
-				}
-				tools = append(tools, tc)
-				if hasStep && hasSeq {
-					decSeq, has := decisionSeq[step]
-					if !has || decSeq >= seq {
-						gaps = append(gaps, EvidenceGap{StepN: step, Seq: seq, ToolName: name})
-					}
-				} else {
-					gaps = append(gaps, EvidenceGap{ToolName: name})
+			if hasStep && hasSeq {
+				decisionSteps[step] = struct{}{}
+				if prev, ok := decisionSeq[step]; !ok || seq < prev {
+					decisionSeq[step] = seq
 				}
 			}
 		case KindAuditCompleted:
@@ -134,9 +103,51 @@ func deriveEvidence(events []Event) EvidenceView {
 			if findings, ok := payloadStringSlice(e.Payload, "findings"); ok {
 				view.AuditFindings = findings
 			} else {
-				// Also accept [{code,message}, ...]
 				view.AuditFindings = payloadFindingCodes(e.Payload)
 			}
+		}
+	}
+
+	var gaps []EvidenceGap
+	var tools []EvidenceToolCall
+	for _, e := range events {
+		if e.Kind != KindNodeAppended {
+			continue
+		}
+		kind, _ := payloadString(e.Payload, "kind")
+		if kind != "TOOL_CALL" {
+			continue
+		}
+		step, hasStep := payloadIntOK(e.Payload, "step_n")
+		seq, hasSeq := payloadIntOK(e.Payload, "seq")
+		name, _ := payloadString(e.Payload, "tool")
+		if name == "" {
+			name, _ = payloadString(e.Payload, "tool_name")
+		}
+		eff, _ := payloadString(e.Payload, "effect_class")
+		key, _ := payloadString(e.Payload, "idempotency_key")
+		nodeID, _ := payloadString(e.Payload, "node_id")
+		ow := effects.IsOpenWorldPrimitive(name)
+		if ow {
+			openWorld[name] = struct{}{}
+		}
+		tools = append(tools, EvidenceToolCall{
+			TS:             e.TS,
+			StepN:          step,
+			Seq:            seq,
+			ToolName:       name,
+			EffectClass:    eff,
+			IdempotencyKey: key,
+			OpenWorld:      ow,
+			NodeID:         nodeID,
+		})
+		if hasStep && hasSeq {
+			decSeq, has := decisionSeq[step]
+			if !has || decSeq >= seq {
+				gaps = append(gaps, EvidenceGap{StepN: step, Seq: seq, ToolName: name})
+			}
+		} else {
+			gaps = append(gaps, EvidenceGap{ToolName: name})
 		}
 	}
 

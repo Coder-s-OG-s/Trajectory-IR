@@ -60,13 +60,26 @@ def _run_verify(pack: Path) -> dict:
         cwd = str(_ROOT / "go")
     else:
         cwd = None
-    proc = subprocess.run(
-        cmd,
-        capture_output=True,
-        text=True,
-        cwd=cwd,
-        check=False,
-    )
+    try:
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            cwd=cwd,
+            check=False,
+            timeout=60,
+        )
+    except subprocess.TimeoutExpired as exc:
+        return {
+            "path": str(pack),
+            "ok": False,
+            "findings": [
+                {
+                    "code": "VERIFY_INVOKE_FAILED",
+                    "message": f"trajir verify timed out after {exc.timeout}s",
+                }
+            ],
+        }
     raw = (proc.stdout or "").strip()
     if not raw:
         return {
