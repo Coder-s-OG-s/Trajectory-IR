@@ -389,6 +389,14 @@ def test_verify_single_tenant_empty_then_acme() -> None:
         _verify_single_tenant({}, [{"tenant_id": ""}, {"tenant_id": "acme"}])
 
 
+def test_verify_single_tenant_missing_key_and_empty_accepted() -> None:
+    """Missing tenant_id and empty string both normalize to "" (Go asString parity)."""
+    from trajectory_ir.package.tir import _verify_single_tenant
+
+    _verify_single_tenant({}, [{}, {"tenant_id": ""}])
+    _verify_single_tenant({}, [{"tenant_id": None}, {"tenant_id": ""}])
+
+
 def test_verify_single_tenant_missing_key_then_acme() -> None:
     from trajectory_ir.package.tir import _verify_single_tenant
 

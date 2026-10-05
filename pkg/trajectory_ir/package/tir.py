@@ -180,7 +180,7 @@ def _verify_node_record(rec: dict[str, Any]) -> None:
 
 
 def _verify_single_tenant(manifest: dict[str, Any], nodes: list[dict[str, Any]]) -> None:
-    tenant_ids = {n.get("tenant_id") for n in nodes}
+    tenant_ids = {n.get("tenant_id") or "" for n in nodes}
     if len(tenant_ids) > 1:
         raise TirVerificationError("package contains mixed tenant_id values")
     manifest_tenant = manifest.get("tenant_id")
