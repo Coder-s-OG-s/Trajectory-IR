@@ -78,6 +78,8 @@ code { font-family: ui-monospace, Consolas, monospace; font-size: 0.9em; }
 .banner.error { background: #2a1518; border-color: #5a2028; color: #ffb4b8; }
 
 .tabs { display: flex; gap: 0.35rem; margin-bottom: 1rem; flex-wrap: wrap; }
+.findings { margin: 0.5rem 0 1rem; padding-left: 1.25rem; }
+.findings li { margin: 0.25rem 0; }
 [role="tab"][aria-selected="true"] {
   background: #243049; border-color: var(--accent); color: #fff;
 }

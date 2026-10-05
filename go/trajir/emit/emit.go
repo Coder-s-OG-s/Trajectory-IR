@@ -30,6 +30,7 @@ const (
 	KindSealCreated     = "seal.created"
 	KindExportCompleted = "export.completed"
 	KindImportCompleted = "import.completed"
+	KindAuditCompleted  = "audit.completed"
 )
 
 // Event is one console-events-v1 object.
@@ -185,6 +186,44 @@ type PackageFact struct {
 	Error        string
 	Source       string
 	Runtime      string
+}
+
+// AuditFact is the payload for audit.completed (trajir verify).
+type AuditFact struct {
+	TrajectoryID string
+	TenantID     string
+	Path         string
+	OK           bool
+	Findings     []any
+	Source       string
+	Runtime      string
+}
+
+// NoteAudit emits one trajir verify / evidence auditor event. Nil sink is a no-op.
+func NoteAudit(s Sink, f AuditFact) {
+	payload := map[string]any{
+		"path": f.Path,
+		"ok":   f.OK,
+	}
+	if f.Findings != nil {
+		payload["findings"] = f.Findings
+	}
+	source := f.Source
+	if source == "" {
+		source = "cli"
+	}
+	runtime := f.Runtime
+	if runtime == "" {
+		runtime = "trajir-verify"
+	}
+	SafeEmit(s, Event{
+		Kind:         KindAuditCompleted,
+		Source:       source,
+		Runtime:      runtime,
+		TrajectoryID: f.TrajectoryID,
+		TenantID:     f.TenantID,
+		Payload:      payload,
+	})
 }
 
 // NotePackage emits one package event. Nil sink is a no-op.

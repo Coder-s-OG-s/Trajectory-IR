@@ -73,6 +73,9 @@ Emitted when a node is successfully appended to the durable log.
 | `seq` | integer | no | Log sequence when known |
 | `step_n` | integer | no | Step number when known |
 | `content_hash` | string | no | Hex SHA-256 of canonical payload when available |
+| `tool` | string | no | Tool name when `kind` is `TOOL_CALL` |
+| `idempotency_key` | string | no | Hashed idempotency key when present on `TOOL_CALL` |
+| `effect_class` | string | no | Host effect class observation (`PURE`, `NON_IDEMPOTENT_WRITE`, …) |
 
 ### 2.2 Seals
 
@@ -174,6 +177,19 @@ observational.
 | `node_count` | integer | yes | |
 | `verify_ok` | boolean | yes | Hash/seal verification result |
 | `error` | string | no | |
+
+### 2.6 Evidence audit (TURNING_POINT)
+
+#### `audit.completed`
+
+Emitted when `trajir verify` (or an equivalent offline auditor) finishes on a
+`.tir` package. This is distinct from `seal.verified` (per-decision hash check).
+
+| Payload field | Type | Required | Notes |
+|---------------|------|----------|-------|
+| `path` | string | yes | Package path that was audited |
+| `ok` | boolean | yes | Overall audit result |
+| `findings` | array | no | Strings or `{code, message}` objects |
 
 ---
 
@@ -284,10 +300,22 @@ Derived events must not claim stronger provenance than the package itself.
 |------------------------|---------------|-----------------|
 | Overview (#394) | mix / latest of all | node count, last `ts`, verify rollup |
 | Seals (#395) | `seal.created`, `seal.verified` | seal count, failed verifies |
+| Evidence (TURNING_POINT) | `node.appended` (`TOOL_CALL`), `seal.created`, `audit.completed` | seal-before-execute, open-world tools, idempotency keys, `trajir verify` |
 | Context economy (#396) | `context.projected`, `redaction.applied` | §3 aggregates |
 | Transfers (#397) | `export.*`, `import.completed` | §4 aggregates |
 
-If a panel needs a number that is not in §3–§4, extend **this document** first.
+### 6.1 Reader object (`summary.evidence`)
+
+| Field | Definition |
+|-------|------------|
+| `seal_count` | Count of `seal.created`, else distinct DECISION steps |
+| `seal_before_execute_ok` | True when every observed `TOOL_CALL` has an earlier DECISION on the same `step_n`; null when no tools and no seals |
+| `seal_before_execute_gaps` | TOOL_CALL rows missing a prior DECISION |
+| `tool_calls` | Observed TOOL_CALL rows (`tool_name`, `effect_class`, `idempotency_key`, `open_world`) |
+| `open_world_tools` | Sorted unique open-world primitive names |
+| `audit_ok`, `audit_findings`, `last_audit_ts`, `last_audit_path` | Latest `audit.completed` |
+
+If a panel needs a number that is not in §3–§4 or §6.1, extend **this document** first.
 
 ---
 

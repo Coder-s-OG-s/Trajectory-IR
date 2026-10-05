@@ -43,6 +43,7 @@ Optional console:
 ```powershell
 $env:TRAJIR_CONSOLE_SINK = "http"
 $env:TRAJIR_CONSOLE_URL = "http://127.0.0.1:8787"
+# demo_stub also emits audit.completed after trajir verify → Evidence tab
 ```
 
 ## What this proves

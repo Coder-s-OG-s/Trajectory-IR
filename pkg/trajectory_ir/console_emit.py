@@ -93,15 +93,30 @@ def note_node(
     node: Any,
     source: str = "python",
     runtime: str = "python",
+    effect_class: str | None = None,
 ) -> None:
     payload = {
         "node_id": node.id,
         "kind": node.kind,
         "seq": node.seq,
-        "content_hash": node.phash,
+        "content_hash": getattr(node, "phash", "") or "",
     }
     if node.step_n is not None:
         payload["step_n"] = node.step_n
+    if getattr(node, "kind", None) == "TOOL_CALL":
+        body = getattr(node, "payload", None) or {}
+        if isinstance(body, dict):
+            tool = body.get("tool") or body.get("tool_name")
+            if tool:
+                payload["tool"] = tool
+            key = body.get("idempotency_key")
+            if key:
+                payload["idempotency_key"] = key
+            recorded = body.get("effect_class")
+            if recorded:
+                payload["effect_class"] = recorded
+        if effect_class:
+            payload["effect_class"] = effect_class
     emit(
         sink,
         {
@@ -141,6 +156,37 @@ def note_seal(
         sink,
         {
             "kind": "seal.created",
+            "source": source,
+            "runtime": runtime,
+            "trajectory_id": trajectory_id,
+            "tenant_id": tenant_id,
+            "payload": payload,
+        },
+    )
+
+
+def note_audit(
+    sink: Any,
+    *,
+    trajectory_id: str,
+    tenant_id: str,
+    path: str,
+    ok: bool,
+    findings: list[Any] | None = None,
+    source: str = "cli",
+    runtime: str = "trajir-verify",
+) -> None:
+    """Emit trajir verify / evidence auditor result (TURNING_POINT)."""
+    payload: dict[str, Any] = {
+        "path": path,
+        "ok": bool(ok),
+    }
+    if findings is not None:
+        payload["findings"] = findings
+    emit(
+        sink,
+        {
+            "kind": "audit.completed",
             "source": source,
             "runtime": runtime,
             "trajectory_id": trajectory_id,
