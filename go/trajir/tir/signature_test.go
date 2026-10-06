@@ -217,6 +217,115 @@ func TestTrustStoreRejectsUnknownKey(t *testing.T) {
 	}
 }
 
+func TestLoadWithOptions_RejectsUntrustedSigner(t *testing.T) {
+	src := openLog(t, "src.sqlite")
+	seedSample(t, src)
+	out := filepath.Join(t.TempDir(), "signed.tir")
+	priv := testOnlySeed()
+	path, err := tir.Export(src, "t-export", out, tir.ExportOptions{Mode: tir.ModeThin, SignKey: priv})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	otherPub, _, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	opts := tir.VerifyOptions{
+		TrustedKeys: []ed25519.PublicKey{otherPub},
+	}
+	if _, err := tir.LoadWithOptions(path, opts); !errors.Is(err, tir.ErrSignature) {
+		t.Fatalf("expected ErrSignature for untrusted signer, got %v", err)
+	}
+}
+
+func TestLoadWithOptions_EnforcesRequireSignature(t *testing.T) {
+	src := openLog(t, "src.sqlite")
+	seedSample(t, src)
+	out := filepath.Join(t.TempDir(), "unsigned.tir")
+	path, err := tir.Export(src, "t-export", out, tir.ExportOptions{Mode: tir.ModeThin})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	opts := tir.VerifyOptions{
+		RequireSignature: true,
+	}
+	if _, err := tir.LoadWithOptions(path, opts); !errors.Is(err, tir.ErrSignature) {
+		t.Fatalf("expected ErrSignature for unsigned package, got %v", err)
+	}
+}
+
+func TestImportWithOptions_RejectsUntrustedSigner(t *testing.T) {
+	src := openLog(t, "src.sqlite")
+	seedSample(t, src)
+	out := filepath.Join(t.TempDir(), "signed.tir")
+	priv := testOnlySeed()
+	path, err := tir.Export(src, "t-export", out, tir.ExportOptions{Mode: tir.ModeThin, SignKey: priv})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	otherPub, _, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dest := openLog(t, "dest.sqlite")
+	opts := tir.ImportOptions{
+		Verify: tir.VerifyOptions{
+			TrustedKeys: []ed25519.PublicKey{otherPub},
+		},
+	}
+	if _, err := tir.ImportWithOptions(path, dest, opts); !errors.Is(err, tir.ErrSignature) {
+		t.Fatalf("expected ErrSignature for untrusted signer, got %v", err)
+	}
+}
+
+func TestImportWithOptions_AcceptsTrustedSigner(t *testing.T) {
+	src := openLog(t, "src.sqlite")
+	seedSample(t, src)
+	out := filepath.Join(t.TempDir(), "signed.tir")
+	priv := testOnlySeed()
+	path, err := tir.Export(src, "t-export", out, tir.ExportOptions{Mode: tir.ModeThin, SignKey: priv})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	dest := openLog(t, "dest.sqlite")
+	opts := tir.ImportOptions{
+		Verify: tir.VerifyOptions{
+			TrustedKeys: []ed25519.PublicKey{priv.Public().(ed25519.PublicKey)},
+		},
+	}
+	pkg, err := tir.ImportWithOptions(path, dest, opts)
+	if err != nil {
+		t.Fatalf("expected successful import, got %v", err)
+	}
+	if pkg.Signature == nil {
+		t.Fatal("expected package signature info, got nil")
+	}
+}
+
+func TestImportWithOptions_EnforcesRequireSignature(t *testing.T) {
+	src := openLog(t, "src.sqlite")
+	seedSample(t, src)
+	out := filepath.Join(t.TempDir(), "unsigned.tir")
+	path, err := tir.Export(src, "t-export", out, tir.ExportOptions{Mode: tir.ModeThin})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	dest := openLog(t, "dest.sqlite")
+	opts := tir.ImportOptions{
+		Verify: tir.VerifyOptions{
+			RequireSignature: true,
+		},
+	}
+	if _, err := tir.ImportWithOptions(path, dest, opts); !errors.Is(err, tir.ErrSignature) {
+		t.Fatalf("expected ErrSignature for unsigned package, got %v", err)
+	}
+}
+
 func TestSignStandaloneAfterExport(t *testing.T) {
 	src := openLog(t, "src.sqlite")
 	seedSample(t, src)

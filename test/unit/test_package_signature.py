@@ -303,12 +303,61 @@ def test_export_sign_failure_removes_unsigned_file(tmp_path, monkeypatch):
     log = NodeLog(tmp_path / "nodes.sqlite")
     log.append("DECISION", 1, {"plan": {"tool_calls": []}}, "t1", "demo", 1)
     out = tmp_path / "gone.tir"
-    key = _test_only_private_key()
 
     def _boom(*_a, **_k):
         raise OSError("disk full")
 
+    key = _test_only_private_key()
     monkeypatch.setattr(tirmod, "sign_package", _boom)
     with pytest.raises(OSError, match="disk full"):
         export_tir(log, "t1", out, mode="thin", sign_key=key)
     assert not out.exists()
+
+
+def test_import_tir_rejects_untrusted_signer(tmp_path):
+    from nacl.signing import SigningKey
+
+    from trajectory_ir.package.tir import TirVerificationError, import_tir
+
+    src_log = NodeLog(tmp_path / "src.sqlite")
+    src_log.append("DECISION", 1, {"plan": {"tool_calls": []}}, "t1", "demo", 1)
+    out = tmp_path / "signed.tir"
+    key1 = _test_only_private_key()
+    export_tir(src_log, "t1", out, mode="thin", sign_key=key1)
+
+    other_key = SigningKey.generate()
+    other_pub = bytes(other_key.verify_key)
+
+    dest_log = NodeLog(tmp_path / "dest.sqlite")
+    with pytest.raises(TirVerificationError, match="not in trust store"):
+        import_tir(out, dest_log, trusted_keys=[other_pub])
+
+
+def test_import_tir_accepts_trusted_signer(tmp_path):
+    from trajectory_ir.package.tir import import_tir
+
+    src_log = NodeLog(tmp_path / "src.sqlite")
+    src_log.append("DECISION", 1, {"plan": {"tool_calls": []}}, "t1", "demo", 1)
+    out = tmp_path / "signed.tir"
+    key = _test_only_private_key()
+    pub = key[32:]
+    export_tir(src_log, "t1", out, mode="thin", sign_key=key)
+
+    dest_log = NodeLog(tmp_path / "dest.sqlite")
+    pkg = import_tir(out, dest_log, trusted_keys=[pub])
+    assert pkg.signature is not None
+    nodes = dest_log.list_nodes("t1", tenant_id="demo")
+    assert len(nodes) == 1
+
+
+def test_import_tir_enforces_require_signature(tmp_path):
+    from trajectory_ir.package.tir import TirVerificationError, import_tir
+
+    src_log = NodeLog(tmp_path / "src.sqlite")
+    src_log.append("DECISION", 1, {"plan": {"tool_calls": []}}, "t1", "demo", 1)
+    out = tmp_path / "unsigned.tir"
+    export_tir(src_log, "t1", out, mode="thin")
+
+    dest_log = NodeLog(tmp_path / "dest.sqlite")
+    with pytest.raises(TirVerificationError, match="unsigned"):
+        import_tir(out, dest_log, require_signature=True)
