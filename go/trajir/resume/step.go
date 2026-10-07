@@ -58,7 +58,10 @@ type RunStepConfig struct {
 	OnDecisionSealed func() // optional test hook after DECISION is appended
 	// Mode is live (default) or sandbox (R06: reject NON_IDEMPOTENT_WRITE, AGENT_SPAWN, SENSITIVE).
 	Mode sandbox.Mode
-	// WorldSnapshot is sealed onto DECISION when non-empty (spec §8.4).
+	// WorldSnapshot is sealed onto a new DECISION when non-empty (spec §8.4).
+	// On resume, an existing DECISION keeps the snapshot it was sealed with.
+	// Passing the moved world here must not rewrite the slot; ObserveWorld
+	// and CheckWorld report WORLD_DRIFT.
 	WorldSnapshot map[string]string
 	// ObserveWorld, when set, is called after the seal exists (including on
 	// resume) and compared with CheckWorld. Empty sealed snapshot is a no-op.
@@ -117,10 +120,21 @@ func RunStep(
 		return nil, fmt.Errorf("resume: plan: %w", err)
 	}
 
+	snapshot := cfg.WorldSnapshot
+	sealed, sealedExists, err := sealedWorldSnapshot(cfg.Log, cfg.TrajectoryID, cfg.TenantID, stepN)
+	if err != nil {
+		return nil, err
+	}
+	if sealedExists {
+		// Keep the sealed snapshot. Re-appending cfg.WorldSnapshot after the
+		// world moved changes the DECISION hash and returns ErrSlotConflict
+		// before CheckWorld can report WORLD_DRIFT.
+		snapshot = sealed
+	}
 	if _, err := cfg.Log.Append(
 		"DECISION",
 		&step,
-		DecisionPayload(plan, cfg.WorldSnapshot),
+		DecisionPayload(plan, snapshot),
 		cfg.TrajectoryID,
 		cfg.TenantID,
 		1,

@@ -136,3 +136,53 @@ func TestRunStepObserveWorldDrift(t *testing.T) {
 		t.Fatalf("err=%v want WorldDrift", err)
 	}
 }
+
+func TestRunStepResumeAfterDecisionReportsDriftNotSlotConflict(t *testing.T) {
+	nl, err := nodelog.Open(filepath.Join(t.TempDir(), "nodes.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = nl.Close() })
+	backend := durable.NewMemory()
+	t.Cleanup(func() { _ = backend.Close() })
+
+	gen := "1"
+	observes := 0
+	cfg := resume.RunStepConfig{
+		Log:           nl,
+		Backend:       backend,
+		TenantID:      "demo",
+		TrajectoryID:  "t-resume-world",
+		WorkflowID:    "wf-resume-world",
+		WorldSnapshot: map[string]string{"cluster_generation": "1"},
+		ObserveWorld: func() (map[string]string, error) {
+			observes++
+			if observes == 1 {
+				return nil, errors.New("crash after decision")
+			}
+			return map[string]string{"cluster_generation": gen}, nil
+		},
+		Tools: map[string]resume.Tool{
+			"echo": {
+				Name:   "echo",
+				Effect: effects.PURE,
+				Fn:     func(args map[string]any) (any, error) { return args["msg"], nil },
+			},
+		},
+	}
+	_, err = resume.RunStep(context.Background(), cfg, 1, echoPlan, map[string]any{})
+	if err == nil || err.Error() != "crash after decision" {
+		t.Fatalf("first run err=%v", err)
+	}
+
+	cfg.WorldSnapshot = map[string]string{"cluster_generation": "2"}
+	gen = "2"
+	_, err = resume.RunStep(context.Background(), cfg, 1, echoPlan, map[string]any{})
+	var drift *resume.WorldDrift
+	if !errors.As(err, &drift) {
+		t.Fatalf("err=%v want WorldDrift, not a slot conflict", err)
+	}
+	if drift.StepN != 1 || len(drift.Mismatches) != 1 || drift.Mismatches[0].Sealed != "1" {
+		t.Fatalf("drift=%#v", drift)
+	}
+}

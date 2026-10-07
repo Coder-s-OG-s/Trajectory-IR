@@ -9,9 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Seal-derived idempotency keys on every `TOOL_CALL`. Format is now
-  `hex(sha256(trajir-idempotency-v1 || tenant || trajectory || step || seq))`
-  (colon form withdrawn). Exposed to the tool body via Go `FnWithMeta` /
+- Seal-derived idempotency keys on every `TOOL_CALL`. Format is
+  `hex(sha256(length-prefixed utf-8 fields))` with domain
+  `trajir-idempotency-v1`: each field is `uint32be(byte length) || utf-8`,
+  in order domain, tenant, trajectory, decimal step, decimal seq.
+  The colon form is withdrawn and does not resume onto this hash
+  (pre-1.0, no translator). Exposed to the tool body via Go `FnWithMeta` /
   Python `current_idempotency_key()` and `IdempotencyKeyHeader`. Never
   injected into tool args. Hosts must forward the key to the remote API.
   The IR log is not exactly-once.

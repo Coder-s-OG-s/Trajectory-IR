@@ -241,15 +241,19 @@ Tools registered from MCP (or any other source) must be mapped into this table b
 
 ```
 idempotency_key = hex(sha256(
-    "trajir-idempotency-v1" || 0x00 ||
-    utf8(tenant_id) || 0x00 ||
-    utf8(trajectory_id) || 0x00 ||
-    utf8(decimal(step_n)) || 0x00 ||
-    utf8(decimal(seq))
+    len32(domain) || utf8(domain) ||
+    len32(tenant_id) || utf8(tenant_id) ||
+    len32(trajectory_id) || utf8(trajectory_id) ||
+    len32(decimal(step_n)) || utf8(decimal(step_n)) ||
+    len32(decimal(seq)) || utf8(decimal(seq))
 ))
 ```
 
-Lowercase hex, 64 characters. `seq` is the sealed tool slot (typically `2 + 2*i` from the sealed `DECISION` tool list), never a fresh id minted after a crash. The colon form `trajectory_id:step_n:seq` is **withdrawn**: it omitted tenant, leaked identifiers into HTTP headers, and was longer than many callees accept.
+`domain` is the ASCII string `trajir-idempotency-v1`. `len32` is the 4-byte big-endian length of the following UTF-8 bytes (not a character count). Lowercase hex, 64 characters. `seq` is the sealed tool slot (typically `2 + 2*i` from the sealed `DECISION` tool list), never a fresh id minted after a crash.
+
+Fields are length-prefixed so a `0x00` inside a tenant or trajectory id cannot alias another pair. NUL-joined concatenation (`domain || 0x00 || tenant || 0x00 || ...`) collides and is not this key.
+
+The colon form `trajectory_id:step_n:seq` is **withdrawn**: it omitted tenant, leaked identifiers into HTTP headers, and was longer than many callees accept. A trajectory whose `TOOL_CALL` rows were sealed with that colon key does not resume onto this hash. Pre-1.0, there is no translator. Forwarding the new key for an in-flight call can repeat the side effect at the callee.
 
 Implementations **must** record this string on the `TOOL_CALL` payload as `idempotency_key`. They **must not** inject it into the tool's user arguments (Python tools use explicit kwargs). They **must** expose it to the tool body so it can leave the process: Python via `current_call_meta()` / `current_idempotency_key()` (a contextvar), Go via `Tool.FnWithMeta`. `IdempotencyKeyHeader(key)` returns `{"Idempotency-Key": key}` for hosts to merge onto outbound HTTP.
 
