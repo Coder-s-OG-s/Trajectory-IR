@@ -326,6 +326,105 @@ func TestImportWithOptions_EnforcesRequireSignature(t *testing.T) {
 	}
 }
 
+func TestImportWithOptions_StrippedSignatureFailsTrustStore(t *testing.T) {
+	src := openLog(t, "src.sqlite")
+	seedSample(t, src)
+	out := filepath.Join(t.TempDir(), "signed.tir")
+	priv := testOnlySeed()
+	pub := priv.Public().(ed25519.PublicKey)
+	path, err := tir.Export(src, "t-export", out, tir.ExportOptions{
+		Mode:    tir.ModeThin,
+		SignKey: priv,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := stripZipMember(path, tir.SignatureMemberName); err != nil {
+		t.Fatal(err)
+	}
+
+	dest := openLog(t, "dest.sqlite")
+	opts := tir.ImportOptions{
+		Verify: tir.VerifyOptions{
+			TrustedKeys:      []ed25519.PublicKey{pub},
+			RequireSignature: false,
+		},
+	}
+	if _, err := tir.ImportWithOptions(path, dest, opts); !errors.Is(err, tir.ErrSignature) {
+		t.Fatalf("expected ErrSignature for stripped signature with trust store, got %v", err)
+	}
+	nodes, err := dest.ListNodes("t-export", "demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(nodes) != 0 {
+		t.Fatalf("expected import not to write nodes, found %d", len(nodes))
+	}
+
+	// Also verify with TrustedKeyIDs while RequireSignature is false
+	destKeyID := openLog(t, "dest-keyid.sqlite")
+	optsKeyID := tir.ImportOptions{
+		Verify: tir.VerifyOptions{
+			TrustedKeyIDs:    []string{tir.KeyID(pub)},
+			RequireSignature: false,
+		},
+	}
+	if _, err := tir.ImportWithOptions(path, destKeyID, optsKeyID); !errors.Is(err, tir.ErrSignature) {
+		t.Fatalf("expected ErrSignature for stripped signature with TrustedKeyIDs, got %v", err)
+	}
+	nodesKeyID, err := destKeyID.ListNodes("t-export", "demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(nodesKeyID) != 0 {
+		t.Fatalf("expected import not to write nodes with TrustedKeyIDs, found %d", len(nodesKeyID))
+	}
+}
+
+func TestLoadWithOptions_StrippedSignatureFailsTrustStore(t *testing.T) {
+	src := openLog(t, "src.sqlite")
+	seedSample(t, src)
+	out := filepath.Join(t.TempDir(), "signed.tir")
+	priv := testOnlySeed()
+	pub := priv.Public().(ed25519.PublicKey)
+	path, err := tir.Export(src, "t-export", out, tir.ExportOptions{
+		Mode:    tir.ModeThin,
+		SignKey: priv,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := stripZipMember(path, tir.SignatureMemberName); err != nil {
+		t.Fatal(err)
+	}
+
+	opts := tir.VerifyOptions{
+		TrustedKeys:      []ed25519.PublicKey{pub},
+		RequireSignature: false,
+	}
+	if _, err := tir.LoadWithOptions(path, opts); !errors.Is(err, tir.ErrSignature) {
+		t.Fatalf("expected ErrSignature for stripped signature from LoadWithOptions, got %v", err)
+	}
+
+	optsKeyID := tir.VerifyOptions{
+		TrustedKeyIDs:    []string{tir.KeyID(pub)},
+		RequireSignature: false,
+	}
+	if _, err := tir.LoadWithOptions(path, optsKeyID); !errors.Is(err, tir.ErrSignature) {
+		t.Fatalf("expected ErrSignature for stripped signature with TrustedKeyIDs from LoadWithOptions, got %v", err)
+	}
+
+	// Verify also fails
+	if _, err := tir.Verify(path, opts); !errors.Is(err, tir.ErrSignature) {
+		t.Fatalf("expected ErrSignature from Verify, got %v", err)
+	}
+	if _, err := tir.Verify(path, optsKeyID); !errors.Is(err, tir.ErrSignature) {
+		t.Fatalf("expected ErrSignature from Verify with TrustedKeyIDs, got %v", err)
+	}
+}
+
 func TestSignStandaloneAfterExport(t *testing.T) {
 	src := openLog(t, "src.sqlite")
 	seedSample(t, src)
@@ -691,3 +790,66 @@ func mutateZipMember(path, member string, mut func([]byte) []byte) error {
 	}
 	return os.Rename(tmp, path)
 }
+
+func stripZipMember(path, member string) error {
+	type entry struct {
+		name string
+		data []byte
+	}
+	var entries []entry
+	if err := func() error {
+		zr, err := zip.OpenReader(path)
+		if err != nil {
+			return err
+		}
+		defer zr.Close()
+		for _, f := range zr.File {
+			if f.Name == "" || f.Name[len(f.Name)-1] == '/' || f.Name == member {
+				continue
+			}
+			rc, err := f.Open()
+			if err != nil {
+				return err
+			}
+			data, err := io.ReadAll(rc)
+			_ = rc.Close()
+			if err != nil {
+				return err
+			}
+			entries = append(entries, entry{name: f.Name, data: data})
+		}
+		return nil
+	}(); err != nil {
+		return err
+	}
+
+	tmp := path + ".strip"
+	f, err := os.Create(tmp)
+	if err != nil {
+		return err
+	}
+	zw := zip.NewWriter(f)
+	for _, e := range entries {
+		w, err := zw.Create(e.name)
+		if err != nil {
+			_ = f.Close()
+			return err
+		}
+		if _, err := w.Write(e.data); err != nil {
+			_ = f.Close()
+			return err
+		}
+	}
+	if err := zw.Close(); err != nil {
+		_ = f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	if err := os.Remove(path); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
+}
+

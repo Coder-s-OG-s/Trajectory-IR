@@ -179,7 +179,7 @@ def verify_package_from_zip(
     """
     members, sig_raw = _collect_zip_members(zf)
     if sig_raw is None:
-        if require_signature:
+        if require_signature or bool(trusted_keys) or bool(trusted_key_ids):
             raise TirSignatureError("package is unsigned (SIGNATURE missing)")
         return None
     return _verify_signature_bytes(
@@ -199,7 +199,8 @@ def verify_package(
 ) -> SignatureInfo | None:
     """Verify SIGNATURE on a .tir package.
 
-    Returns None when unsigned and require_signature is False.
+    Returns None when unsigned, require_signature is False, and no trust store
+    is configured.
     """
     path = Path(path)
     with zipfile.ZipFile(path, "r") as zf:

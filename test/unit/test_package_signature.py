@@ -361,3 +361,46 @@ def test_import_tir_enforces_require_signature(tmp_path):
     dest_log = NodeLog(tmp_path / "dest.sqlite")
     with pytest.raises(TirVerificationError, match="unsigned"):
         import_tir(out, dest_log, require_signature=True)
+
+
+def _strip_signature(path: Path) -> None:
+    import zipfile
+
+    tmp = path.with_suffix(".tmp")
+    with zipfile.ZipFile(path, "r") as zin, zipfile.ZipFile(tmp, "w") as zout:
+        for item in zin.infolist():
+            if item.filename != "SIGNATURE":
+                zout.writestr(item, zin.read(item.filename))
+    tmp.replace(path)
+
+
+def test_import_tir_stripped_signature_fails_trust_store(tmp_path):
+    from trajectory_ir.package.signature import key_id
+    from trajectory_ir.package.tir import TirVerificationError, import_tir, load_tir
+
+    src_log = NodeLog(tmp_path / "src.sqlite")
+    src_log.append("DECISION", 1, {"plan": {"tool_calls": []}}, "t1", "demo", 1)
+    out = tmp_path / "signed.tir"
+    key = _test_only_private_key()
+    pub = key[32:]
+    export_tir(src_log, "t1", out, mode="thin", sign_key=key)
+
+    _strip_signature(out)
+
+    dest_log = NodeLog(tmp_path / "dest.sqlite")
+    # require_signature stays False; trust store implies signature
+    with pytest.raises(TirVerificationError, match="unsigned"):
+        import_tir(out, dest_log, trusted_keys=[pub])
+    assert len(dest_log.list_nodes("t1", tenant_id="demo")) == 0
+
+    dest_key_id = NodeLog(tmp_path / "dest_key_id.sqlite")
+    with pytest.raises(TirVerificationError, match="unsigned"):
+        import_tir(out, dest_key_id, trusted_key_ids=[key_id(pub)])
+    assert len(dest_key_id.list_nodes("t1", tenant_id="demo")) == 0
+
+    with pytest.raises(TirVerificationError, match="unsigned"):
+        load_tir(out, trusted_keys=[pub])
+
+    with pytest.raises(TirSignatureError, match="unsigned"):
+        verify_package(out, trusted_keys=[pub])
+

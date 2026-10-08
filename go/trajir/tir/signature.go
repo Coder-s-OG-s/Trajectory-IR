@@ -74,6 +74,7 @@ type SignatureInfo struct {
 // VerifyOptions control Verify (and optional strict policy for callers).
 type VerifyOptions struct {
 	// RequireSignature fails when the package has no SIGNATURE member.
+	// A non-empty TrustedKeys or TrustedKeyIDs implicitly requires a signature.
 	RequireSignature bool
 	// TrustedKeys, when non-empty, requires the package public key to match one entry.
 	TrustedKeys []ed25519.PublicKey
@@ -184,7 +185,8 @@ func Sign(path string, privateKey ed25519.PrivateKey, meta SignerMeta) error {
 }
 
 // Verify checks package signature policy for path.
-// When SIGNATURE is absent and RequireSignature is false, returns (nil, nil).
+// When SIGNATURE is absent, returns (nil, nil) unless RequireSignature is true
+// or a trust store (TrustedKeys / TrustedKeyIDs) is configured.
 //
 // Prefer VerifyReader or verifySignatureFromZipFiles when the archive is
 // already open so signature metadata cannot come from a different file than
@@ -220,7 +222,7 @@ func verifySignatureFromZipFiles(files []*zip.File, opts VerifyOptions) (*Signat
 
 func verifyFromMembers(members map[string][]byte, sigRaw []byte, opts VerifyOptions) (*SignatureInfo, error) {
 	if sigRaw == nil {
-		if opts.RequireSignature {
+		if opts.RequireSignature || len(opts.TrustedKeys) > 0 || len(opts.TrustedKeyIDs) > 0 {
 			return nil, fmt.Errorf("%w: package is unsigned (SIGNATURE missing)", ErrSignature)
 		}
 		return nil, nil
