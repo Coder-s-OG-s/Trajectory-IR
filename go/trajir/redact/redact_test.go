@@ -1,6 +1,7 @@
 package redact_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/redact"
@@ -12,6 +13,44 @@ func TestRedactValueNonStringLeafPassesThrough(t *testing.T) {
 	}
 	if redact.RedactValue("ok", true) != true {
 		t.Fatal("bool leaf should pass through unchanged")
+	}
+}
+
+func TestRedactValueMatchesPythonSecretShapes(t *testing.T) {
+	gcp := "AIzaSyD-" + strings.Repeat("a", 31)
+	redacted := []struct{ key, val string }{
+		{"key", "sk_live_abc123def456ghi789"},
+		{"key", "rk_live_abc123def456ghi789"},
+		{"key", "sk_test_abc123def456ghi789"},
+		{"key", "rk_test_abc123def456ghi789"},
+		{"key", gcp},
+		{"config", "postgres://user:s3cret@host/db"},
+		{"config", "mongodb+srv://admin:password@cluster"},
+		{"config", "redis://default:hunter2@cache.internal:6379"},
+		{"config", "amqp://guest:guest@rabbitmq:5672"},
+		{"config", "redis://:hunter2@cache.internal:6379"},
+		{"db_url", "postgres://user:s3cret@host/db"},
+		{"database_url", "mysql://root:pass@localhost/app"},
+		{"connection_string", "Server=host;Password=x"},
+		{"dsn", "host=db user=app password=secret"},
+	}
+	for _, tc := range redacted {
+		if got := redact.RedactValue(tc.key, tc.val); got != redact.Redacted {
+			t.Fatalf("%s %q => %#v", tc.key, tc.val, got)
+		}
+	}
+	kept := []struct{ key, val string }{
+		{"url", "https://example.com/path"},
+		{"url", "ssh://git@github.com/repo"},
+		{"url", "https://api.example.com"},
+		{"key", "sk_live_short"},
+		{"key", "AIzaTooShort"},
+		{"note", "plain text"},
+	}
+	for _, tc := range kept {
+		if got := redact.RedactValue(tc.key, tc.val); got != tc.val {
+			t.Fatalf("%s %q => %#v", tc.key, tc.val, got)
+		}
 	}
 }
 
