@@ -18,7 +18,7 @@ smoke automation [#160](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/160
   - Confirm: `docker version` shows a **Server** version (not only Client)
   - On Windows, if the Server section is missing, wait until `wsl -l -v`
     shows `docker-desktop` as **Running**, then re-check `docker version`
-- Go 1.25.x and Python 3.11+ with `pip install -e ".[dev,postgres,s3]"`
+- Go 1.26.9 and Python 3.11+ with `pip install -e ".[dev,postgres,s3]"`
 - Free host ports: `5432`, `9000`, `9001`, `7233` (7233 only if Temporal is up)
 
 ## One command smoke (preferred)
