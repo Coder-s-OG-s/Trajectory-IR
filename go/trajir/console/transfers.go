@@ -33,6 +33,7 @@ type Handoff struct {
 	ImportTS     string `json:"import_ts,omitempty"`
 	ExportPath   string `json:"export_path,omitempty"`
 	ImportPath   string `json:"import_path,omitempty"`
+	ConsolePath  string `json:"console_path,omitempty"`
 	ExportSource string `json:"export_source,omitempty"`
 	ImportSource string `json:"import_source,omitempty"`
 	Runtime      string `json:"runtime,omitempty"`
@@ -199,5 +200,8 @@ func fillPackage(h *Handoff, raw json.RawMessage, export bool) {
 		} else {
 			h.ImportPath = path
 		}
+	}
+	if rel, ok := payloadString(raw, "console_path"); ok && h.ConsolePath == "" {
+		h.ConsolePath = rel
 	}
 }

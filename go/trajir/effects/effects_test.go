@@ -1,6 +1,7 @@
 package effects_test
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/effects"
@@ -143,6 +144,32 @@ func TestClassifyToolLeavesOrdinaryNamesToMCP(t *testing.T) {
 	}
 	if got := effects.ClassifyTool("charge_card", map[string]any{}); got != effects.NON_IDEMPOTENT_WRITE {
 		t.Fatalf("charge_card: got %s", got)
+	}
+}
+
+func TestAssertOpenWorldEffect(t *testing.T) {
+	err := effects.AssertOpenWorldEffect("bash", effects.READ_ONLY, false)
+	var ow *effects.OpenWorldOverrideRequired
+	if !errors.As(err, &ow) {
+		t.Fatalf("err=%v want OpenWorldOverrideRequired", err)
+	}
+	if err := effects.AssertOpenWorldEffect("python", effects.PURE, false); err == nil {
+		t.Fatal("python PURE must be refused")
+	}
+	if err := effects.AssertOpenWorldEffect("sql", effects.IDEMPOTENT_WRITE, false); err == nil {
+		t.Fatal("sql IDEMPOTENT_WRITE must be refused")
+	}
+	if err := effects.AssertOpenWorldEffect("bash", effects.NON_IDEMPOTENT_WRITE, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := effects.AssertOpenWorldEffect("bash", effects.AGENT_SPAWN, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := effects.AssertOpenWorldEffect("echo", effects.READ_ONLY, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := effects.AssertOpenWorldEffect("bash", effects.READ_ONLY, true); err != nil {
+		t.Fatal(err)
 	}
 }
 

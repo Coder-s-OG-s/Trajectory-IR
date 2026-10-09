@@ -251,6 +251,75 @@ func TestResumeTenantIsolation(t *testing.T) {
 	}
 }
 
+func TestProjectEmitsContextProjected(t *testing.T) {
+	dir := t.TempDir()
+	var kinds []string
+	sink := emit.SinkFunc(func(e emit.Event) error {
+		kinds = append(kinds, e.Kind)
+		return nil
+	})
+	tr, err := client.OpenTrajectory("demo", "t-proj", client.Options{WorkDir: dir, ConsoleSink: sink})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tr.Close()
+	if _, err := tr.Project(1, map[string]any{"goal": "demo"}); err != nil {
+		t.Fatal(err)
+	}
+	foundNode, foundProj := false, false
+	for _, k := range kinds {
+		if k == emit.KindNodeAppended {
+			foundNode = true
+		}
+		if k == emit.KindContextProjected {
+			foundProj = true
+		}
+	}
+	if !foundNode || !foundProj {
+		t.Fatalf("kinds=%v", kinds)
+	}
+}
+
+func TestExecToolEmitsToolNodes(t *testing.T) {
+	dir := t.TempDir()
+	var kinds []string
+	var nodeKinds []string
+	sink := emit.SinkFunc(func(e emit.Event) error {
+		kinds = append(kinds, e.Kind)
+		if e.Kind == emit.KindNodeAppended {
+			if k, _ := e.Payload["kind"].(string); k != "" {
+				nodeKinds = append(nodeKinds, k)
+			}
+		}
+		return nil
+	})
+	tr, err := client.OpenTrajectory("demo", "t-tool", client.Options{WorkDir: dir, ConsoleSink: sink})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tr.Close()
+	tool := resume.Tool{
+		Name:   "echo",
+		Effect: effects.READ_ONLY,
+		Fn:     func(args map[string]any) (any, error) { return "ok", nil },
+	}
+	if _, err := tr.ExecTool(1, 2, tool, map[string]any{"x": 1}); err != nil {
+		t.Fatal(err)
+	}
+	foundCall, foundResult := false, false
+	for _, k := range nodeKinds {
+		if k == "TOOL_CALL" {
+			foundCall = true
+		}
+		if k == "TOOL_RESULT" {
+			foundResult = true
+		}
+	}
+	if !foundCall || !foundResult {
+		t.Fatalf("nodeKinds=%v kinds=%v", nodeKinds, kinds)
+	}
+}
+
 func TestSealHashIgnoresSink(t *testing.T) {
 	plan := map[string]any{"tool_calls": []any{map[string]any{"name": "echo", "args": map[string]any{}}}}
 	off := decisionID(t, nil, plan)
@@ -291,4 +360,102 @@ func decisionID(t *testing.T, sink emit.Sink, plan map[string]any) string {
 	}
 	t.Fatal("missing DECISION")
 	return ""
+}
+
+func TestExecToolRefusesOpenWorldTaggedReadOnly(t *testing.T) {
+	dir := t.TempDir()
+	tr, err := client.OpenTrajectory("demo", "ow-1", client.Options{WorkDir: dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tr.Close()
+	tool := resume.Tool{
+		Name:   "bash",
+		Effect: effects.READ_ONLY,
+		Fn:     func(args map[string]any) (any, error) { return args["cmd"], nil },
+	}
+	_, err = tr.ExecTool(1, 2, tool, map[string]any{"cmd": "cat f"})
+	var ow *effects.OpenWorldOverrideRequired
+	if !errors.As(err, &ow) {
+		t.Fatalf("err=%v want OpenWorldOverrideRequired", err)
+	}
+}
+
+func TestExecToolAllowsOpenWorldWithOverride(t *testing.T) {
+	dir := t.TempDir()
+	tr, err := client.OpenTrajectory("demo", "ow-2", client.Options{WorkDir: dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tr.Close()
+	tool := resume.Tool{
+		Name:                   "bash",
+		Effect:                 effects.READ_ONLY,
+		AllowOpenWorldOverride: true,
+		Fn:                     func(args map[string]any) (any, error) { return args["cmd"], nil },
+	}
+	res, err := tr.ExecTool(1, 2, tool, map[string]any{"cmd": "cat f"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Result != "cat f" {
+		t.Fatalf("result=%v", res.Result)
+	}
+}
+
+func TestSealDecisionWorldSnapshotAndCheckWorld(t *testing.T) {
+	dir := t.TempDir()
+	tr, err := client.OpenTrajectory("demo", "w1", client.Options{WorkDir: dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tr.Close()
+	if _, err := tr.Project(1, map[string]any{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tr.SealDecision(1, map[string]any{"tool_calls": []any{}}, client.SealDecisionOpts{
+		WorldSnapshot: map[string]string{"cluster_generation": "42"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := tr.CheckWorld(1, map[string]string{"cluster_generation": "42"}); err != nil {
+		t.Fatal(err)
+	}
+	err = tr.CheckWorld(1, map[string]string{"cluster_generation": "43"})
+	var drift *resume.WorldDrift
+	if !errors.As(err, &drift) {
+		t.Fatalf("err=%v want WorldDrift", err)
+	}
+}
+
+func TestExecToolFnWithMetaSeesHashedKey(t *testing.T) {
+	dir := t.TempDir()
+	tr, err := client.OpenTrajectory("demo", "meta-1", client.Options{WorkDir: dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tr.Close()
+	var seen resume.CallMeta
+	tool := resume.Tool{
+		Name:   "charge",
+		Effect: effects.NON_IDEMPOTENT_WRITE,
+		FnWithMeta: func(args map[string]any, meta resume.CallMeta) (any, error) {
+			seen = meta
+			if _, ok := args["idempotency_key"]; ok {
+				t.Fatal("key must not be in args")
+			}
+			return "ok", nil
+		},
+	}
+	if _, err := tr.ExecTool(1, 2, tool, map[string]any{"amount": 10}); err != nil {
+		t.Fatal(err)
+	}
+	want := resume.IdempotencyKey("demo", "meta-1", 1, 2)
+	if seen.IdempotencyKey != want {
+		t.Fatalf("key=%q want %q", seen.IdempotencyKey, want)
+	}
+	h := resume.IdempotencyKeyHeader(seen.IdempotencyKey)
+	if h["Idempotency-Key"] != want {
+		t.Fatalf("header=%v", h)
+	}
 }

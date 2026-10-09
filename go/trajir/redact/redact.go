@@ -6,15 +6,23 @@ import (
 )
 
 var (
-	secretKeyRE = regexp.MustCompile(`(?i)(password|passwd|pass[_-]?phrase|secret|token|api[_-]?key|access[_-]?key|authorization|auth|credential|private[_-]?key)`)
+	secretKeyRE = regexp.MustCompile(`(?i)(` +
+		`password|passwd|pass[_-]?phrase|secret|token|api[_-]?key|access[_-]?key|` +
+		`authorization|auth|credential|private[_-]?key|` +
+		`database[_-]?url|connection[_-]?string|db[_-]?url|dsn` +
+		`)`)
 	secretValRE = regexp.MustCompile(
 		`AKIA[0-9A-Z]{16}` +
 			`|[Bb]earer\s+[A-Za-z0-9\-_.=]{10,}` +
 			`|gh[pousr]_[A-Za-z0-9]{20,}` +
 			`|sk-[A-Za-z0-9]{20,}` +
+			`|[sr]k_live_[A-Za-z0-9]{8,}` +
+			`|[sr]k_test_[A-Za-z0-9]{8,}` +
 			`|xox[baprs]-[A-Za-z0-9-]{10,}` +
+			`|AIza[0-9A-Za-z_-]{35}` +
 			`|-----BEGIN[ A-Z]*PRIVATE KEY-----` +
-			`|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}`,
+			`|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}` +
+			`|[a-zA-Z][a-zA-Z0-9+.-]*://[^:@\s]*:[^@\s]+@`,
 	)
 )
 

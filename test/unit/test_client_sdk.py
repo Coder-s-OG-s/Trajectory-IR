@@ -11,7 +11,7 @@ from client.python.trajectory_client import (
     resume,
     seal_decision,
 )
-from trajectory_ir.effects import EffectClass
+from trajectory_ir.effects import EffectClass, OpenWorldOverrideRequired
 from trajectory_ir.runtime.log import NodeLog
 from trajectory_ir.runtime.tool import Tool
 
@@ -115,6 +115,40 @@ def test_open_trajectory_path_traversal_and_url_parameters(db_path, tmp_path, mo
     assert not (tmp_path / "evil.sqlite").exists()
     assert not (tmp_path / f"{traj_id}.sqlite").exists()
     assert NodeLog(db_path).has(traj_id, "demo", 1, "PROJECT_CONTEXT")
+
+
+def test_exec_tool_refuses_open_world_tagged_read_only(db_path):
+    traj = open_trajectory(tenant_id="demo", trajectory_id="ow-1", db_path=db_path)
+    tool = Tool(
+        name="bash",
+        fn=lambda cmd: cmd,
+        effect_class=EffectClass.READ_ONLY,
+    )
+    with pytest.raises(OpenWorldOverrideRequired, match="OPEN_WORLD_OVERRIDE_REQUIRED"):
+        exec_tool(traj, step_n=1, call={"args": {"cmd": "cat f"}}, tool=tool, seq=2)
+
+
+def test_exec_tool_allows_open_world_with_explicit_override(db_path):
+    traj = open_trajectory(tenant_id="demo", trajectory_id="ow-2", db_path=db_path)
+    tool = Tool(
+        name="bash",
+        fn=lambda cmd: cmd,
+        effect_class=EffectClass.READ_ONLY,
+        allow_open_world_override=True,
+    )
+    result = exec_tool(traj, step_n=1, call={"args": {"cmd": "cat f"}}, tool=tool, seq=2)
+    assert result.result == "cat f"
+
+
+def test_exec_tool_allows_open_world_when_honestly_non_idempotent(db_path):
+    traj = open_trajectory(tenant_id="demo", trajectory_id="ow-3", db_path=db_path)
+    tool = Tool(
+        name="bash",
+        fn=lambda cmd: cmd,
+        effect_class=EffectClass.NON_IDEMPOTENT_WRITE,
+    )
+    result = exec_tool(traj, step_n=1, call={"args": {"cmd": "echo hi"}}, tool=tool, seq=2)
+    assert result.result == "echo hi"
 
 
 def test_open_trajectory_does_not_pollute_cwd_with_trajectory_id_sqlite(
