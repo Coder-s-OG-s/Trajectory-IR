@@ -5,6 +5,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -35,12 +36,52 @@ type localAction struct {
 	Name         string `json:"name"`
 }
 
-func (s *Server) requireLoopback(w http.ResponseWriter, r *http.Request) bool {
-	if isLoopback(r) {
+// isLoopbackHost reports whether a Host or Origin host names this machine.
+func isLoopbackHost(hostport string) bool {
+	host := hostport
+	if h, _, err := net.SplitHostPort(hostport); err == nil {
+		host = h
+	}
+	host = strings.Trim(host, "[]")
+	if strings.EqualFold(host, "localhost") {
 		return true
 	}
-	writeErr(w, http.StatusForbidden, "local actions are loopback-only")
-	return false
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
+// isSameOriginLocal blocks browser requests from other sites. A page on any
+// origin can POST to 127.0.0.1, so the loopback peer check alone is not enough.
+// Host must be a loopback name (no DNS rebinding) and Origin, when sent, must
+// be this console.
+func isSameOriginLocal(r *http.Request) bool {
+	if !isLoopbackHost(r.Host) {
+		return false
+	}
+	if site := r.Header.Get("Sec-Fetch-Site"); site != "" && site != "same-origin" && site != "none" {
+		return false
+	}
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		return true
+	}
+	u, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+	return strings.EqualFold(u.Host, r.Host)
+}
+
+func (s *Server) requireLoopback(w http.ResponseWriter, r *http.Request) bool {
+	if !isLoopback(r) {
+		writeErr(w, http.StatusForbidden, "local actions are loopback-only")
+		return false
+	}
+	if !isSameOriginLocal(r) {
+		writeErr(w, http.StatusForbidden, "local actions are same-origin only")
+		return false
+	}
+	return true
 }
 
 func (s *Server) resolveLocalPath(act localAction) (string, error) {

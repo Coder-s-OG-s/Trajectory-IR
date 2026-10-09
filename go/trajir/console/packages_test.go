@@ -18,11 +18,11 @@ func TestStoreStagesExportAndLists(t *testing.T) {
 		t.Fatal(err)
 	}
 	src := filepath.Join(root, "demo.tir")
-	if err := os.WriteFile(src, []byte("package-bytes"), 0o644); err != nil {
+	if err := os.WriteFile(src, append([]byte{0x50, 0x4b, 0x03, 0x04}, "package-bytes"...), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	e := sampleEvent(KindExportCompleted)
-	e.Payload = json.RawMessage(`{"path":` + jsonString(src) + `,"mode":"thin","redacted":false,"bytes":13,"member_count":5,"node_count":1,"ok":true}`)
+	e.Payload = json.RawMessage(`{"path":` + jsonString(src) + `,"mode":"thin","redacted":false,"bytes":17,"member_count":5,"node_count":1,"ok":true}`)
 	if err := st.Append(e); err != nil {
 		t.Fatal(err)
 	}
@@ -30,7 +30,7 @@ func TestStoreStagesExportAndLists(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(items) != 1 || items[0].Name != "demo.tir" || items[0].Bytes != 13 {
+	if len(items) != 1 || items[0].Name != "demo.tir" || items[0].Bytes != 17 {
 		t.Fatalf("items=%+v", items)
 	}
 	events, err := st.ReadEvents(e.TrajectoryID)
@@ -108,6 +108,8 @@ func TestHTTPPackagesAndLoopback(t *testing.T) {
 
 	req5 := httptest.NewRequest(http.MethodPost, "/v1/local/reveal", nil)
 	req5.RemoteAddr = "127.0.0.1:9"
+	req5.Host = "127.0.0.1:8787"
+	req5.Header.Set("Origin", "http://127.0.0.1:8787")
 	rr5 := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rr5, req5)
 	if rr5.Code != http.StatusOK {
@@ -119,10 +121,61 @@ func TestHTTPPackagesAndLoopback(t *testing.T) {
 
 	req6 := httptest.NewRequest(http.MethodPost, "/v1/local/open-shell", nil)
 	req6.RemoteAddr = "127.0.0.1:9"
+	req6.Host = "127.0.0.1:8787"
+	req6.Header.Set("Origin", "http://127.0.0.1:8787")
 	rr6 := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rr6, req6)
 	if rr6.Code != http.StatusOK {
 		t.Fatalf("shell status=%d body=%s", rr6.Code, rr6.Body.String())
+	}
+
+	// A page on another site can reach 127.0.0.1 too. It must not start a process.
+	started = nil
+	crossSite := []func(*http.Request){
+		func(r *http.Request) { r.Header.Set("Origin", "https://evil.example") },
+		func(r *http.Request) { r.Header.Set("Sec-Fetch-Site", "cross-site") },
+		func(r *http.Request) { r.Host = "rebind.evil.example:8787" },
+	}
+	for i, mutate := range crossSite {
+		for _, path := range []string{"/v1/local/reveal", "/v1/local/open-shell"} {
+			req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{"root":true}`))
+			req.RemoteAddr = "127.0.0.1:9"
+			req.Host = "127.0.0.1:8787"
+			mutate(req)
+			rr := httptest.NewRecorder()
+			srv.Handler().ServeHTTP(rr, req)
+			if rr.Code != http.StatusForbidden {
+				t.Fatalf("case %d %s status=%d", i, path, rr.Code)
+			}
+		}
+	}
+	if len(started) != 0 {
+		t.Fatalf("cross-site started=%v", started)
+	}
+}
+
+func TestStoreDoesNotStageNonTir(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	st, err := OpenStore(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secret := filepath.Join(t.TempDir(), "id_rsa")
+	if err := os.WriteFile(secret, []byte("TOP-SECRET"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	e := sampleEvent(KindExportCompleted)
+	e.Payload = json.RawMessage(`{"path":` + jsonString(secret) + `,"mode":"thin","redacted":false,"bytes":10,"member_count":5,"node_count":1,"ok":true}`)
+	if err := st.Append(e); err != nil {
+		t.Fatal(err)
+	}
+	items, err := st.ListPackages(e.TrajectoryID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 0 {
+		t.Fatalf("staged a non-.tir file: %+v", items)
 	}
 }
 

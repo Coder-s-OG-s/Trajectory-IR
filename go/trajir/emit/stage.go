@@ -1,6 +1,7 @@
 package emit
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -48,15 +49,14 @@ func StagePackage(dataDir, trajectoryID, srcPath, eventID string) (string, error
 	if info.Size() > MaxStageBytes {
 		return "", fmt.Errorf("emit: package too large (%d bytes)", info.Size())
 	}
+	// Only real .tir packages are staged. Any other file named in an event
+	// would become downloadable from the console.
 	name, err := SafeTirName(filepath.Base(src))
 	if err != nil {
-		if eventID == "" {
-			return "", err
-		}
-		name, err = SafeTirName(sanitizeID(eventID) + ".tir")
-		if err != nil {
-			return "", err
-		}
+		return "", err
+	}
+	if err := checkTirMagic(src); err != nil {
+		return "", err
 	}
 	root, err := filepath.Abs(dataDir)
 	if err != nil {
@@ -130,6 +130,22 @@ func SafeTirName(base string) (string, error) {
 		return "", errors.New("emit: bad package name")
 	}
 	return base, nil
+}
+
+// tirMagic is the zip local file header every .tir starts with.
+var tirMagic = []byte{0x50, 0x4b, 0x03, 0x04}
+
+func checkTirMagic(path string) error {
+	f, err := openChecked(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	head := make([]byte, len(tirMagic))
+	if _, err := io.ReadFull(f, head); err != nil || !bytes.Equal(head, tirMagic) {
+		return errors.New("emit: not a .tir package")
+	}
+	return nil
 }
 
 func sanitizeID(id string) string {

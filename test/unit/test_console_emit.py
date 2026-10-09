@@ -3,8 +3,10 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from client.python.trajectory_client import open_trajectory, project, seal_decision
-from trajectory_ir.console_emit import FileSink, emit, note_package, note_seal
+from trajectory_ir.console_emit import FileSink, emit, note_package, note_seal, stage_package
 from trajectory_ir.package import export_tir
 from trajectory_ir.runtime.log import NodeLog
 from trajectory_ir.runtime.nodes import Node
@@ -95,9 +97,24 @@ def test_kinds_and_required_fields():
     assert "ok" not in imported["payload"]
 
 
+_ZIP = bytes.fromhex("504b0304")
+
+
+def test_stage_package_rejects_non_tir(tmp_path: Path):
+    secret = tmp_path / "id_rsa"
+    secret.write_bytes(_ZIP + b"secret")
+    with pytest.raises(ValueError):
+        stage_package(str(tmp_path), "t1", str(secret), "evt1")
+    fake = tmp_path / "fake.tir"
+    fake.write_bytes(b"not a zip")
+    with pytest.raises(ValueError):
+        stage_package(str(tmp_path), "t1", str(fake), "evt1")
+    assert not (tmp_path / "packages").exists()
+
+
 def test_file_sink_stages_tir(tmp_path: Path):
     src = tmp_path / "out.tir"
-    src.write_bytes(b"tir-bytes")
+    src.write_bytes(_ZIP + b"tir-bytes")
     sink = FileSink(str(tmp_path))
     emit(
         sink,
@@ -116,7 +133,7 @@ def test_file_sink_stages_tir(tmp_path: Path):
         },
     )
     copied = tmp_path / "packages" / "pack" / "out.tir"
-    assert copied.read_bytes() == b"tir-bytes"
+    assert copied.read_bytes() == _ZIP + b"tir-bytes"
     raw = (tmp_path / "trajectories" / "pack.ndjson").read_text(encoding="utf-8")
     event = json.loads(raw)
     assert event["payload"]["console_path"] == "packages/pack/out.tir"

@@ -24,6 +24,7 @@ SCHEMA = "console-events-v1"
 PACKAGES_DIR = "packages"
 MAX_STAGE_BYTES = 64 * 1024 * 1024
 OBSERVATION_BUDGET = 50000
+_TIR_MAGIC = bytes.fromhex("504b0304")  # zip local file header
 _TIR_NAME = re.compile(r"^[A-Za-z0-9._-]{1,180}\.tir$", re.IGNORECASE)
 
 
@@ -179,12 +180,14 @@ def stage_package(data_dir: str, trajectory_id: str, src_path: str, event_id: st
     size = os.path.getsize(src_path)
     if size > MAX_STAGE_BYTES:
         raise ValueError("package too large")
+    # Only real .tir packages are staged. Any other file named in an event
+    # would become downloadable from the console.
     name = os.path.basename(src_path)
     if not _TIR_NAME.match(name):
-        stem = re.sub(r"[^A-Za-z0-9]", "", event_id)[:12] or "pkg"
-        name = stem + ".tir"
-        if not _TIR_NAME.match(name):
-            raise ValueError("bad package name")
+        raise ValueError("bad package name")
+    with open(src_path, "rb") as fh:
+        if fh.read(len(_TIR_MAGIC)) != _TIR_MAGIC:
+            raise ValueError("not a .tir package")
     dest_dir = os.path.join(data_dir, PACKAGES_DIR, trajectory_id)
     os.makedirs(dest_dir, exist_ok=True)
     dest = os.path.join(dest_dir, name)

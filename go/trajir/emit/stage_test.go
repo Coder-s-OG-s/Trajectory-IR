@@ -12,7 +12,7 @@ import (
 func TestStagePackageCopiesTir(t *testing.T) {
 	dir := t.TempDir()
 	src := filepath.Join(dir, "run.tir")
-	if err := os.WriteFile(src, []byte("PK-demo"), 0o644); err != nil {
+	if err := os.WriteFile(src, tirBytes("PK-demo"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	rel, err := emit.StagePackage(dir, "t1", src, "evt1")
@@ -26,7 +26,7 @@ func TestStagePackageCopiesTir(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(got) != "PK-demo" {
+	if string(got) != string(tirBytes("PK-demo")) {
 		t.Fatalf("copied %q", got)
 	}
 	rel2, err := emit.StagePackage(dir, "t1", src, "evt1")
@@ -68,28 +68,49 @@ func TestStagePackageRejectsTraversalAndDir(t *testing.T) {
 	}
 }
 
-func TestStagePackageBadNameFallsBackToEventID(t *testing.T) {
+func TestStagePackageRejectsBadName(t *testing.T) {
 	dir := t.TempDir()
 	src := filepath.Join(dir, "bad name.tir")
-	if err := os.WriteFile(src, []byte("pkg"), 0o644); err != nil {
+	if err := os.WriteFile(src, tirBytes("pkg"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	rel, err := emit.StagePackage(dir, "t1", src, "evt99")
-	if err != nil {
+	if _, err := emit.StagePackage(dir, "t1", src, "evt99"); err == nil {
+		t.Fatal("expected bad name reject")
+	}
+}
+
+func TestStagePackageRejectsNonTir(t *testing.T) {
+	dir := t.TempDir()
+	// A file that is not named .tir must never be staged, even with an event id.
+	secret := filepath.Join(dir, "id_rsa")
+	if err := os.WriteFile(secret, tirBytes("secret"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if rel != "packages/t1/evt99.tir" {
-		t.Fatalf("rel=%s", rel)
+	if _, err := emit.StagePackage(dir, "t1", secret, "evt1"); err == nil {
+		t.Fatal("expected non-.tir name reject")
 	}
-	if _, err := emit.StagePackage(dir, "t1", src, ""); err == nil {
-		t.Fatal("expected fail without event id")
+	// A .tir name without the zip header is not a package either.
+	fake := filepath.Join(dir, "fake.tir")
+	if err := os.WriteFile(fake, []byte("not a zip"), 0o600); err != nil {
+		t.Fatal(err)
 	}
+	if _, err := emit.StagePackage(dir, "t1", fake, "evt1"); err == nil {
+		t.Fatal("expected magic reject")
+	}
+	if entries, _ := os.ReadDir(filepath.Join(dir, "packages", "t1")); len(entries) != 0 {
+		t.Fatalf("staged %d files", len(entries))
+	}
+}
+
+// tirBytes prefixes body with the zip header so StagePackage accepts it.
+func tirBytes(body string) []byte {
+	return append([]byte{0x50, 0x4b, 0x03, 0x04}, body...)
 }
 
 func TestStagePackageDuplicateDifferentContent(t *testing.T) {
 	dir := t.TempDir()
 	src := filepath.Join(dir, "run.tir")
-	if err := os.WriteFile(src, []byte("first!!"), 0o644); err != nil {
+	if err := os.WriteFile(src, tirBytes("first!!"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	rel, err := emit.StagePackage(dir, "t1", src, "evt1")
@@ -99,7 +120,7 @@ func TestStagePackageDuplicateDifferentContent(t *testing.T) {
 	if rel != "packages/t1/run.tir" {
 		t.Fatalf("rel=%s", rel)
 	}
-	if err := os.WriteFile(src, []byte("second!"), 0o644); err != nil {
+	if err := os.WriteFile(src, tirBytes("second!"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	rel2, err := emit.StagePackage(dir, "t1", src, "evt2-extra")
@@ -113,7 +134,7 @@ func TestStagePackageDuplicateDifferentContent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(got) != "second!" {
+	if string(got) != string(tirBytes("second!")) {
 		t.Fatalf("copied %q", got)
 	}
 }
@@ -121,13 +142,13 @@ func TestStagePackageDuplicateDifferentContent(t *testing.T) {
 func TestStagePackageDuplicateNoEventID(t *testing.T) {
 	dir := t.TempDir()
 	src := filepath.Join(dir, "run.tir")
-	if err := os.WriteFile(src, []byte("aaaa"), 0o644); err != nil {
+	if err := os.WriteFile(src, tirBytes("aaaa"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := emit.StagePackage(dir, "t1", src, ""); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(src, []byte("bbbb"), 0o644); err != nil {
+	if err := os.WriteFile(src, tirBytes("bbbb"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	rel, err := emit.StagePackage(dir, "t1", src, "")
@@ -180,7 +201,7 @@ func TestRelConsolePath(t *testing.T) {
 func TestFileSinkStagesExport(t *testing.T) {
 	dir := t.TempDir()
 	src := filepath.Join(dir, "out.tir")
-	if err := os.WriteFile(src, []byte("tir-bytes"), 0o644); err != nil {
+	if err := os.WriteFile(src, tirBytes("tir-bytes"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	sink := &emit.FileSink{Dir: dir}
