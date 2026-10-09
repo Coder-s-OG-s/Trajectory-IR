@@ -852,4 +852,3 @@ func stripZipMember(path, member string) error {
 	}
 	return os.Rename(tmp, path)
 }
-

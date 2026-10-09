@@ -1006,4 +1006,3 @@ func ImportWithOptions(path string, nodeLog *nodelog.NodeLog, opts ImportOptions
 func Import(path string, nodeLog *nodelog.NodeLog) (*Package, error) {
 	return ImportWithOptions(path, nodeLog, ImportOptions{})
 }
-

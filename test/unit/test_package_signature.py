@@ -403,4 +403,3 @@ def test_import_tir_stripped_signature_fails_trust_store(tmp_path):
 
     with pytest.raises(TirSignatureError, match="unsigned"):
         verify_package(out, trusted_keys=[pub])
-
