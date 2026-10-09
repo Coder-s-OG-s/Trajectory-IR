@@ -463,26 +463,40 @@ var afterBackupHook func(dest string)
 // On platforms where rename cannot overwrite (Windows), dest is moved to a
 // sibling backup first; if the final rename fails, the backup is restored.
 func replaceFile(src, dest string) error {
-	if err := os.Rename(src, dest); err == nil {
-		return nil
+	if err := installFile(src, dest); err != nil {
+		return fmt.Errorf("%w: %v", ErrSignature, err)
 	}
-	return replaceFileViaBackup(src, dest)
+	return nil
 }
 
 func replaceFileViaBackup(src, dest string) error {
+	if err := installFileViaBackup(src, dest); err != nil {
+		return fmt.Errorf("%w: %v", ErrSignature, err)
+	}
+	return nil
+}
+
+func installFile(src, dest string) error {
+	if err := os.Rename(src, dest); err == nil {
+		return nil
+	}
+	return installFileViaBackup(src, dest)
+}
+
+func installFileViaBackup(src, dest string) error {
 	bak := dest + ".trajir-replace-bak"
 	_ = os.Remove(bak)
 	if err := os.Rename(dest, bak); err != nil {
-		return fmt.Errorf("%w: replace package (move aside): %v", ErrSignature, err)
+		return fmt.Errorf("replace package (move aside): %v", err)
 	}
 	if afterBackupHook != nil {
 		afterBackupHook(dest)
 	}
 	if err := os.Rename(src, dest); err != nil {
 		if rbErr := os.Rename(bak, dest); rbErr != nil {
-			return fmt.Errorf("%w: replace package: %v (restore failed: %v)", ErrSignature, err, rbErr)
+			return fmt.Errorf("replace package: %v (restore failed: %v)", err, rbErr)
 		}
-		return fmt.Errorf("%w: replace package: %v", ErrSignature, err)
+		return fmt.Errorf("replace package: %v", err)
 	}
 	_ = os.Remove(bak)
 	return nil
