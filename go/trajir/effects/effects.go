@@ -2,7 +2,10 @@
 // Rules match pkg/trajectory_ir/effects/classify.py (fail closed).
 package effects
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 // EffectClass is how dangerous a tool is for resume and gate policy.
 type EffectClass string
@@ -55,9 +58,44 @@ func IsOpenWorldPrimitive(name string) bool {
 	return ok
 }
 
+// OpenWorldOverrideRequired is raised when an open-world primitive is tagged
+// PURE, READ_ONLY, or IDEMPOTENT_WRITE without AllowOpenWorldOverride.
+type OpenWorldOverrideRequired struct {
+	ToolName string
+	Effect   EffectClass
+}
+
+func (e *OpenWorldOverrideRequired) Error() string {
+	return fmt.Sprintf(
+		"OPEN_WORLD_OVERRIDE_REQUIRED: tool %q is an open-world primitive tagged %s; set AllowOpenWorldOverride or classify it NON_IDEMPOTENT_WRITE",
+		e.ToolName,
+		e.Effect,
+	)
+}
+
+// AssertOpenWorldEffect refuses open-world names tagged safer than
+// NON_IDEMPOTENT_WRITE unless allowOverride is set. ClassifyTool only
+// covers the mapper; ExecTool / RunStep must still reject a Tool that
+// claims bash is read-only. This is not an AST analyzer.
+func AssertOpenWorldEffect(name string, effect EffectClass, allowOverride bool) error {
+	if !IsOpenWorldPrimitive(name) {
+		return nil
+	}
+	switch effect {
+	case PURE, READ_ONLY, IDEMPOTENT_WRITE:
+		if allowOverride {
+			return nil
+		}
+		return &OpenWorldOverrideRequired{ToolName: name, Effect: effect}
+	default:
+		return nil
+	}
+}
+
 // ClassifyTool classifies a named tool. Open-world primitives fail closed
-// even if MCP hints claim read-only. Operators override by setting
-// Tool.Effect directly, not by lying on the hint bits.
+// even if MCP hints claim read-only. Operators who still want a safer class
+// must set Tool.Effect and AllowOpenWorldOverride. Hint bits alone are not
+// enough. This is not an AST analyzer.
 func ClassifyTool(name string, annotations map[string]any) EffectClass {
 	if IsOpenWorldPrimitive(name) {
 		return NON_IDEMPOTENT_WRITE
