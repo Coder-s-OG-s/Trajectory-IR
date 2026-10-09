@@ -470,6 +470,197 @@ func TestExportRejectsMixedTenants(t *testing.T) {
 	}
 }
 
+func TestImportRejectsMixedTenants(t *testing.T) {
+	step := 1
+	acme := openLog(t, "acme.sqlite")
+	if _, err := acme.Append("PROJECT_CONTEXT", &step, map[string]any{"goal": "a"}, "t-mix", "acme", 0); err != nil {
+		t.Fatal(err)
+	}
+	beta := openLog(t, "beta.sqlite")
+	if _, err := beta.Append("PROJECT_CONTEXT", &step, map[string]any{"goal": "b"}, "t-mix", "beta", 1); err != nil {
+		t.Fatal(err)
+	}
+
+	acmePath := filepath.Join(t.TempDir(), "acme.tir")
+	if _, err := tir.Export(acme, "t-mix", acmePath, tir.ExportOptions{Mode: tir.ModeThin}); err != nil {
+		t.Fatal(err)
+	}
+	betaPath := filepath.Join(t.TempDir(), "beta.tir")
+	if _, err := tir.Export(beta, "t-mix", betaPath, tir.ExportOptions{Mode: tir.ModeThin}); err != nil {
+		t.Fatal(err)
+	}
+
+	mixed := filepath.Join(t.TempDir(), "mixed.tir")
+	if err := mergeNodesFromZip(acmePath, betaPath, mixed); err != nil {
+		t.Fatal(err)
+	}
+
+	dest := openLog(t, "dest.sqlite")
+	_, err := tir.Import(mixed, dest)
+	if !errors.Is(err, tir.ErrVerification) {
+		t.Fatalf("err=%v want ErrVerification", err)
+	}
+	nodes, listErr := dest.ListNodesAllTenants("t-mix")
+	if listErr != nil {
+		t.Fatal(listErr)
+	}
+	if len(nodes) != 0 {
+		t.Fatalf("expected empty log after rejected import, got %d nodes", len(nodes))
+	}
+}
+
+func TestLoadRejectsManifestTenantMismatch(t *testing.T) {
+	step := 1
+	beta := openLog(t, "beta.sqlite")
+	if _, err := beta.Append("PROJECT_CONTEXT", &step, map[string]any{"goal": "b"}, "t-mismatch", "beta", 0); err != nil {
+		t.Fatal(err)
+	}
+	betaPath := filepath.Join(t.TempDir(), "beta.tir")
+	if _, err := tir.Export(beta, "t-mismatch", betaPath, tir.ExportOptions{Mode: tir.ModeThin}); err != nil {
+		t.Fatal(err)
+	}
+
+	acme := openLog(t, "acme.sqlite")
+	if _, err := acme.Append("PROJECT_CONTEXT", &step, map[string]any{"goal": "a"}, "t-mismatch", "acme", 1); err != nil {
+		t.Fatal(err)
+	}
+	acmePath := filepath.Join(t.TempDir(), "acme.tir")
+	if _, err := tir.Export(acme, "t-mismatch", acmePath, tir.ExportOptions{Mode: tir.ModeThin}); err != nil {
+		t.Fatal(err)
+	}
+
+	// acme manifest, beta nodes
+	tampered := filepath.Join(t.TempDir(), "tampered.tir")
+	if err := swapNodesFromZip(acmePath, betaPath, tampered); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := tir.Load(tampered)
+	if !errors.Is(err, tir.ErrVerification) {
+		t.Fatalf("err=%v want ErrVerification", err)
+	}
+}
+
+// mergeNodesFromZip copies acmePath wholesale but appends all node lines from betaPath into nodes.ndjson.
+func mergeNodesFromZip(acmePath, betaPath, dst string) error {
+	ar, err := zip.OpenReader(acmePath)
+	if err != nil {
+		return err
+	}
+	defer ar.Close()
+	br, err := zip.OpenReader(betaPath)
+	if err != nil {
+		return err
+	}
+	defer br.Close()
+
+	var betaNodes []byte
+	for _, f := range br.File {
+		if f.Name == "nodes.ndjson" {
+			rc, err := f.Open()
+			if err != nil {
+				return err
+			}
+			betaNodes, err = io.ReadAll(rc)
+			rc.Close()
+			if err != nil {
+				return err
+			}
+			break
+		}
+	}
+
+	f, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	w := zip.NewWriter(f)
+	defer w.Close()
+	for _, zf := range ar.File {
+		rc, err := zf.Open()
+		if err != nil {
+			return err
+		}
+		data, err := io.ReadAll(rc)
+		rc.Close()
+		if err != nil {
+			return err
+		}
+		if zf.Name == "nodes.ndjson" {
+			data = append(data, betaNodes...)
+		}
+		out, err := w.Create(zf.Name)
+		if err != nil {
+			return err
+		}
+		if _, err := out.Write(data); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// swapNodesFromZip takes the manifest from srcManifestPath and the nodes.ndjson from srcNodesPath.
+func swapNodesFromZip(srcManifestPath, srcNodesPath, dst string) error {
+	mr, err := zip.OpenReader(srcManifestPath)
+	if err != nil {
+		return err
+	}
+	defer mr.Close()
+	nr, err := zip.OpenReader(srcNodesPath)
+	if err != nil {
+		return err
+	}
+	defer nr.Close()
+
+	nodesByName := make(map[string][]byte)
+	for _, f := range nr.File {
+		rc, err := f.Open()
+		if err != nil {
+			return err
+		}
+		data, err := io.ReadAll(rc)
+		rc.Close()
+		if err != nil {
+			return err
+		}
+		nodesByName[f.Name] = data
+	}
+
+	f, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	w := zip.NewWriter(f)
+	defer w.Close()
+	for _, zf := range mr.File {
+		rc, err := zf.Open()
+		if err != nil {
+			return err
+		}
+		data, err := io.ReadAll(rc)
+		rc.Close()
+		if err != nil {
+			return err
+		}
+		if zf.Name == "nodes.ndjson" {
+			if alt, ok := nodesByName["nodes.ndjson"]; ok {
+				data = alt
+			}
+		}
+		out, err := w.Create(zf.Name)
+		if err != nil {
+			return err
+		}
+		if _, err := out.Write(data); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func TestExportFatRejectsMissingArtifactBytes(t *testing.T) {
 	src := openLog(t, "src.sqlite")
 	seedSample(t, src)

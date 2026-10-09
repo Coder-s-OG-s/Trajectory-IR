@@ -7,13 +7,13 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-
 from integrations.langgraph.sidecar import TrajIRToolGuard
 from integrations.langgraph.verify_pack import (
     ensure_trajir_built,
     run_verify,
     verify_and_note_audit,
 )
+
 from trajectory_ir.console_emit import FileSink
 from trajectory_ir.effects import EffectClass, OpenWorldOverrideRequired
 from trajectory_ir.runtime.log import NodeLog
@@ -66,18 +66,22 @@ def test_multi_tool_export_verify_ok_and_flip_fail(tmp_path: Path, trajir_exe: P
 
 @pytest.mark.integration
 def test_open_world_refuse(tmp_path: Path) -> None:
-    with TrajIRToolGuard(
-        tenant_id="demo",
-        trajectory_id="it-ow",
-        work_dir=tmp_path,
-        effect_hints={"bash": EffectClass.READ_ONLY},
-    ) as guard:
-        with pytest.raises(OpenWorldOverrideRequired):
-            guard.run_sealed("bash", {"cmd": "echo hi"}, lambda cmd: cmd)
+    with (
+        TrajIRToolGuard(
+            tenant_id="demo",
+            trajectory_id="it-ow",
+            work_dir=tmp_path,
+            effect_hints={"bash": EffectClass.READ_ONLY},
+        ) as guard,
+        pytest.raises(OpenWorldOverrideRequired),
+    ):
+        guard.run_sealed("bash", {"cmd": "echo hi"}, lambda cmd: cmd)
 
 
 @pytest.mark.integration
-def test_console_file_sink_roundtrip(tmp_path: Path, trajir_exe: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_console_file_sink_roundtrip(
+    tmp_path: Path, trajir_exe: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     console_root = tmp_path / "console"
     monkeypatch.setenv("TRAJIR_CONSOLE_SINK", "file")
     monkeypatch.setenv("TRAJIR_CONSOLE_DATA", str(console_root))

@@ -1,10 +1,21 @@
 """Seal-derived idempotency keys (spec §7.3).
 
-The key is ``hex(sha256(domain || 0x00 || tenant || 0x00 || trajectory ||
-0x00 || step || 0x00 || seq))`` with domain ``trajir-idempotency-v1``.
-It is recorded on the ``TOOL_CALL`` node and exposed to the tool body via
-:class:`CallMeta` / :func:`current_call_meta` so a host can forward it as
-``Idempotency-Key``. It is never injected into the tool's user arguments.
+The key is ``hex(sha256(length-prefixed fields))`` with domain
+``trajir-idempotency-v1``. Each field is ``uint32be(byte length) || utf-8``,
+in order: domain, tenant, trajectory, decimal step, decimal seq.
+
+Length prefixes stop a NUL inside a tenant or trajectory id from aliasing
+a different pair. The NUL-joined draft collides: ``("a", "b\\x00c")`` and
+``("a\\x00b", "c")`` hash the same.
+
+A trajectory sealed under the withdrawn colon key
+(``trajectory:step:seq``, no tenant) does not resume onto this hash.
+Pre-1.0, there is no translator. Forwarding the new key for an in-flight
+call can repeat the side effect at the callee.
+
+The key is recorded on the ``TOOL_CALL`` node and exposed to the tool body
+via :class:`CallMeta` / :func:`current_call_meta` so a host can forward it
+as ``Idempotency-Key``. It is never injected into the tool's user arguments.
 
 The IR log is not the server. Client-side block-and-gate is at-most-one
 automatic attempt from this process; exactly-once still requires the
@@ -48,17 +59,27 @@ _current_meta: contextvars.ContextVar[CallMeta | None] = contextvars.ContextVar(
 )
 
 
+def _len_prefixed(field: str) -> bytes:
+    raw = field.encode("utf-8")
+    return len(raw).to_bytes(4, "big") + raw
+
+
 def idempotency_key(tenant_id: str, trajectory_id: str, step_n: int, seq: int) -> str:
-    """Return the spec §7.3 hashed key for a sealed tool slot."""
-    raw = "\x00".join(
-        (
+    """Return the spec §7.3 hashed key for a sealed tool slot.
+
+    Fields are length-prefixed. A trajectory sealed with the withdrawn colon
+    key does not resume onto this hash (pre-1.0, no translator).
+    """
+    raw = b"".join(
+        _len_prefixed(field)
+        for field in (
             IDEMPOTENCY_DOMAIN,
             tenant_id,
             trajectory_id,
             str(step_n),
             str(seq),
         )
-    ).encode("utf-8")
+    )
     return hashlib.sha256(raw).hexdigest()
 
 

@@ -42,6 +42,10 @@ def test_idempotency_key_is_stable_for_same_sealed_slot():
     assert idempotency_key("demo", "t", 3, 4) == idempotency_key("demo", "t", 3, 4)
 
 
+def test_idempotency_key_nul_inside_id_does_not_alias():
+    assert idempotency_key("a", "b\x00c", 1, 2) != idempotency_key("a\x00b", "c", 1, 2)
+
+
 def test_idempotency_key_changes_when_slot_or_tenant_changes():
     base = idempotency_key("demo", "t", 1, 2)
     assert base != idempotency_key("demo", "t", 1, 4)

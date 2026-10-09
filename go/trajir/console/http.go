@@ -31,8 +31,15 @@ func NewServer(store *Store, token string) *Server {
 	s := &Server{Store: store, Token: token, Mux: http.NewServeMux()}
 	s.Mux.HandleFunc("POST /v1/events", s.handlePostEvent)
 	s.Mux.HandleFunc("GET /v1/trajectories", s.handleList)
+	s.Mux.HandleFunc("GET /v1/savings", s.handleSavings)
+	s.Mux.HandleFunc("GET /v1/dashboard", s.handleDashboard)
+	s.Mux.HandleFunc("GET /v1/about", s.handleAbout)
 	s.Mux.HandleFunc("GET /v1/trajectories/{id}/events", s.handleEvents)
 	s.Mux.HandleFunc("GET /v1/trajectories/{id}/summary", s.handleSummary)
+	s.Mux.HandleFunc("GET /v1/trajectories/{id}/packages", s.handleListPackages)
+	s.Mux.HandleFunc("GET /v1/trajectories/{id}/packages/{name}", s.handleGetPackage)
+	s.Mux.HandleFunc("POST /v1/local/reveal", s.handleReveal)
+	s.Mux.HandleFunc("POST /v1/local/open-shell", s.handleOpenShell)
 	s.Mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok\n"))
@@ -57,6 +64,10 @@ func (s *Server) mountUI() {
 	})
 	s.Mux.HandleFunc("GET /ui", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/", http.StatusFound)
+	})
+	s.Mux.HandleFunc("GET /favicon.ico", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		http.ServeFileFS(w, r, sub, "logo.png")
 	})
 }
 
@@ -130,6 +141,43 @@ func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"trajectories": ids})
 }
 
+func (s *Server) handleSavings(w http.ResponseWriter, r *http.Request) {
+	if !s.authorize(w, r) {
+		return
+	}
+	view, err := s.Store.Savings()
+	if err != nil {
+		writeErr(w, statusForRead(err), err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, view)
+}
+
+func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
+	if !s.authorize(w, r) {
+		return
+	}
+	view, err := s.Store.Dashboard()
+	if err != nil {
+		writeErr(w, statusForRead(err), err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, view)
+}
+
+func (s *Server) handleAbout(w http.ResponseWriter, r *http.Request) {
+	if !s.authorize(w, r) {
+		return
+	}
+	view, err := s.Store.About()
+	if err != nil {
+		writeErr(w, statusForRead(err), err.Error())
+		return
+	}
+	view.AuthRequired = s.Token != ""
+	writeJSON(w, http.StatusOK, view)
+}
+
 func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	if !s.authorize(w, r) {
 		return
@@ -144,6 +192,35 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 		"trajectory_id": id,
 		"events":        events,
 	})
+}
+
+func (s *Server) handleListPackages(w http.ResponseWriter, r *http.Request) {
+	if !s.authorize(w, r) {
+		return
+	}
+	id := r.PathValue("id")
+	items, err := s.Store.ListPackages(id)
+	if err != nil {
+		writeErr(w, statusForRead(err), err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"packages": items})
+}
+
+func (s *Server) handleGetPackage(w http.ResponseWriter, r *http.Request) {
+	if !s.authorize(w, r) {
+		return
+	}
+	id := r.PathValue("id")
+	name := r.PathValue("name")
+	path, err := s.Store.PackagePath(id, name)
+	if err != nil {
+		writeErr(w, statusForRead(err), err.Error())
+		return
+	}
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", `attachment; filename="`+name+`"`)
+	http.ServeFile(w, r, path)
 }
 
 func (s *Server) handleSummary(w http.ResponseWriter, r *http.Request) {

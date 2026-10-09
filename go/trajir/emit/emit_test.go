@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/emit"
@@ -129,5 +130,129 @@ func TestNotePackageImportFlag(t *testing.T) {
 	}
 	if _, isExportOK := got.Payload["ok"]; isExportOK {
 		t.Fatal("import used ok")
+	}
+}
+
+func TestNotePackageExportAndError(t *testing.T) {
+	var got emit.Event
+	ok := false
+	emit.NotePackage(emit.SinkFunc(func(e emit.Event) error {
+		got = e
+		return nil
+	}), emit.PackageFact{
+		Kind:         emit.KindExportCompleted,
+		TrajectoryID: "t",
+		Path:         "out.tir",
+		Mode:         "thin",
+		OK:           &ok,
+		Error:        "disk",
+	})
+	if got.Kind != "export.completed" || got.Payload["ok"] != false {
+		t.Fatalf("%+v", got)
+	}
+	if got.Payload["error"] != "disk" {
+		t.Fatalf("error %v", got.Payload["error"])
+	}
+	if got.Source != "go" {
+		t.Fatalf("default source %s", got.Source)
+	}
+}
+
+func TestNoteProjectionDefaults(t *testing.T) {
+	var got emit.Event
+	emit.NoteProjection(emit.SinkFunc(func(e emit.Event) error {
+		got = e
+		return nil
+	}), emit.ProjectionFact{TrajectoryID: "t", StepN: 3})
+	if got.Kind != emit.KindContextProjected {
+		t.Fatalf("kind %s", got.Kind)
+	}
+	if got.Payload["budget"] != emit.ObservationBudget {
+		t.Fatalf("budget %v", got.Payload["budget"])
+	}
+	if got.Payload["metric"] != "rfc8785_bytes" {
+		t.Fatalf("metric %v", got.Payload["metric"])
+	}
+	if got.Payload["step_n"] != 3 {
+		t.Fatalf("step %v", got.Payload["step_n"])
+	}
+	if _, ok := got.Payload["included_ids"].([]string); !ok {
+		t.Fatalf("included %T", got.Payload["included_ids"])
+	}
+}
+
+func TestFromEnv(t *testing.T) {
+	t.Setenv("TRAJIR_CONSOLE_SINK", "")
+	if emit.FromEnv() != nil {
+		t.Fatal("empty sink should be nil")
+	}
+	t.Setenv("TRAJIR_CONSOLE_SINK", "file")
+	t.Setenv("TRAJIR_CONSOLE_DATA", "data-dir")
+	file, ok := emit.FromEnv().(*emit.FileSink)
+	if !ok || file.Dir != "data-dir" {
+		t.Fatalf("file sink %+v", emit.FromEnv())
+	}
+	t.Setenv("TRAJIR_CONSOLE_SINK", "HTTP")
+	t.Setenv("TRAJIR_CONSOLE_URL", "")
+	t.Setenv("TRAJIR_CONSOLE_TOKEN", "tok")
+	httpSink, ok := emit.FromEnv().(*emit.HTTPSink)
+	if !ok || httpSink.BaseURL != "http://127.0.0.1:8787" || httpSink.Token != "tok" {
+		t.Fatalf("http sink %+v", httpSink)
+	}
+	t.Setenv("TRAJIR_CONSOLE_SINK", "http")
+	t.Setenv("TRAJIR_CONSOLE_URL", "http://example.invalid:9")
+	httpSink, ok = emit.FromEnv().(*emit.HTTPSink)
+	if !ok || httpSink.BaseURL != "http://example.invalid:9" {
+		t.Fatalf("custom url %+v", httpSink)
+	}
+}
+
+func TestSafeEmitNilAndSinkFuncNil(t *testing.T) {
+	emit.SafeEmit(nil, emit.Event{Kind: emit.KindNodeAppended, TrajectoryID: "t"})
+	var fn emit.SinkFunc
+	if err := fn.Emit(emit.Event{}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestFileSinkRequiresDir(t *testing.T) {
+	var nilSink *emit.FileSink
+	if err := nilSink.Emit(emit.Event{TrajectoryID: "t"}); err == nil {
+		t.Fatal("expected nil sink error")
+	}
+	if err := (&emit.FileSink{}).Emit(emit.Event{TrajectoryID: "t"}); err == nil {
+		t.Fatal("expected empty dir")
+	}
+}
+
+func TestHTTPSinkRequiresURL(t *testing.T) {
+	var nilSink *emit.HTTPSink
+	if err := nilSink.Emit(emit.Event{TrajectoryID: "t"}); err == nil {
+		t.Fatal("expected nil sink error")
+	}
+	if err := (&emit.HTTPSink{}).Emit(emit.Event{TrajectoryID: "t"}); err == nil {
+		t.Fatal("expected empty url")
+	}
+}
+
+func TestFileSinkExportPathIgnoredWhenUnsafe(t *testing.T) {
+	dir := t.TempDir()
+	sink := &emit.FileSink{Dir: dir}
+	if err := sink.Emit(emit.Event{
+		Kind:         emit.KindExportCompleted,
+		TrajectoryID: "pack",
+		Payload: map[string]any{
+			"path": "../secret.tir", "mode": "thin",
+			"bytes": 1, "member_count": 1, "node_count": 1,
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, "trajectories", "pack.ndjson"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "console_path") {
+		t.Fatalf("unsafe path should not stage: %s", raw)
 	}
 }

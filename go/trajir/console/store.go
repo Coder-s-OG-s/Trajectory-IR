@@ -13,10 +13,10 @@ import (
 )
 
 const (
-	envDataDir       = "TRAJIR_CONSOLE_DATA"
-	trajectoriesDir  = "trajectories"
-	defaultFilePerm  = 0o644
-	defaultDirPerm   = 0o755
+	envDataDir      = "TRAJIR_CONSOLE_DATA"
+	trajectoriesDir = "trajectories"
+	defaultFilePerm = 0o644
+	defaultDirPerm  = 0o755
 )
 
 // Store is an append-only NDJSON event store keyed by trajectory id.
@@ -58,6 +58,7 @@ func (s *Store) Append(e Event) error {
 	if err := e.Validate(); err != nil {
 		return err
 	}
+	e = s.maybeStageExport(e)
 	line, err := json.Marshal(e)
 	if err != nil {
 		return fmt.Errorf("console: marshal event: %w", err)

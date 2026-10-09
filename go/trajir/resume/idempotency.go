@@ -2,9 +2,9 @@ package resume
 
 import (
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"strconv"
-	"strings"
 )
 
 // IdempotencyDomain is the SHA-256 domain separator for spec §7.3 keys.
@@ -31,27 +31,40 @@ func NewCallMeta(tenantID, trajectoryID string, stepN, seq int) CallMeta {
 	}
 }
 
-// IdempotencyKey is spec §7.3: hex(sha256(domain || 0x00 || tenant || 0x00 ||
-// trajectory || 0x00 || step || 0x00 || seq)).
+// IdempotencyKey is spec §7.3: hex(sha256(length-prefixed fields)).
+// Each field is uint32be(byte length) || utf-8 bytes, in order:
+// domain, tenant, trajectory, decimal step, decimal seq.
 //
-// The colon form (trajectory:step:seq) leaked identifiers into HTTP headers
-// and omitted tenant. This hash is stable for a sealed slot, includes tenant,
-// and is short enough to send as Idempotency-Key. Hosts must forward it to
-// the remote API. Recording it on TOOL_CALL is not exactly-once.
-// Block-and-gate is at-most-one automatic attempt from this client.
+// Length prefixes stop a NUL inside a tenant or trajectory id from aliasing
+// a different pair. The earlier NUL-joined draft (domain || 0x00 || tenant ||
+// 0x00 || ...) collides: ("a", "b\x00c") and ("a\x00b", "c") hash the same.
+//
+// Resume: a trajectory whose TOOL_CALL rows were sealed with the withdrawn
+// colon key (trajectory:step:seq, no tenant) does not compute this hash.
+// Pre-1.0, there is no translator. Resuming that call and forwarding the new
+// key can repeat the side effect at the callee. The colon form leaked
+// identifiers into HTTP headers and omitted tenant.
+//
+// The hash is stable for a sealed slot and is short enough to send as
+// Idempotency-Key. Hosts must forward it to the remote API. Recording it
+// on TOOL_CALL is not exactly-once. Block-and-gate is at-most-one automatic
+// attempt from this client.
 func IdempotencyKey(tenantID, trajectoryID string, stepN, seq int) string {
-	var b strings.Builder
-	b.WriteString(IdempotencyDomain)
-	b.WriteByte(0)
-	b.WriteString(tenantID)
-	b.WriteByte(0)
-	b.WriteString(trajectoryID)
-	b.WriteByte(0)
-	b.WriteString(strconv.Itoa(stepN))
-	b.WriteByte(0)
-	b.WriteString(strconv.Itoa(seq))
-	sum := sha256.Sum256([]byte(b.String()))
+	var buf []byte
+	buf = appendLenPrefixed(buf, IdempotencyDomain)
+	buf = appendLenPrefixed(buf, tenantID)
+	buf = appendLenPrefixed(buf, trajectoryID)
+	buf = appendLenPrefixed(buf, strconv.Itoa(stepN))
+	buf = appendLenPrefixed(buf, strconv.Itoa(seq))
+	sum := sha256.Sum256(buf)
 	return hex.EncodeToString(sum[:])
+}
+
+func appendLenPrefixed(dst []byte, s string) []byte {
+	var n [4]byte
+	binary.BigEndian.PutUint32(n[:], uint32(len(s)))
+	dst = append(dst, n[:]...)
+	return append(dst, s...)
 }
 
 // IdempotencyKeyHeader returns a map a host can merge onto outbound HTTP.

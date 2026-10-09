@@ -74,6 +74,14 @@ func TestIdempotencyKeyChangesWithSlotOrTenant(t *testing.T) {
 	}
 }
 
+func TestIdempotencyKeyNulInsideIdDoesNotAlias(t *testing.T) {
+	a := resume.IdempotencyKey("a", "b\x00c", 1, 2)
+	b := resume.IdempotencyKey("a\x00b", "c", 1, 2)
+	if a == b {
+		t.Fatal("NUL inside a tenant or trajectory id must not alias another pair")
+	}
+}
+
 func TestIdempotencyKeyHeader(t *testing.T) {
 	key := resume.IdempotencyKey("demo", "t1", 1, 2)
 	h := resume.IdempotencyKeyHeader(key)

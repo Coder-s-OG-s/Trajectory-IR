@@ -113,3 +113,78 @@ def test_run_step_observe_world_drift(tmp_path, monkeypatch):
     observed["cluster_generation"] = "2"
     with SetWorkflowID("w-run-2"), pytest.raises(WorldDrift, match="WORLD_DRIFT"):
         run_step(step_n=2, model_call=_world_model, context={})
+
+
+def _passthrough(fn):
+    return fn
+
+
+def test_world_snapshot_callable_is_per_step(tmp_path):
+    log = NodeLog(str(tmp_path / "nodes.sqlite"))
+    current = {"step": 1}
+
+    def snap(step_n: int):
+        return {"cluster_generation": str(step_n)}
+
+    def observe():
+        return {"cluster_generation": str(current["step"])}
+
+    tools = {
+        "echo": Tool(name="echo", fn=_echo_msg, effect_class=EffectClass.PURE),
+    }
+    run_step = make_run_step(
+        log,
+        "demo",
+        "w-per-step",
+        tools,
+        world_snapshot=snap,
+        observe_world=observe,
+        durable_infer_fn=_passthrough,
+        durable_tool_fn=_passthrough,
+        durable_workflow_fn=_passthrough,
+    )
+    assert run_step(step_n=1, model_call=_world_model, context={}) == ["ok"]
+    current["step"] = 2
+    assert run_step(step_n=2, model_call=_world_model, context={}) == ["ok"]
+    decisions = {
+        row["step_n"]: row["payload"]["world_snapshot"]
+        for row in log.list_nodes("w-per-step", tenant_id="demo")
+        if row["kind"] == "DECISION"
+    }
+    assert decisions == {1: {"cluster_generation": "1"}, 2: {"cluster_generation": "2"}}
+
+
+def test_resume_after_decision_reports_drift_not_slot_conflict(tmp_path):
+    log = NodeLog(str(tmp_path / "nodes.sqlite"))
+    state = {"gen": "1", "observes": 0}
+
+    def snap(_step_n: int):
+        return {"cluster_generation": state["gen"]}
+
+    def observe():
+        state["observes"] += 1
+        if state["observes"] == 1:
+            raise RuntimeError("crash after decision")
+        return {"cluster_generation": state["gen"]}
+
+    tools = {
+        "echo": Tool(name="echo", fn=_echo_msg, effect_class=EffectClass.PURE),
+    }
+    run_step = make_run_step(
+        log,
+        "demo",
+        "w-resume",
+        tools,
+        world_snapshot=snap,
+        observe_world=observe,
+        durable_infer_fn=_passthrough,
+        durable_tool_fn=_passthrough,
+        durable_workflow_fn=_passthrough,
+    )
+    with pytest.raises(RuntimeError, match="crash after decision"):
+        run_step(step_n=1, model_call=_world_model, context={})
+    state["gen"] = "2"
+    with pytest.raises(WorldDrift, match="WORLD_DRIFT") as exc:
+        run_step(step_n=1, model_call=_world_model, context={})
+    assert exc.value.mismatches[0]["sealed"] == "1"
+    assert exc.value.mismatches[0]["observed"] == "2"

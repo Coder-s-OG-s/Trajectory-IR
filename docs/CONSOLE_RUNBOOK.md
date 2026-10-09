@@ -10,8 +10,10 @@ The fixture `go/trajir/console/testdata/console_demo.ndjson` is trajectory
 `console-demo`. It has one seal create, one seal verify, one projection
 (`raw_char_len` 400, `projected_char_len` 100, so the reader reports 75
 estimated tokens avoided), one redaction count, and one `.tir` export followed
-by an import of `demo.tir`. The UI copies those summary fields. It does not
-recompute hashes or token estimates.
+by an import of `demo.tir`. The demo script also copies
+`testdata/sample_thin.tir` to `packages/console-demo/demo.tir` so Transfers can
+download the file and Show in folder can open it. The UI copies summary fields.
+It does not recompute hashes or token estimates.
 
 ## Prepare the data
 
@@ -39,12 +41,19 @@ cd go
 go run ./cmd/trajir-console -addr 127.0.0.1:8787
 ```
 
-Open `http://127.0.0.1:8787/?id=console-demo`.
+Open `http://127.0.0.1:8787/` for the home dashboard, or
+`http://127.0.0.1:8787/?id=console-demo` for one run.
 
-1. Overview shows the event count and the seal / package rollup.
-2. Seals shows `seal.created` then `seal.verified` with `ok=true`.
-3. Transfers shows the export and the import of `demo.tir` (mode thin, redacted).
-4. Economy shows the projection. Tokens avoided (est.) is 75. That figure is `ceil(chars/4)`, not a provider invoice.
+1. Home shows a run activity board (filled hexes are real runs, empty hexes are empty), a Runs table, Tokens saved (est.), and this-machine health. Click a hex or a run name to open it. Not a city map and not a forecast.
+2. The sidebar Tokens saved (est.) is `GET /v1/dashboard` (same numbers as `GET /v1/savings`). For this fixture it is 75. That figure is `ceil(chars/4)`, not a provider invoice.
+3. **What happened** is a plain-language timeline. The log names stay on each row.
+4. **Locked decisions** shows `seal.created` then `seal.verified` with `ok=true`.
+5. **Files** shows the export and the import of `demo.tir` (mode thin, redacted), plus the local copy.
+6. **Tokens** shows the projection. Saved last time is 75. Same estimator as the sidebar.
+7. Download and Show in folder only work on this machine.
+8. Sidebar Show data folder / Open PowerShell here talk to `POST /v1/local/*` on loopback. The browser does not spawn a shell itself. Press `/` to search runs.
+9. Top right: **Light mode** / **Dark mode** remembers your choice. **Live** refreshes every 4 seconds. Pause it if you want the page still.
+10. Sidebar **License** opens Apache License 2.0 plus facts about this computer (data folder, health, run and package counts). There is no product key and no expiry. This is not object storage IAM.
 
 Stop the process with Ctrl+C. Nothing here phones home.
 
