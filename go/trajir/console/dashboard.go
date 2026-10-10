@@ -20,6 +20,11 @@ type RunCard struct {
 	TokensAvoidedEstimated       *int   `json:"tokens_avoided_estimated"`
 	LatestTokensAvoidedEstimated *int   `json:"latest_tokens_avoided_estimated"`
 	ProjectionHits               int    `json:"projection_hits"`
+	RawCharLen                   *int   `json:"raw_char_len"`
+	ProjectedCharLen             *int   `json:"projected_char_len"`
+	PromptTokens                 *int   `json:"prompt_tokens"`
+	CompletionTokens             *int   `json:"completion_tokens"`
+	Model                        string `json:"model,omitempty"`
 }
 
 // Dashboard scans every trajectory once for the home screen.
@@ -52,5 +57,10 @@ func runCardFrom(sum Summary) RunCard {
 		TokensAvoidedEstimated:       copyInt(sum.Economy.LifetimeTokensAvoidedEstimated),
 		LatestTokensAvoidedEstimated: copyInt(sum.Economy.TokensAvoidedEstimated),
 		ProjectionHits:               sum.Economy.ProjectionHits,
+		RawCharLen:                   copyInt(sum.RawCharLen),
+		ProjectedCharLen:             copyInt(sum.ProjectedCharLen),
+		PromptTokens:                 copyInt(sum.PromptTokens),
+		CompletionTokens:             copyInt(sum.CompletionTokens),
+		Model:                        sum.Model,
 	}
 }

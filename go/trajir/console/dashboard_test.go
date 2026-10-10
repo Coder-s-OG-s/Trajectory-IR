@@ -38,7 +38,13 @@ func TestDashboardHomeRollup(t *testing.T) {
 	if got.Runs[0].EventCount != 3 || got.Runs[0].ProjectionHits != 2 {
 		t.Fatalf("econ card %+v", got.Runs[0])
 	}
-	if got.Runs[1].TokensAvoidedEstimated != nil || got.Runs[1].EventCount != 1 {
+	if got.Runs[0].RawCharLen == nil || *got.Runs[0].RawCharLen != 400 || got.Runs[0].ProjectedCharLen == nil || *got.Runs[0].ProjectedCharLen != 100 {
+		t.Fatalf("econ chars %+v", got.Runs[0])
+	}
+	if got.Runs[0].PromptTokens != nil || got.Runs[0].CompletionTokens != nil || got.Runs[0].Model != "" {
+		t.Fatalf("econ usage invented %+v", got.Runs[0])
+	}
+	if got.Runs[1].TokensAvoidedEstimated != nil || got.Runs[1].EventCount != 1 || got.Runs[1].RawCharLen != nil || got.Runs[1].LatestTokensAvoidedEstimated != nil {
 		t.Fatalf("plain card %+v", got.Runs[1])
 	}
 }
@@ -90,6 +96,8 @@ func TestDashboardUIShell(t *testing.T) {
 		"Show data folder",
 		"Open PowerShell here",
 		"Light mode",
+		"Save on this browser",
+		"List price for the illustration",
 		`rel="icon"`,
 		"/ui/logo.png",
 		"/ui/logo_transparent.png",
@@ -115,6 +123,17 @@ func TestDashboardUIShell(t *testing.T) {
 		"bindHome",
 		"barPct",
 		"Run activity",
+		"Token check",
+		"Latest trim (est.)",
+		"Lifetime sum (est.)",
+		"List-price illustration",
+		"No trim yet",
+		"trajir_console_prices",
+		"token-scroll",
+		"hex unknown",
+		"data-pager",
+		"Per page",
+		"Previous",
 	} {
 		if !strings.Contains(js, want) {
 			t.Fatalf("missing %q in js", want)
@@ -132,5 +151,8 @@ func TestDashboardUIShell(t *testing.T) {
 		if strings.Contains(src, "\u00b7") {
 			t.Fatal("dashboard copy must not use middle dots")
 		}
+	}
+	if strings.Contains(js, "slice(0, 40)") {
+		t.Fatal("overview must page events instead of cutting the list at 40")
 	}
 }
