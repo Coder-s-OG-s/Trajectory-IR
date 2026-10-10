@@ -37,7 +37,7 @@
       <div id="savings" class="hero" aria-live="polite">
         <div class="label">Tokens saved (est.)</div>
         <div id="savings-total" class="value">none</div>
-        <p class="muted tiny">Guess from text size (chars divided by 4). Not a bill.</p>
+        <p class="muted tiny">Guess from text size (chars divided by 4). Not a bill. This total adds every trim.</p>
       </div>
 
       <label class="field search">
@@ -55,6 +55,10 @@
       </p>
 
       <div class="side-foot">
+        <div class="row wrap">
+          <button type="button" id="run-langgraph-demo" class="btn primary">Run LangGraph demo</button>
+        </div>
+        <p class="muted tiny">Runs the evidence sidecar stub into this console as run <code>langgraph-demo</code>. This PC only.</p>
         <div class="row wrap">
           <button type="button" id="open-folder" class="btn">Show data folder</button>
           <button type="button" id="open-shell" class="btn">Open PowerShell here</button>
@@ -99,6 +103,23 @@
       <div id="banner" class="banner hidden" role="status"></div>
 
       <section id="home" class="home" aria-label="All runs"></section>
+
+      <section id="price-card" class="price-card" aria-label="List price">
+        <h3>List price for the illustration</h3>
+        <p class="muted tiny">Type a dated rate for one model. It stays in this browser. It is not written to the log, and it is not a bill. The illustration needs provider input, provider output, and this price. Otherwise the cell stays none.</p>
+        <form id="price-form" class="price-form" autocomplete="off">
+          <label class="field"><span>Model id</span><input name="model" type="text" maxlength="200" /></label>
+          <label class="field"><span>Input USD per million</span><input name="input_usd" type="text" inputmode="decimal" /></label>
+          <label class="field"><span>Output USD per million</span><input name="output_usd" type="text" inputmode="decimal" /></label>
+          <label class="field"><span>Date</span><input name="priced_on" type="date" /></label>
+          <label class="field span-all"><span>Source</span><input name="source" type="text" maxlength="300" /></label>
+          <div class="price-actions span-all">
+            <button type="submit" class="btn">Save on this browser</button>
+            <span class="muted tiny">Both rates are required. An empty rate is not saved as zero.</span>
+          </div>
+        </form>
+        <div id="price-saved"></div>
+      </section>
 
       <div id="panels" class="hidden">
         <div class="tabs" role="tablist" aria-label="Views">

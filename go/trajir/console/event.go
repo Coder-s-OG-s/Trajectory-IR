@@ -25,6 +25,8 @@ const (
 	KindExportStarted    = "export.started"
 	KindExportCompleted  = "export.completed"
 	KindImportCompleted  = "import.completed"
+	// KindAuditCompleted is trajir verify output from the LangGraph evidence demo.
+	KindAuditCompleted = "audit.completed"
 )
 
 var knownKinds = map[string]struct{}{
@@ -36,6 +38,7 @@ var knownKinds = map[string]struct{}{
 	KindExportStarted:    {},
 	KindExportCompleted:  {},
 	KindImportCompleted:  {},
+	KindAuditCompleted:   {},
 }
 
 var knownSources = map[string]struct{}{

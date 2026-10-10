@@ -23,6 +23,18 @@ type EconomyView struct {
 	LifetimeProjectedEstimatedTokens *int `json:"lifetime_projected_estimated_tokens"`
 	LifetimeTokensAvoidedEstimated   *int `json:"lifetime_tokens_avoided_estimated"`
 
+	// Latest character counts from the last context.projected. Null when that
+	// event did not carry the length. The page displays these; it does not
+	// estimate from them.
+	RawCharLen       *int `json:"raw_char_len"`
+	ProjectedCharLen *int `json:"projected_char_len"`
+
+	// Flat provider usage copied from Summary. Null when the host never sent
+	// the key. A nested usage object is not read.
+	PromptTokens     *int   `json:"prompt_tokens"`
+	CompletionTokens *int   `json:"completion_tokens"`
+	Model            string `json:"model,omitempty"`
+
 	Steps   []EconomyStep `json:"steps"`
 	Largest []EconomyStep `json:"largest"`
 }
@@ -48,6 +60,12 @@ type EconomyStep struct {
 	RawEstimatedTokens       *int `json:"raw_estimated_tokens"`
 	ProjectedEstimatedTokens *int `json:"projected_estimated_tokens"`
 	TokensAvoidedEstimated   *int `json:"tokens_avoided_estimated"`
+
+	RawCharLen       *int   `json:"raw_char_len"`
+	ProjectedCharLen *int   `json:"projected_char_len"`
+	PromptTokens     *int   `json:"prompt_tokens"`
+	CompletionTokens *int   `json:"completion_tokens"`
+	Model            string `json:"model,omitempty"`
 }
 
 func deriveEconomy(events []Event, s Summary) EconomyView {
@@ -56,6 +74,11 @@ func deriveEconomy(events []Event, s Summary) EconomyView {
 		RawEstimatedTokens:       copyInt(s.RawEstimatedTokens),
 		ProjectedEstimatedTokens: copyInt(s.ProjectedEstimatedTokens),
 		TokensAvoidedEstimated:   copyInt(s.TokensAvoidedEstimated),
+		RawCharLen:               copyInt(s.RawCharLen),
+		ProjectedCharLen:         copyInt(s.ProjectedCharLen),
+		PromptTokens:             copyInt(s.PromptTokens),
+		CompletionTokens:         copyInt(s.CompletionTokens),
+		Model:                    s.Model,
 		Steps:                    []EconomyStep{},
 		Largest:                  []EconomyStep{},
 	}
@@ -178,10 +201,12 @@ func projectionStep(e Event) EconomyStep {
 	if hasRaw {
 		t := EstimatedTokens(rawLen)
 		step.RawEstimatedTokens = copyInt(&t)
+		step.RawCharLen = copyInt(&rawLen)
 	}
 	if hasProj {
 		t := EstimatedTokens(projLen)
 		step.ProjectedEstimatedTokens = copyInt(&t)
+		step.ProjectedCharLen = copyInt(&projLen)
 	}
 	if hasRaw && hasProj {
 		avoided := EstimatedTokens(rawLen) - EstimatedTokens(projLen)
@@ -189,6 +214,15 @@ func projectionStep(e Event) EconomyStep {
 			avoided = 0
 		}
 		step.TokensAvoidedEstimated = copyInt(&avoided)
+	}
+	if n, ok := payloadIntOK(e.Payload, "prompt_tokens"); ok {
+		step.PromptTokens = copyInt(&n)
+	}
+	if n, ok := payloadIntOK(e.Payload, "completion_tokens"); ok {
+		step.CompletionTokens = copyInt(&n)
+	}
+	if model, ok := payloadString(e.Payload, "model"); ok {
+		step.Model = model
 	}
 	return step
 }
@@ -236,6 +270,7 @@ func EconomyTableCSV(v EconomyView) (string, error) {
 		"id", "ts", "kind", "step_n", "mode",
 		"raw_estimated_tokens", "projected_estimated_tokens", "tokens_avoided_estimated",
 		"dropped", "thought_collapses", "secret_field_hits",
+		"raw_char_len", "projected_char_len", "prompt_tokens", "completion_tokens", "model",
 	}
 	if err := w.Write(header); err != nil {
 		return "", err
@@ -253,6 +288,11 @@ func EconomyTableCSV(v EconomyView) (string, error) {
 			strconv.Itoa(step.Dropped),
 			strconv.Itoa(step.ThoughtCollapses),
 			strconv.Itoa(step.SecretFieldHits),
+			csvInt(step.RawCharLen),
+			csvInt(step.ProjectedCharLen),
+			csvInt(step.PromptTokens),
+			csvInt(step.CompletionTokens),
+			step.Model,
 		}
 		if err := w.Write(row); err != nil {
 			return "", err

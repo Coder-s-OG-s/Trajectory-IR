@@ -51,6 +51,9 @@ func TestEconomyMatchesSummaryFixture(t *testing.T) {
 	if strings.Contains(csvText, "{") {
 		t.Fatal("csv leaked a JSON payload")
 	}
+	if !strings.Contains(csvText, "raw_char_len") || !strings.Contains(csvText, "projected_char_len") {
+		t.Fatalf("csv header drifted:\n%s", csvText)
+	}
 	js, err := EconomyTableJSON(ev)
 	if err != nil {
 		t.Fatal(err)
@@ -112,6 +115,67 @@ func TestEconomyUITrustsServerAggregates(t *testing.T) {
 		if strings.Contains(body, banned) {
 			t.Fatalf("economy panel must not invent estimates or billing claims: %s", banned)
 		}
+	}
+}
+
+func TestProjectionExposesCharLengthsWithoutInventedUsage(t *testing.T) {
+	t.Parallel()
+	sum := Summarize("econ", loadEconomyFixture(t))
+	if sum.RawCharLen == nil || *sum.RawCharLen != 400 || sum.ProjectedCharLen == nil || *sum.ProjectedCharLen != 100 {
+		t.Fatalf("latest chars raw=%v projected=%v", sum.RawCharLen, sum.ProjectedCharLen)
+	}
+	if sum.PromptTokens != nil || sum.CompletionTokens != nil || sum.Model != "" {
+		t.Fatalf("usage invented prompt=%v completion=%v model=%q", sum.PromptTokens, sum.CompletionTokens, sum.Model)
+	}
+	if sum.Economy.RawCharLen == nil || *sum.Economy.RawCharLen != 400 || sum.Economy.ProjectedCharLen == nil || *sum.Economy.ProjectedCharLen != 100 {
+		t.Fatalf("economy chars %+v %+v", sum.Economy.RawCharLen, sum.Economy.ProjectedCharLen)
+	}
+	first := sum.Economy.Steps[0]
+	if first.RawCharLen == nil || *first.RawCharLen != 40 || first.ProjectedCharLen == nil || *first.ProjectedCharLen != 20 {
+		t.Fatalf("first step chars %+v", first)
+	}
+	if first.PromptTokens != nil || sum.Economy.Steps[1].RawCharLen != nil {
+		t.Fatalf("step usage or redaction chars %+v %+v", first.PromptTokens, sum.Economy.Steps[1].RawCharLen)
+	}
+}
+
+func TestProviderUsageSticksWhenLaterEventOmitsIt(t *testing.T) {
+	t.Parallel()
+	base := []Event{
+		{
+			SchemaVersion: SchemaVersion, ID: "u1", TS: "2026-09-22T15:00:00Z",
+			Kind: KindContextProjected, Source: "go", TrajectoryID: "usage",
+			Payload: []byte(`{"raw_char_len":40,"projected_char_len":20,"prompt_tokens":1200,"completion_tokens":30,"model":"demo-model"}`),
+		},
+		{
+			SchemaVersion: SchemaVersion, ID: "n1", TS: "2026-09-22T15:01:00Z",
+			Kind: KindNodeAppended, Source: "go", TrajectoryID: "usage",
+			Payload: []byte(`{"node_id":"n1","kind":"TOOL_CALL"}`),
+		},
+	}
+	sum := Summarize("usage", base)
+	if sum.PromptTokens == nil || *sum.PromptTokens != 1200 || sum.CompletionTokens == nil || *sum.CompletionTokens != 30 || sum.Model != "demo-model" {
+		t.Fatalf("usage dropped prompt=%v completion=%v model=%q", sum.PromptTokens, sum.CompletionTokens, sum.Model)
+	}
+	if sum.Economy.PromptTokens == nil || *sum.Economy.PromptTokens != 1200 || sum.Economy.Model != "demo-model" {
+		t.Fatalf("economy usage %+v %q", sum.Economy.PromptTokens, sum.Economy.Model)
+	}
+	later := append(append([]Event{}, base...), Event{
+		SchemaVersion: SchemaVersion, ID: "u2", TS: "2026-09-22T15:02:00Z",
+		Kind: KindNodeAppended, Source: "go", TrajectoryID: "usage",
+		Payload: []byte(`{"model":"other-model"}`),
+	})
+	sum = Summarize("usage", later)
+	if sum.Model != "other-model" || sum.PromptTokens == nil || *sum.PromptTokens != 1200 || sum.CompletionTokens == nil || *sum.CompletionTokens != 30 {
+		t.Fatalf("later omit cleared usage prompt=%v completion=%v model=%q", sum.PromptTokens, sum.CompletionTokens, sum.Model)
+	}
+	nested := Summarize("nested", []Event{{
+		SchemaVersion: SchemaVersion, ID: "n", TS: "2026-09-22T15:00:00Z",
+		Kind: KindNodeAppended, Source: "go", TrajectoryID: "nested",
+		Payload: []byte(`{"usage":{"prompt_tokens":9,"completion_tokens":9,"model":"hidden"}}`),
+	}})
+	if nested.PromptTokens != nil || nested.CompletionTokens != nil || nested.Model != "" {
+		t.Fatalf("nested usage was guessed prompt=%v model=%q", nested.PromptTokens, nested.Model)
 	}
 }
 
