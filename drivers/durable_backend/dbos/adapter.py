@@ -8,7 +8,7 @@ def _sqlite_file(url: str) -> str | None:
     prefix = "sqlite:///"
     if not url.startswith(prefix) or ":memory:" in url:
         return None
-    return url[len(prefix):]
+    return url[len(prefix) :]
 
 
 def init_backend(
