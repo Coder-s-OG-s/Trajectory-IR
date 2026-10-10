@@ -255,7 +255,7 @@ func (t *Trajectory) ExecTool(stepN, seq int, tool resume.Tool, args map[string]
 			bound,
 		)
 		result, err := fn(args)
-		t.emitToolNodes(stepN, seq)
+		t.emitToolNodes(stepN, seq, tool.Effect)
 		if err != nil {
 			return nil, err
 		}
@@ -271,7 +271,7 @@ func (t *Trajectory) ExecTool(stepN, seq int, tool resume.Tool, args map[string]
 		bound,
 	)
 	result, err := fn(args)
-	t.emitToolNodes(stepN, seq)
+	t.emitToolNodes(stepN, seq, tool.Effect)
 	if err != nil {
 		return nil, err
 	}

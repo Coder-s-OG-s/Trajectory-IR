@@ -39,6 +39,7 @@ dev = ["pytest", "pytest-cov", "ruff", "mypy", "pip-audit"]
 postgres = ["psycopg[binary]>=3.1"]
 s3 = ["boto3"]
 rfc8785 = ["rfc8785"]
+langgraph = ["langgraph>=0.6", "langchain-core>=0.3"]
 
 [project.urls]
 Homepage = "https://github.com/Coder-s-OG-s/Trajectory-IR"

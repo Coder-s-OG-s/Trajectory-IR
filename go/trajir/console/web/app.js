@@ -695,6 +695,93 @@
     URL.revokeObjectURL(a.href);
   }
 
+  function boolLabel(v) {
+    if (v === true) return "ok";
+    if (v === false) return "fail";
+    return "none";
+  }
+
+  function boolClass(v) {
+    if (v === true) return "ok";
+    if (v === false) return "bad";
+    return "";
+  }
+
+  function renderEvidence() {
+    const s = state.summary || {};
+    const ev = s.evidence || {};
+    const tools = Array.isArray(ev.tool_calls) ? ev.tool_calls.filter((row) => inRange(row.ts || "")) : [];
+    const gaps = Array.isArray(ev.seal_before_execute_gaps) ? ev.seal_before_execute_gaps : [];
+    const findings = Array.isArray(ev.audit_findings) ? ev.audit_findings : [];
+    const openWorld = Array.isArray(ev.open_world_tools) ? ev.open_world_tools : [];
+    const empty =
+      !ev.seal_count &&
+      tools.length === 0 &&
+      (ev.audit_ok === undefined || ev.audit_ok === null)
+        ? "No evidence events yet. Seal a step, run tools, then trajir verify."
+        : "";
+    $("panel-evidence").innerHTML = `
+      <div class="stats">
+        ${stat("Seals", ev.seal_count)}
+        ${stat("Seal-before-execute", boolLabel(ev.seal_before_execute_ok), boolClass(ev.seal_before_execute_ok))}
+        ${stat("Gaps", gaps.length, gaps.length ? "bad" : "")}
+        ${stat("trajir verify", boolLabel(ev.audit_ok), boolClass(ev.audit_ok))}
+        ${stat("Open-world tools", openWorld.length || "none", openWorld.length ? "bad" : "")}
+      </div>
+      <p class="muted">TURNING_POINT evidence: console Chain-of-Evidence requires a DECISION before every TOOL_CALL (stricter than <code>trajir verify</code>, which exempts some pure/read-only tools). Also shows open-world flags, hashed idempotency keys, and offline audit results.</p>
+      ${ev.last_audit_path ? `<p class="muted">Last audit: <code>${esc(ev.last_audit_path)}</code>${ev.last_audit_ts ? " @ " + esc(ev.last_audit_ts) : ""}</p>` : ""}
+      ${
+        findings.length
+          ? `<h3>Audit findings</h3><ul class="findings">${findings
+              .map((f) => `<li><code>${esc(f)}</code></li>`)
+              .join("")}</ul>`
+          : ""
+      }
+      ${
+        openWorld.length
+          ? `<p class="muted">Open-world: ${openWorld.map((n) => `<code>${esc(n)}</code>`).join(", ")}</p>`
+          : ""
+      }
+      ${
+        gaps.length
+          ? `<h3>Seal-before-execute gaps</h3>
+             <table>
+               <thead><tr><th>Step</th><th>Seq</th><th>Tool</th></tr></thead>
+               <tbody>${gaps
+                 .map(
+                   (g) =>
+                     `<tr class="bad"><td>${esc(fmt(g.step_n))}</td><td>${esc(fmt(g.seq))}</td><td><code>${esc(g.tool_name || "")}</code></td></tr>`
+                 )
+                 .join("")}</tbody>
+             </table>`
+          : ""
+      }
+      ${
+        empty
+          ? `<p class="empty-economy" role="status">${esc(empty)}</p>`
+          : `<h3>Tool calls</h3>
+             <table>
+               <thead><tr><th>Time</th><th>Step</th><th>Seq</th><th>Tool</th><th>Effect</th><th>Idempotency</th><th>Open-world</th></tr></thead>
+               <tbody>${
+                 tools
+                   .map((row) => {
+                     const ow = row.open_world === true;
+                     return `<tr>
+                       <td>${esc(row.ts || "")}</td>
+                       <td>${esc(fmt(row.step_n))}</td>
+                       <td>${esc(fmt(row.seq))}</td>
+                       <td><code>${esc(row.tool_name || "")}</code></td>
+                       <td>${esc(row.effect_class || "none")}</td>
+                       <td><code>${esc(row.idempotency_key || "none")}</code></td>
+                       <td class="${ow ? "bad" : ""}">${ow ? "yes" : "no"}</td>
+                     </tr>`;
+                   })
+                   .join("") || `<tr><td colspan="7" class="muted">No TOOL_CALL observations in range.</td></tr>`
+               }</tbody>
+             </table>`
+      }`;
+  }
+
   function renderEconomy() {
     const s = state.summary || {};
     const economy = s.economy || {};
@@ -858,6 +945,7 @@
     renderHome();
     renderOverview();
     renderSeals();
+    renderEvidence();
     renderTransfers();
     renderEconomy();
   }
@@ -868,7 +956,7 @@
       const on = btn.dataset.tab === name;
       btn.setAttribute("aria-selected", on ? "true" : "false");
     });
-    ["overview", "seals", "transfers", "economy"].forEach((n) => {
+    ["overview", "seals", "evidence", "transfers", "economy"].forEach((n) => {
       $("panel-" + n).classList.toggle("hidden", n !== name);
     });
   }
@@ -947,7 +1035,7 @@
       state.events = [];
       state.summary = null;
       state.packages = [];
-      ["overview", "seals", "transfers", "economy"].forEach((n) => {
+      ["overview", "seals", "evidence", "transfers", "economy"].forEach((n) => {
         $("panel-" + n).innerHTML = `<p class="empty-seals" role="status">Could not load this trajectory.</p>`;
       });
       showBanner(String(err.message || err), true);

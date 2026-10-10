@@ -262,6 +262,8 @@ code { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-siz
   border: 1px solid var(--border);
 }
 [role="tab"] { background: transparent; border-color: transparent; }
+.findings { margin: 0.5rem 0 1rem; padding-left: 1.25rem; }
+.findings li { margin: 0.25rem 0; }
 [role="tab"][aria-selected="true"] {
   background: var(--accent-dim); border-color: var(--accent); color: var(--tab-on);
 }
