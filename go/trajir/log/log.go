@@ -17,7 +17,10 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-var ErrSlotConflict = postgres.ErrSlotConflict
+var (
+	ErrSlotConflict = postgres.ErrSlotConflict
+	ErrNotStored    = postgres.ErrNotStored
+)
 
 // NodeLog is an append only SQLite log keyed by content addressed node id.
 // INSERT OR IGNORE makes replaying the same node a no op, which is what durable
@@ -29,7 +32,7 @@ type NodeLog struct {
 
 // Open creates or opens a SQLite database at path and ensures the schema exists.
 func Open(path string) (*NodeLog, error) {
-	db, err := sql.Open("sqlite", path)
+	db, err := sql.Open("sqlite", path+"?_busy_timeout=5000")
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
 	}
@@ -67,7 +70,7 @@ ON nodes (trajectory_id, tenant_id);
 
 // Append builds a node via trajir/nodes and stores it. Same content id is
 // ignored (idempotent replay). Different payload at the same logical slot
-// returns ErrSlotConflict.
+// returns ErrSlotConflict. A missed insert returns ErrNotStored.
 func (l *NodeLog) Append(
 	kind string,
 	stepN *int,
@@ -122,11 +125,15 @@ func (l *NodeLog) Append(
 	if err != nil {
 		return nil, fmt.Errorf("slot owner: %w", err)
 	}
-	if owner != "" && owner != n.ID {
+	if owner == n.ID {
+		return n, nil
+	}
+	if owner != "" {
 		return nil, fmt.Errorf("%w: trajectory=%s step=%v seq=%d kind=%s",
 			ErrSlotConflict, trajectoryID, step, seq, kind)
 	}
-	return n, nil
+	return nil, fmt.Errorf("%w: trajectory=%s step=%v seq=%d kind=%s",
+		ErrNotStored, trajectoryID, step, seq, kind)
 }
 
 func (l *NodeLog) slotOwner(tenantID, trajectoryID string, step any, seq int, kind string) (string, error) {

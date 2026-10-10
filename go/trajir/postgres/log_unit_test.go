@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/nodes"
 	"github.com/DATA-DOG/go-sqlmock"
 )
 
@@ -110,13 +111,19 @@ func TestMockAppendHasListClose(t *testing.T) {
 	}
 
 	step := 1
+	payload := map[string]any{"plan": "x"}
+	want, err := nodes.NewNode("DECISION", "t1", "demo", &step, 1, payload)
+	if err != nil {
+		t.Fatal(err)
+	}
 	mock.ExpectBegin()
 	mock.ExpectExec("SAVEPOINT insert_node").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec("INSERT INTO nodes").WillReturnResult(sqlmock.NewResult(1, 1))
-	mock.ExpectQuery("SELECT id FROM nodes").WillReturnError(sql.ErrNoRows)
+	mock.ExpectQuery("SELECT id FROM nodes").
+		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(want.ID))
 	mock.ExpectCommit()
 
-	n, err := nl.Append("DECISION", &step, map[string]any{"plan": "x"}, "t1", "demo", 1)
+	n, err := nl.Append("DECISION", &step, payload, "t1", "demo", 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -245,5 +252,64 @@ func TestMockAppendSlotConflict(t *testing.T) {
 	_, err = nl.Append("DECISION", &step, map[string]any{"plan": "b"}, "t1", "demo", 1)
 	if !errors.Is(err, ErrSlotConflict) && !strings.Contains(err.Error(), "slot conflict") {
 		t.Fatalf("err=%v want slot conflict", err)
+	}
+}
+
+func TestMockAppendEmptyOwner(t *testing.T) {
+	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherRegexp))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	expectDDL(mock)
+
+	nl, err := OpenDB(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	step := 1
+	mock.ExpectBegin()
+	mock.ExpectExec("SAVEPOINT insert_node").WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec("INSERT INTO nodes").WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectQuery("SELECT id FROM nodes").WillReturnError(sql.ErrNoRows)
+	mock.ExpectRollback()
+
+	_, err = nl.Append("DECISION", &step, map[string]any{"plan": "x"}, "t1", "demo", 1)
+	if !errors.Is(err, ErrNotStored) {
+		t.Fatalf("err=%v want ErrNotStored", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestMockAppendInsertErrorKeepsTheDriverError(t *testing.T) {
+	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherRegexp))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	expectDDL(mock)
+
+	nl, err := OpenDB(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	step := 1
+	mock.ExpectBegin()
+	mock.ExpectExec("SAVEPOINT insert_node").WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec("INSERT INTO nodes").WillReturnError(errors.New("insert failed"))
+	mock.ExpectExec("ROLLBACK TO SAVEPOINT insert_node").WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectQuery("SELECT id FROM nodes").WillReturnError(sql.ErrNoRows)
+	mock.ExpectRollback()
+
+	_, err = nl.Append("DECISION", &step, map[string]any{"plan": "x"}, "t1", "demo", 1)
+	if !errors.Is(err, ErrNotStored) || !strings.Contains(err.Error(), "insert failed") {
+		t.Fatalf("err=%v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
 	}
 }

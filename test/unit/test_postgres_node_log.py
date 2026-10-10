@@ -10,7 +10,8 @@ from typing import Any
 import pytest
 
 from drivers.postgres.log import PostgresNodeLog, open_postgres_node_log
-from trajectory_ir.runtime.log import SlotConflictError
+from trajectory_ir.runtime.log import NodeNotStoredError, SlotConflictError
+from trajectory_ir.runtime.nodes import Node
 
 
 class _FakeCursor:
@@ -214,6 +215,80 @@ def test_append_idempotent_by_content(log: PostgresNodeLog):
     n2 = log.append("DECISION", 1, {"plan": "x"}, "t1", "demo", 1)
     assert n1.id == n2.id
     assert log.count(n1.id) == 1
+
+
+def test_append_errors_when_slot_owner_missing(log: PostgresNodeLog):
+    node = Node(
+        kind="DECISION",
+        trajectory_id="t1",
+        tenant_id="demo",
+        step_n=1,
+        seq=1,
+        payload={"plan": "x"},
+    )
+    log._conn._store.rows[node.id] = {
+        "id": node.id,
+        "trajectory_id": "other",
+        "tenant_id": "demo",
+        "step_n": 9,
+        "seq": 1,
+        "kind": "DECISION",
+        "payload_json": "{}",
+        "ts": 0,
+    }
+    with pytest.raises(NodeNotStoredError):
+        log.append("DECISION", 1, {"plan": "x"}, "t1", "demo", 1)
+    assert log._conn._store.rows[node.id]["trajectory_id"] == "other"
+
+
+def test_unique_violation_without_owner_is_not_success():
+    from psycopg.errors import UniqueViolation
+
+    class _Cursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def execute(self, sql, params=None):
+            normalized = " ".join(sql.lower().split())
+            if normalized.startswith(("create table", "create unique index", "create index")):
+                return
+            if normalized.startswith("insert into nodes"):
+                raise UniqueViolation("duplicate")
+            if "select id from nodes" in normalized:
+                return
+            raise AssertionError(sql)
+
+        def fetchone(self):
+            return None
+
+    class _Conn:
+        def __init__(self):
+            self.commits = 0
+            self.rollbacks = 0
+
+        def cursor(self):
+            return _Cursor()
+
+        def commit(self):
+            self.commits += 1
+
+        def rollback(self):
+            self.rollbacks += 1
+
+        def close(self):
+            return None
+
+    conn = _Conn()
+    node_log = PostgresNodeLog(conn)
+    conn.commits = 0
+    conn.rollbacks = 0
+    with pytest.raises(UniqueViolation):
+        node_log.append("DECISION", 1, {"plan": "x"}, "t1", "demo", 1)
+    assert conn.commits == 0
+    assert conn.rollbacks == 1
 
 
 def test_slot_conflict(log: PostgresNodeLog):

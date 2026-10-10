@@ -27,6 +27,9 @@ const defaultPGConnectTimeout = 10 * time.Second
 // ErrSlotConflict is raised when a different payload already occupies the slot.
 var ErrSlotConflict = errors.New("postgres: slot conflict")
 
+// ErrNotStored means the append did not leave this node in the slot.
+var ErrNotStored = errors.New("node not stored")
+
 // NodeLog is an append only, content addressed IR log on PostgreSQL.
 type NodeLog struct {
 	db *sql.DB
@@ -180,7 +183,8 @@ func (l *NodeLog) ensureSchema(ctx context.Context) error {
 }
 
 // Append stores a node. Same content id is ignored. Different payload at the
-// same logical slot returns ErrSlotConflict.
+// same logical slot returns ErrSlotConflict. If the insert does not leave this
+// node in the slot, Append returns an error.
 func (l *NodeLog) Append(
 	kind string,
 	stepN *int,
@@ -232,17 +236,24 @@ func (l *NodeLog) Append(
 		if oerr != nil {
 			return nil, err
 		}
-		if owner != "" && owner != n.ID {
+		if owner == n.ID {
+			return n, nil
+		}
+		if owner != "" {
 			return nil, fmt.Errorf("%w: trajectory=%s step=%v seq=%d kind=%s",
 				ErrSlotConflict, trajectoryID, stepN, seq, kind)
 		}
-		return n, nil
+		return nil, fmt.Errorf("%w: %w", ErrNotStored, err)
 	}
 	owner, err := slotOwner(tx, tenantID, trajectoryID, stepN, seq, kind)
 	if err != nil {
 		return nil, err
 	}
-	if owner != "" && owner != n.ID {
+	if owner == "" {
+		return nil, fmt.Errorf("%w: trajectory=%s step=%v seq=%d kind=%s",
+			ErrNotStored, trajectoryID, stepN, seq, kind)
+	}
+	if owner != n.ID {
 		return nil, fmt.Errorf("%w: trajectory=%s step=%v seq=%d kind=%s",
 			ErrSlotConflict, trajectoryID, stepN, seq, kind)
 	}
