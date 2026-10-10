@@ -1,15 +1,31 @@
 import os
+import sqlite3
 
 from dbos import DBOS, DBOSConfig
+
+
+def _sqlite_file(url: str) -> str | None:
+    prefix = "sqlite:///"
+    if not url.startswith(prefix) or ":memory:" in url:
+        return None
+    return url[len(prefix) :]
 
 
 def init_backend(
     db_path: str = "trajectory.sqlite",
     app_name: str = "trajectory-ir-local",
 ) -> None:
+    url = os.environ.get("DBOS_SYSTEM_DATABASE_URL", f"sqlite:///{db_path}")
+    sqlite_file = _sqlite_file(url)
+    if sqlite_file:
+        conn = sqlite3.connect(sqlite_file)
+        try:
+            conn.execute("PRAGMA journal_mode=WAL")
+        finally:
+            conn.close()
     config: DBOSConfig = {
         "name": app_name,
-        "system_database_url": os.environ.get("DBOS_SYSTEM_DATABASE_URL", f"sqlite:///{db_path}"),
+        "system_database_url": url,
     }
     DBOS(config=config)
     DBOS.launch()
