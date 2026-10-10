@@ -54,7 +54,7 @@ func MakeGatedToolCall(
 			map[string]any{
 				"tool":            toolName,
 				"args":            args,
-				"idempotency_key": IdempotencyKey(trajectoryID, stepN, seq),
+				"idempotency_key": IdempotencyKey(tenantID, trajectoryID, stepN, seq),
 			},
 			trajectoryID,
 			tenantID,
@@ -120,7 +120,7 @@ func MakePlainToolCall(
 			map[string]any{
 				"tool":            toolName,
 				"args":            args,
-				"idempotency_key": IdempotencyKey(trajectoryID, stepN, seq),
+				"idempotency_key": IdempotencyKey(tenantID, trajectoryID, stepN, seq),
 			},
 			trajectoryID,
 			tenantID,

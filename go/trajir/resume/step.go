@@ -15,6 +15,32 @@ type Tool struct {
 	Name   string
 	Effect effects.EffectClass
 	Fn     ToolFunc
+	// FnWithMeta, when set, is preferred over Fn so the tool can forward
+	// the hashed idempotency key without it being stuffed into args.
+	FnWithMeta ToolFuncWithMeta
+	// AllowOpenWorldOverride is required to tag bash/python/sql/browser as
+	// PURE, READ_ONLY, or IDEMPOTENT_WRITE. Without it, ExecTool / RunStep
+	// refuse the claim.
+	AllowOpenWorldOverride bool
+}
+
+// ToolFuncWithMeta is a tool body that also receives CallMeta.
+type ToolFuncWithMeta func(args map[string]any, meta CallMeta) (any, error)
+
+// BoundToolFn returns the function MakeGatedToolCall / MakePlainToolCall run.
+// FnWithMeta wins when set so the key can leave the process via headers.
+func BoundToolFn(tool Tool, meta CallMeta) ToolFunc {
+	if tool.FnWithMeta != nil {
+		return func(args map[string]any) (any, error) {
+			return tool.FnWithMeta(args, meta)
+		}
+	}
+	if tool.Fn != nil {
+		return tool.Fn
+	}
+	return func(map[string]any) (any, error) {
+		return nil, fmt.Errorf("resume: tool %q has no function", tool.Name)
+	}
 }
 
 // ModelFunc produces a plan map for a step. Plan must include "tool_calls":
@@ -32,6 +58,14 @@ type RunStepConfig struct {
 	OnDecisionSealed func() // optional test hook after DECISION is appended
 	// Mode is live (default) or sandbox (R06: reject NON_IDEMPOTENT_WRITE, AGENT_SPAWN, SENSITIVE).
 	Mode sandbox.Mode
+	// WorldSnapshot is sealed onto a new DECISION when non-empty (spec §8.4).
+	// On resume, an existing DECISION keeps the snapshot it was sealed with.
+	// Passing the moved world here must not rewrite the slot; ObserveWorld
+	// and CheckWorld report WORLD_DRIFT.
+	WorldSnapshot map[string]string
+	// ObserveWorld, when set, is called after the seal exists (including on
+	// resume) and compared with CheckWorld. Empty sealed snapshot is a no-op.
+	ObserveWorld func() (map[string]string, error)
 }
 
 // RunStep executes one agent step: project context, durable infer, DECISION seal,
@@ -86,10 +120,21 @@ func RunStep(
 		return nil, fmt.Errorf("resume: plan: %w", err)
 	}
 
+	snapshot := cfg.WorldSnapshot
+	sealed, sealedExists, err := sealedWorldSnapshot(cfg.Log, cfg.TrajectoryID, cfg.TenantID, stepN)
+	if err != nil {
+		return nil, err
+	}
+	if sealedExists {
+		// Keep the sealed snapshot. Re-appending cfg.WorldSnapshot after the
+		// world moved changes the DECISION hash and returns ErrSlotConflict
+		// before CheckWorld can report WORLD_DRIFT.
+		snapshot = sealed
+	}
 	if _, err := cfg.Log.Append(
 		"DECISION",
 		&step,
-		map[string]any{"plan": plan},
+		DecisionPayload(plan, snapshot),
 		cfg.TrajectoryID,
 		cfg.TenantID,
 		1,
@@ -98,6 +143,15 @@ func RunStep(
 	}
 	if cfg.OnDecisionSealed != nil {
 		cfg.OnDecisionSealed()
+	}
+	if cfg.ObserveWorld != nil {
+		observed, err := cfg.ObserveWorld()
+		if err != nil {
+			return nil, err
+		}
+		if err := CheckWorld(cfg.Log, cfg.TrajectoryID, cfg.TenantID, stepN, observed); err != nil {
+			return nil, err
+		}
 	}
 
 	calls, err := toolCallsFromPlan(plan)
@@ -116,9 +170,18 @@ func RunStep(
 		if args == nil {
 			args = map[string]any{}
 		}
+		if err := effects.AssertOpenWorldEffect(tool.Name, tool.Effect, tool.AllowOpenWorldOverride); err != nil {
+			return nil, err
+		}
+		if err := effects.AssertOpenWorldEffect(call.Name, tool.Effect, tool.AllowOpenWorldOverride); err != nil {
+			return nil, err
+		}
 		if err := sandbox.AssertToolAllowed(cfg.Mode, call.Name, tool.Effect); err != nil {
 			return nil, err
 		}
+
+		meta := NewCallMeta(cfg.TenantID, cfg.TrajectoryID, stepN, seq)
+		fn := BoundToolFn(tool, meta)
 
 		var result any
 		stepKey := fmt.Sprintf("%s@%d", call.Name, seq)
@@ -130,7 +193,7 @@ func RunStep(
 				stepN,
 				seq,
 				call.Name,
-				tool.Fn,
+				fn,
 			)
 			result, err = durable.Tool(ctx, cfg.Backend, cfg.WorkflowID, stepKey, func(context.Context) (any, error) {
 				return gated(args)
@@ -146,7 +209,7 @@ func RunStep(
 				stepN,
 				seq,
 				call.Name,
-				tool.Fn,
+				fn,
 			)
 			result, err = durable.Tool(ctx, cfg.Backend, cfg.WorkflowID, stepKey, func(context.Context) (any, error) {
 				return plain(args)

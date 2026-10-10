@@ -11,6 +11,9 @@ Spec: [CONSOLE_EVENTS.md](CONSOLE_EVENTS.md). Issue:
 $TRAJIR_CONSOLE_DATA/
   trajectories/
     <trajectory_id>.ndjson
+  packages/
+    <trajectory_id>/
+      <name>.tir
 ```
 
 Each line is one `console-events-v1` event object.
@@ -30,16 +33,29 @@ go run ./cmd/trajir-console -addr 127.0.0.1:8787
 |--------|------|-------|
 | `POST` | `/v1/events` | Body = one event JSON; fail-closed on invalid envelope |
 | `GET` | `/v1/trajectories` | List trajectory ids |
+| `GET` | `/v1/savings` | Cross-trajectory tokens saved (est.). Sum of lifetime avoided |
+| `GET` | `/v1/dashboard` | Home rollup: savings plus one card per run |
+| `GET` | `/v1/about` | License (Apache 2.0, no expiry) plus local data dir, counts, health |
 | `GET` | `/v1/trajectories/{id}/events` | Append-ordered events |
 | `GET` | `/v1/trajectories/{id}/summary` | Seal / economy / transfer rollup |
+| `GET` | `/v1/trajectories/{id}/packages` | Local `.tir` copies for that id |
+| `GET` | `/v1/trajectories/{id}/packages/{name}` | Download one staged package |
+| `POST` | `/v1/local/reveal` | Loopback only. Open Explorer/Finder on the data dir or a staged `.tir` |
+| `POST` | `/v1/local/open-shell` | Loopback only. Open PowerShell (Windows) or a folder (other OS) in the data dir. No command string from the browser |
 | `GET` | `/healthz` | Liveness (no auth) |
 | `GET` | `/` | Operator UI shell (trajectory picker + panels) |
 | `GET` | `/ui/*` | Static CSS/JS for the shell |
 
 When `TRAJIR_CONSOLE_TOKEN` is set, send `Authorization: Bearer <token>` on
 all `/v1/*` routes. The UI has a token field (sessionStorage) for local demos.
+`POST /v1/local/reveal` and `POST /v1/local/open-shell` also require a loopback
+client. They never take a shell command from the browser.
 
-Open `http://127.0.0.1:8787/?id=<trajectory_id>` for a deep link.
+Open `http://127.0.0.1:8787/` for the home dashboard, or
+`http://127.0.0.1:8787/?id=<trajectory_id>` for a deep link.
+The UI can Light/Dark itself (saved in the browser) and Live-refresh
+`GET /v1/dashboard` plus the open run every few seconds. Pause Live if you
+want the page still. This is the same local data. It is not a remote stream.
 
 ## Library
 

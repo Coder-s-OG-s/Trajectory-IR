@@ -1,8 +1,9 @@
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Any
 
-from trajectory_ir.effects import requires_block_and_gate
+from trajectory_ir.effects import assert_open_world_effect, requires_block_and_gate
 from trajectory_ir.resume.gate import make_gated_tool_call, make_plain_tool_call
+from trajectory_ir.resume.world import check_world, decision_payload, sealed_world_snapshot
 from trajectory_ir.runtime.sandbox import RunMode, assert_tool_allowed_in_mode, normalize_run_mode
 
 
@@ -61,6 +62,22 @@ def _resolve_durable_hooks(
     return dbos_infer, dbos_tool, dbos_workflow
 
 
+def _decision_world_snapshot(
+    node_log,
+    trajectory_id: str,
+    tenant_id: str,
+    step_n: int,
+    world_snapshot: Mapping[str, str] | Callable[[int], Mapping[str, str]] | None,
+) -> Mapping[str, str] | None:
+    """Snapshot to seal. An existing DECISION wins over the host's current value."""
+    sealed = sealed_world_snapshot(node_log, trajectory_id, tenant_id, step_n)
+    if sealed is not None:
+        return sealed or None
+    if callable(world_snapshot):
+        return world_snapshot(step_n)
+    return world_snapshot
+
+
 def make_run_step(
     node_log,
     tenant_id,
@@ -69,6 +86,8 @@ def make_run_step(
     on_decision_sealed=None,
     *,
     mode: RunMode | str = RunMode.LIVE,
+    world_snapshot: Mapping[str, str] | Callable[[int], Mapping[str, str]] | None = None,
+    observe_world: Callable[[], Mapping[str, str]] | None = None,
     durable_infer_fn: Callable[[Callable[..., Any]], Callable[..., Any]] | None = None,
     durable_tool_fn: Callable[[Callable[..., Any]], Callable[..., Any]] | None = None,
     durable_workflow_fn: Callable[[Callable[..., Any]], Callable[..., Any]] | None = None,
@@ -88,6 +107,13 @@ def make_run_step(
     memo) wrappers via ``durable_infer_fn`` / ``durable_tool_fn`` /
     ``durable_workflow_fn`` together for a second backend. Partial injection
     raises ``ValueError`` so backends are never mixed silently.
+
+    ``world_snapshot`` is sealed onto ``DECISION`` (spec §8.4). Pass a
+    string-to-string mapping, or ``callable(step_n) -> mapping`` when each
+    step has its own facts. A bare mapping is reused for every step. On
+    resume, a ``DECISION`` that already exists keeps its sealed snapshot.
+    Re-sealing the host's current snapshot would raise ``SlotConflictError``
+    before ``check_world`` can report ``WORLD_DRIFT``.
     """
     durable_infer, durable_tool, durable_workflow = _resolve_durable_hooks(
         durable_infer_fn,
@@ -108,10 +134,38 @@ def make_run_step(
         plan = infer(context)
 
         # append() is idempotent by content, so this doubles as the "seal":
-        # replaying it after a crash produces the same node id and is a no-op.
-        node_log.append("DECISION", step_n, {"plan": plan}, trajectory_id, tenant_id, seq=1)
+        # replaying it after a crash produces the same node id and is a no-op
+        # when the payload matches. A resume that already has this DECISION
+        # keeps the sealed snapshot instead of calling world_snapshot again.
+        node_log.append(
+            "DECISION",
+            step_n,
+            decision_payload(
+                plan,
+                _decision_world_snapshot(
+                    node_log,
+                    trajectory_id,
+                    tenant_id,
+                    step_n,
+                    world_snapshot,
+                ),
+            ),
+            trajectory_id,
+            tenant_id,
+            seq=1,
+        )
         if on_decision_sealed is not None:
             on_decision_sealed()
+        # Observe after the seal exists so resume re-checks the world against
+        # the original snapshot. Do not re-seal a different payload.
+        if observe_world is not None:
+            check_world(
+                node_log,
+                trajectory_id,
+                tenant_id,
+                step_n,
+                observe_world(),
+            )
 
         results = []
         for i, call in enumerate(plan["tool_calls"]):
@@ -123,6 +177,16 @@ def make_run_step(
             # call already attempted" by looking up (step_n, seq), so seq has to
             # identify one call unambiguously.
             seq = 2 + 2 * i
+            assert_open_world_effect(
+                tool.name,
+                tool.effect_class,
+                allow_override=tool.allow_open_world_override,
+            )
+            assert_open_world_effect(
+                call["name"],
+                tool.effect_class,
+                allow_override=tool.allow_open_world_override,
+            )
             assert_tool_allowed_in_mode(
                 run_mode,
                 tool_name=call["name"],

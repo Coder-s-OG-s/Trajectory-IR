@@ -55,7 +55,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version: "1.25.x"
+          go-version: "1.26.9"
 
       # go install is more reliable than curl|tar from GitHub releases on flaky networks.
       - name: Install and run actionlint
@@ -130,7 +130,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version: "1.25.x"
+          go-version: "1.26.9"
 
       - name: Install go-licenses
         run: go install github.com/google/go-licenses/v2@v2.0.1

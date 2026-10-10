@@ -452,3 +452,68 @@ func TestRunStepReplayAfterToolFailureDoesNotConflict(t *testing.T) {
 		t.Fatalf("expected 3 nodes, got %d", len(nodes))
 	}
 }
+
+func TestRunStepRefusesOpenWorldTaggedReadOnly(t *testing.T) {
+	ctx := context.Background()
+	nl, backend := testEnv(t)
+	cfg := resume.RunStepConfig{
+		Log:          nl,
+		Backend:      backend,
+		TenantID:     "demo",
+		TrajectoryID: "t-ow",
+		WorkflowID:   "wf-ow",
+		Tools: map[string]resume.Tool{
+			"bash": {
+				Name:   "bash",
+				Effect: effects.READ_ONLY,
+				Fn:     func(args map[string]any) (any, error) { return args["cmd"], nil },
+			},
+		},
+	}
+	model := func(context.Context, map[string]any) (map[string]any, error) {
+		return map[string]any{
+			"tool_calls": []any{
+				map[string]any{"name": "bash", "args": map[string]any{"cmd": "cat f"}},
+			},
+		}, nil
+	}
+	_, err := resume.RunStep(ctx, cfg, 1, model, nil)
+	var ow *effects.OpenWorldOverrideRequired
+	if !errors.As(err, &ow) {
+		t.Fatalf("err=%v want OpenWorldOverrideRequired", err)
+	}
+}
+
+func TestRunStepAllowsOpenWorldWithOverride(t *testing.T) {
+	ctx := context.Background()
+	nl, backend := testEnv(t)
+	cfg := resume.RunStepConfig{
+		Log:          nl,
+		Backend:      backend,
+		TenantID:     "demo",
+		TrajectoryID: "t-ow2",
+		WorkflowID:   "wf-ow2",
+		Tools: map[string]resume.Tool{
+			"bash": {
+				Name:                   "bash",
+				Effect:                 effects.READ_ONLY,
+				AllowOpenWorldOverride: true,
+				Fn:                     func(args map[string]any) (any, error) { return args["cmd"], nil },
+			},
+		},
+	}
+	model := func(context.Context, map[string]any) (map[string]any, error) {
+		return map[string]any{
+			"tool_calls": []any{
+				map[string]any{"name": "bash", "args": map[string]any{"cmd": "cat f"}},
+			},
+		}, nil
+	}
+	results, err := resume.RunStep(ctx, cfg, 1, model, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 || results[0] != "cat f" {
+		t.Fatalf("results=%#v", results)
+	}
+}

@@ -1,10 +1,20 @@
+import json
+from collections.abc import Mapping
 from dataclasses import dataclass, field
+from types import SimpleNamespace
 from typing import Any
 
 from drivers.durable_backend.dbos.adapter import init_backend
-from trajectory_ir.console_emit import note_node, note_seal
-from trajectory_ir.effects import requires_block_and_gate
+from trajectory_ir.console_emit import (
+    OBSERVATION_BUDGET,
+    note_node,
+    note_projection,
+    note_seal,
+)
+from trajectory_ir.effects import assert_open_world_effect, requires_block_and_gate
 from trajectory_ir.resume.gate import make_gated_tool_call, make_plain_tool_call
+from trajectory_ir.resume.world import WorldDrift, decision_payload
+from trajectory_ir.resume.world import check_world as _check_world
 from trajectory_ir.runtime.log import NodeLog
 from trajectory_ir.runtime.sandbox import RunMode, assert_tool_allowed_in_mode, normalize_run_mode
 from trajectory_ir.runtime.tool import Tool
@@ -14,6 +24,8 @@ __all__ = [
     "ProjectContext",
     "ToolResult",
     "Trajectory",
+    "WorldDrift",
+    "check_world",
     "commit_step",
     "exec_tool",
     "open_trajectory",
@@ -60,6 +72,7 @@ class ProjectContext:
 class Decision:
     step_n: int
     plan: dict
+    world_snapshot: dict[str, str] | None = None
 
 
 @dataclass
@@ -112,14 +125,21 @@ def project(trajectory: Trajectory, step_n: int, context: dict) -> ProjectContex
         tenant_id=trajectory.tenant_id,
         node=node,
     )
+    _emit_projection(trajectory, step_n)
     return ProjectContext(step_n=step_n, context=context)
 
 
-def seal_decision(trajectory: Trajectory, step_n: int, plan: dict) -> Decision:
+def seal_decision(
+    trajectory: Trajectory,
+    step_n: int,
+    plan: dict,
+    world_snapshot: Mapping[str, str] | None = None,
+) -> Decision:
+    snap = dict(world_snapshot) if world_snapshot else None
     node = trajectory._log.append(
         "DECISION",
         step_n,
-        {"plan": plan},
+        decision_payload(plan, snap),
         trajectory.trajectory_id,
         trajectory.tenant_id,
         seq=1,
@@ -138,7 +158,26 @@ def seal_decision(trajectory: Trajectory, step_n: int, plan: dict) -> Decision:
         step_n=step_n,
         plan=plan,
     )
-    return Decision(step_n=step_n, plan=plan)
+    return Decision(step_n=step_n, plan=plan, world_snapshot=snap)
+
+
+def check_world(
+    trajectory: Trajectory,
+    step_n: int,
+    observed: Mapping[str, str],
+) -> None:
+    """Fail-loud WORLD_DRIFT if a sealed snapshot no longer matches.
+
+    No-op when the DECISION has no world_snapshot. Raises ValueError if
+    this step has no DECISION yet.
+    """
+    _check_world(
+        trajectory._log,
+        trajectory.trajectory_id,
+        trajectory.tenant_id,
+        step_n,
+        observed,
+    )
 
 
 def exec_tool(trajectory: Trajectory, step_n: int, call: dict, tool: Tool, seq: int) -> ToolResult:
@@ -155,34 +194,44 @@ def exec_tool(trajectory: Trajectory, step_n: int, call: dict, tool: Tool, seq: 
     Returns:
         ToolResult with the tool execution result
     """
+    assert_open_world_effect(
+        tool.name,
+        tool.effect_class,
+        allow_override=tool.allow_open_world_override,
+    )
     assert_tool_allowed_in_mode(
         trajectory.mode,
         tool_name=tool.name,
         effect_class=tool.effect_class,
     )
     log = trajectory._log
-    if requires_block_and_gate(tool.effect_class):
-        fn = make_gated_tool_call(
-            log,
-            trajectory.trajectory_id,
-            trajectory.tenant_id,
-            step_n,
-            seq=seq,
-            tool_name=tool.name,
-            tool_fn=tool.fn,
-        )
-        result = fn(**call["args"])
-    else:
-        fn = make_plain_tool_call(
-            log,
-            trajectory.trajectory_id,
-            trajectory.tenant_id,
-            step_n,
-            seq=seq,
-            tool_name=tool.name,
-            tool_fn=tool.fn,
-        )
-        result = fn(**call["args"])
+    try:
+        if requires_block_and_gate(tool.effect_class):
+            fn = make_gated_tool_call(
+                log,
+                trajectory.trajectory_id,
+                trajectory.tenant_id,
+                step_n,
+                seq=seq,
+                tool_name=tool.name,
+                tool_fn=tool.fn,
+            )
+            result = fn(**call["args"])
+        else:
+            fn = make_plain_tool_call(
+                log,
+                trajectory.trajectory_id,
+                trajectory.tenant_id,
+                step_n,
+                seq=seq,
+                tool_name=tool.name,
+                tool_fn=tool.fn,
+            )
+            result = fn(**call["args"])
+    except Exception:
+        _emit_tool_nodes(trajectory, step_n, seq)
+        raise
+    _emit_tool_nodes(trajectory, step_n, seq)
     return ToolResult(step_n=step_n, result=result)
 
 
@@ -209,6 +258,72 @@ def commit_step(trajectory: Trajectory, step_n: int, seq: int) -> None:
         tenant_id=trajectory.tenant_id,
         node=node,
     )
+
+
+def _char_len(rows: list[dict[str, Any]]) -> int:
+    items = [{"kind": n.get("kind"), "payload": n.get("payload")} for n in rows]
+    return len(json.dumps(items, separators=(",", ":")))
+
+
+def _emit_projection(trajectory: Trajectory, step_n: int) -> None:
+    if trajectory.console_sink is None:
+        return
+    try:
+        from trajectory_ir.runtime.projector import node_size_units, project_context
+
+        rows = trajectory._log.list_nodes(trajectory.trajectory_id, tenant_id=trajectory.tenant_id)
+        if not rows:
+            return
+        raw_units = sum(node_size_units(n) for n in rows)
+        result = project_context(rows, budget=OBSERVATION_BUDGET)
+        included_ids = list(result.included_ids)
+        want = set(included_ids)
+        included = [n for n in rows if n.get("id") in want]
+        note_projection(
+            trajectory.console_sink,
+            trajectory_id=trajectory.trajectory_id,
+            tenant_id=trajectory.tenant_id,
+            step_n=step_n,
+            budget=result.budget,
+            metric=result.metric,
+            size_units=result.size_units,
+            raw_size_units=raw_units,
+            included_ids=included_ids,
+            dropped_ids=list(result.dropped_ids),
+            raw_char_len=_char_len(rows),
+            projected_char_len=_char_len(included),
+        )
+    except Exception:
+        return
+
+
+def _emit_tool_nodes(trajectory: Trajectory, step_n: int, seq: int) -> None:
+    if trajectory.console_sink is None:
+        return
+    try:
+        rows = trajectory._log.list_nodes(trajectory.trajectory_id, tenant_id=trajectory.tenant_id)
+    except Exception:
+        return
+    for row in rows:
+        if row.get("kind") not in ("TOOL_CALL", "TOOL_RESULT"):
+            continue
+        if row.get("seq") not in (seq, seq + 1):
+            continue
+        if row.get("step_n") not in (step_n, None) and row.get("step_n") != step_n:
+            continue
+        node = SimpleNamespace(
+            id=row.get("id"),
+            kind=row.get("kind"),
+            seq=row.get("seq"),
+            phash="",
+            step_n=row.get("step_n"),
+        )
+        note_node(
+            trajectory.console_sink,
+            trajectory_id=trajectory.trajectory_id,
+            tenant_id=trajectory.tenant_id,
+            node=node,
+        )
 
 
 def resume(

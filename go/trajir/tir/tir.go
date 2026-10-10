@@ -317,6 +317,25 @@ func verifyNodeRecord(rec map[string]any) error {
 	return nil
 }
 
+func verifySingleTenant(manifest map[string]any, nodeList []map[string]any) error {
+	var seen string
+	haveSeen := false
+	for _, n := range nodeList {
+		tid, _ := asString(n["tenant_id"])
+		if !haveSeen {
+			seen, haveSeen = tid, true
+			continue
+		}
+		if tid != seen {
+			return fmt.Errorf("%w: package contains mixed tenant_id values", ErrVerification)
+		}
+	}
+	if mTenant, ok := asString(manifest["tenant_id"]); ok && mTenant != "" && mTenant != seen {
+		return fmt.Errorf("%w: manifest tenant_id %q does not match node tenant_id %q", ErrVerification, mTenant, seen)
+	}
+	return nil
+}
+
 func sealsFromNodes(nodeList []map[string]any) ([]map[string]any, error) {
 	seals := make([]map[string]any, 0)
 	for _, n := range nodeList {
@@ -880,6 +899,9 @@ func loadFromZipWithOptions(zr *zip.Reader, verify bool, opts VerifyOptions) (*P
 			if err := verifyNodeRecord(n); err != nil {
 				return nil, err
 			}
+		}
+		if err := verifySingleTenant(manifest, nodeList); err != nil {
+			return nil, err
 		}
 		expectedSeals, err := sealsFromNodes(nodeList)
 		if err != nil {
