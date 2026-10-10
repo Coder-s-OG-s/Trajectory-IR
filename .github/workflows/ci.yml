@@ -285,6 +285,15 @@ jobs:
       - name: Conformance R01–R08
         run: pytest conformance/ -q
 
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: "1.26.9"
+          cache-dependency-path: go/go.sum
+
+      - name: Evidence sidecar tests
+        run: pytest integrations/langgraph/test_sidecar.py test/integration/test_evidence_sidecar.py -q
+
   # Phase B: real service integrations (separate from Quality so Phase A stays fast).
   integration-postgres:
     name: Integration (Postgres)

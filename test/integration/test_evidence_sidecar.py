@@ -65,6 +65,33 @@ def test_multi_tool_export_verify_ok_and_flip_fail(tmp_path: Path, trajir_exe: P
 
 
 @pytest.mark.integration
+def test_two_turns_export_verify_ok(tmp_path: Path, trajir_exe: Path) -> None:
+    tir = tmp_path / "turns.tir"
+    with TrajIRToolGuard(
+        tenant_id="demo",
+        trajectory_id="it-turns",
+        work_dir=tmp_path / "run",
+        effect_hints={"echo": EffectClass.PURE, "ship": EffectClass.NON_IDEMPOTENT_WRITE},
+    ) as guard:
+        guard.run_sealed("echo", {"msg": "a"}, lambda msg: msg)
+        guard.run_sealed("ship", {"svc": "api"}, lambda svc: {"ok": svc})
+        guard.export_tir(tir)
+
+    log = NodeLog(str(tmp_path / "run" / "nodes.sqlite"))
+    try:
+        rows = log.list_nodes("it-turns", tenant_id="demo")
+    finally:
+        log.close()
+    decisions = [r for r in rows if r["kind"] == "DECISION"]
+    tools = [r for r in rows if r["kind"] == "TOOL_CALL"]
+    assert [r["step_n"] for r in decisions] == [1, 2]
+    assert [r["step_n"] for r in tools] == [1, 2]
+    result = run_verify(tir, root=_ROOT)
+    assert result["ok"] is True, result
+    _ = trajir_exe
+
+
+@pytest.mark.integration
 def test_open_world_refuse(tmp_path: Path) -> None:
     with (
         TrajIRToolGuard(

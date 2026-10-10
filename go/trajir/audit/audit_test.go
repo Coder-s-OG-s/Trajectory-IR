@@ -178,6 +178,124 @@ func TestVerifyOpenWorldLieOnToolCall(t *testing.T) {
 	}
 }
 
+func TestVerifyToolOutsideSealedPlan(t *testing.T) {
+	dir := t.TempDir()
+	nl, err := nodelog.Open(filepath.Join(dir, "nodes.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer nl.Close()
+	step := 1
+	if _, err := nl.Append("PROJECT_CONTEXT", &step, map[string]any{"goal": "x"}, "t-plan", "demo", 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := nl.Append("DECISION", &step, map[string]any{
+		"plan": map[string]any{"tool_calls": []any{
+			map[string]any{"name": "echo", "args": map[string]any{"msg": "hi"}},
+		}},
+	}, "t-plan", "demo", 1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := nl.Append("TOOL_CALL", &step, map[string]any{
+		"tool":         "echo",
+		"args":         map[string]any{"msg": "hi"},
+		"effect_class": "PURE",
+	}, "t-plan", "demo", 2); err != nil {
+		t.Fatal(err)
+	}
+	// Second tool on the same step was not in the sealed plan.
+	if _, err := nl.Append("TOOL_CALL", &step, map[string]any{
+		"tool":         "ship",
+		"args":         map[string]any{"svc": "api"},
+		"effect_class": "PURE",
+	}, "t-plan", "demo", 4); err != nil {
+		t.Fatal(err)
+	}
+	out := filepath.Join(dir, "outside.tir")
+	tenant := "demo"
+	if _, err := tir.Export(nl, "t-plan", out, tir.ExportOptions{Mode: tir.ModeThin, TenantID: &tenant}); err != nil {
+		t.Fatal(err)
+	}
+	res, err := audit.VerifyFile(out, audit.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.OK {
+		t.Fatal("expected PLAN_MISMATCH")
+	}
+	joined := ""
+	for _, f := range res.Findings {
+		joined += f.Code + " " + f.Message + "\n"
+	}
+	if !strings.Contains(joined, "PLAN_MISMATCH") || !strings.Contains(joined, "ship") {
+		t.Fatalf("findings=%v", res.Findings)
+	}
+	if strings.Contains(joined, `tool="echo"`) {
+		t.Fatalf("planned echo should pass, findings=%v", res.Findings)
+	}
+}
+
+func TestVerifyTwoStepsMatchTheirOwnPlans(t *testing.T) {
+	dir := t.TempDir()
+	nl, err := nodelog.Open(filepath.Join(dir, "nodes.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer nl.Close()
+	step := 1
+	if _, err := nl.Append("PROJECT_CONTEXT", &step, map[string]any{"goal": "x"}, "t-two", "demo", 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := nl.Append("DECISION", &step, map[string]any{
+		"plan": map[string]any{"tool_calls": []any{
+			map[string]any{"name": "echo", "args": map[string]any{"msg": "a"}},
+		}},
+	}, "t-two", "demo", 1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := nl.Append("TOOL_CALL", &step, map[string]any{
+		"tool": "echo",
+		"args": map[string]any{"msg": "a"},
+	}, "t-two", "demo", 2); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := nl.Append("COMMIT_STEP", &step, map[string]any{}, "t-two", "demo", 4); err != nil {
+		t.Fatal(err)
+	}
+	step = 2
+	if _, err := nl.Append("PROJECT_CONTEXT", &step, map[string]any{"goal": "x"}, "t-two", "demo", 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := nl.Append("DECISION", &step, map[string]any{
+		"plan": map[string]any{"tool_calls": []any{
+			map[string]any{"name": "ship", "args": map[string]any{"svc": "api"}},
+		}},
+	}, "t-two", "demo", 1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := nl.Append("TOOL_CALL", &step, map[string]any{
+		"tool": "ship",
+		"args": map[string]any{"svc": "api"},
+	}, "t-two", "demo", 2); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := nl.Append("COMMIT_STEP", &step, map[string]any{}, "t-two", "demo", 4); err != nil {
+		t.Fatal(err)
+	}
+	out := filepath.Join(dir, "two.tir")
+	tenant := "demo"
+	if _, err := tir.Export(nl, "t-two", out, tir.ExportOptions{Mode: tir.ModeThin, TenantID: &tenant}); err != nil {
+		t.Fatal(err)
+	}
+	res, err := audit.VerifyFile(out, audit.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.OK {
+		t.Fatalf("findings=%v", res.Findings)
+	}
+}
+
 func TestVerifyRequireSignature(t *testing.T) {
 	dir := t.TempDir()
 	path := exportGood(t, dir)

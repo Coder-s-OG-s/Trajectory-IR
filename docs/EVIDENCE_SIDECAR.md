@@ -5,7 +5,7 @@ host (LangGraph today). TrajIR seals the `DECISION` **before** the tool mutates
 the world, classifies the effect, binds a hashed idempotency key, and emits a
 portable `.tir` pack anyone can audit offline with `trajir verify`.
 
-This is the TURNING_POINT install story: **wrap + verify**, not a host rewrite.
+This is the install story: **wrap + verify**, not a host rewrite.
 
 **Honesty lock**
 
@@ -15,8 +15,6 @@ This is the TURNING_POINT install story: **wrap + verify**, not a host rewrite.
 - OTel correlation **labels** spans after an in-process seal. A post-hoc OTLP
   collector that sees `execute_tool` after the tool finished is a logger, not
   Chain-of-Evidence.
-
-Local soak notes (gitignored): `docs/LOCAL_EVIDENCE_SIDECAR.md`.
 
 ---
 
@@ -71,6 +69,8 @@ tools = ToolNode(my_tools, wrap_tool_call=guard.wrap_tool_call)
 path = guard.export_tir(".local-evidence/lg-live.tir")
 guard.close()
 ```
+
+Each distinct tool plan is one turn. The guard seals that plan, then runs the tools. A later model call with a different plan commits the open step and seals the next step. Parallel tools on the same plan share one seal and take separate sequence numbers. If resume skips the tool body, the wrap returns a tool message from the sealed result.
 
 Then:
 
@@ -130,7 +130,8 @@ Seal first via `TrajIRToolGuard`. Then label the span. Details:
 
 - Package load / hash chain is broken
 - A mutating tool ran without a prior `DECISION` on that step (seal-before-execute)
-- An open-world primitive is tagged as a safer effect class (lie)
+- A `TOOL_CALL` name and args are not in the sealed `DECISION` plan for that same step (`PLAN_MISMATCH`). Each model turn has its own plan. A later tool does not inherit the previous turn's plan.
+- An open-world primitive (`bash`, `shell`, `python`, `browser`, and the other names in the effects list) is tagged `PURE`, `READ_ONLY`, or `IDEMPOTENT_WRITE`. `AllowOpenWorldOverride` is a live execution choice. The pack does not record it, so verify always treats that safer tag as an `OPEN_WORLD_LIE`.
 - `--require-signature` is set and the pack has no `SIGNATURE` member
 
 Console Evidence can be **stricter** than verify on pure/read-only tools; the
@@ -141,7 +142,6 @@ UI labels that difference.
 ## Smoke / tests
 
 ```powershell
-pwsh -File scripts\local_evidence_sidecar_smoke.ps1
 python -m pytest integrations/langgraph/test_sidecar.py test/integration/test_evidence_sidecar.py -q
 ```
 

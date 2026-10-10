@@ -1,4 +1,4 @@
-"""LangGraph evidence sidecar (local TURNING_POINT build).
+"""LangGraph evidence sidecar.
 
 Optional. Install langgraph only when you use ToolNode wrap_tool_call.
 Core sealing works through TrajIRToolGuard without LangGraph.

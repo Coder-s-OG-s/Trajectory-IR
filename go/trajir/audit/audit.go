@@ -1,10 +1,11 @@
 // Package audit implements offline .tir evidence checks for trajir verify.
 //
 // These checks are observations over a verified package. They do not replace
-// NodeLog or tir.Load. See docs/TURNING_POINT.md (local planning).
+// NodeLog or tir.Load.
 package audit
 
 import (
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -74,6 +75,7 @@ func VerifyPackage(path string, pkg *tir.Package, opts Options) *Result {
 	}
 
 	res.Findings = append(res.Findings, checkSealBeforeExecute(pkg.Nodes)...)
+	res.Findings = append(res.Findings, checkPlanMembership(pkg.Nodes)...)
 	res.Findings = append(res.Findings, checkOpenWorldLies(pkg.Nodes)...)
 
 	if len(res.Findings) > 0 {
@@ -169,7 +171,121 @@ func checkSealBeforeExecute(nodes []map[string]any) []Finding {
 	return out
 }
 
+// checkPlanMembership fails a TOOL_CALL that is not in the sealed plan for
+// its own step. An earlier DECISION on that step is not enough: the call's
+// name and args have to match an unused plan entry. Plans do not leak across
+// steps, so a later turn cannot reuse the previous turn's tool list.
+func checkPlanMembership(nodes []map[string]any) []Finding {
+	type callKey struct {
+		name string
+		args string
+	}
+	type planInfo struct {
+		seq    int
+		counts map[callKey]int
+	}
+	plans := map[int]*planInfo{}
+	for _, n := range nodes {
+		kind, _ := n["kind"].(string)
+		if kind != "DECISION" {
+			continue
+		}
+		step, ok := asInt(n["step_n"])
+		if !ok {
+			continue
+		}
+		seq, ok := asInt(n["seq"])
+		if !ok {
+			continue
+		}
+		payload, _ := n["payload"].(map[string]any)
+		plan, _ := payload["plan"].(map[string]any)
+		if plan == nil {
+			continue
+		}
+		if prev, exists := plans[step]; exists && prev.seq <= seq {
+			continue
+		}
+		counts := map[callKey]int{}
+		calls, _ := plan["tool_calls"].([]any)
+		for _, raw := range calls {
+			call, ok := raw.(map[string]any)
+			if !ok {
+				continue
+			}
+			name, _ := call["name"].(string)
+			if name == "" {
+				name, _ = call["tool"].(string)
+			}
+			if name == "" {
+				continue
+			}
+			counts[callKey{name: name, args: canonicalArgs(call["args"])}]++
+		}
+		plans[step] = &planInfo{seq: seq, counts: counts}
+	}
+
+	var out []Finding
+	for _, n := range nodes {
+		kind, _ := n["kind"].(string)
+		if kind != "TOOL_CALL" {
+			continue
+		}
+		step, ok := asInt(n["step_n"])
+		if !ok {
+			continue
+		}
+		seq, ok := asInt(n["seq"])
+		if !ok {
+			continue
+		}
+		info, has := plans[step]
+		if !has || seq <= info.seq {
+			continue
+		}
+		payload, _ := n["payload"].(map[string]any)
+		name := toolNameFromPayload(payload)
+		args := canonicalArgs(nil)
+		if payload != nil {
+			args = canonicalArgs(payload["args"])
+		}
+		key := callKey{name: name, args: args}
+		if info.counts[key] > 0 {
+			info.counts[key]--
+			continue
+		}
+		label := name
+		if label == "" {
+			label = "?"
+		}
+		out = append(out, Finding{
+			Code: "PLAN_MISMATCH",
+			Message: fmt.Sprintf(
+				"TOOL_CALL tool=%q step=%d seq=%d is not in the sealed DECISION plan for that step",
+				label, step, seq,
+			),
+		})
+	}
+	return out
+}
+
+func canonicalArgs(v any) string {
+	if v == nil {
+		v = map[string]any{}
+	}
+	buf, err := json.Marshal(v)
+	if err != nil {
+		return ""
+	}
+	return string(buf)
+}
+
 func checkOpenWorldLies(nodes []map[string]any) []Finding {
+	// AllowOpenWorldOverride is a live execution choice. DECISION and TOOL_CALL
+	// payloads do not record it, so verify always passes false. A safer tag on
+	// an open-world primitive is an OPEN_WORLD_LIE offline even if the process
+	// that ran the tool set the override. See docs/EVIDENCE_SIDECAR.md.
+	const allowOverride = false
 	var out []Finding
 	for _, n := range nodes {
 		kind, _ := n["kind"].(string)
@@ -181,7 +297,7 @@ func checkOpenWorldLies(nodes []map[string]any) []Finding {
 			if !ok || name == "" {
 				continue
 			}
-			if err := effects.AssertOpenWorldEffect(name, effects.EffectClass(eff), false); err != nil {
+			if err := effects.AssertOpenWorldEffect(name, effects.EffectClass(eff), allowOverride); err != nil {
 				out = append(out, Finding{
 					Code:    "OPEN_WORLD_LIE",
 					Message: err.Error(),
@@ -203,7 +319,7 @@ func checkOpenWorldLies(nodes []map[string]any) []Finding {
 				if !ok || name == "" {
 					continue
 				}
-				if err := effects.AssertOpenWorldEffect(name, effects.EffectClass(eff), false); err != nil {
+				if err := effects.AssertOpenWorldEffect(name, effects.EffectClass(eff), allowOverride); err != nil {
 					out = append(out, Finding{
 						Code:    "OPEN_WORLD_LIE",
 						Message: err.Error(),
