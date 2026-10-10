@@ -179,7 +179,7 @@ def verify_package_from_zip(
     """
     members, sig_raw = _collect_zip_members(zf)
     if sig_raw is None:
-        if require_signature or bool(trusted_keys) or bool(trusted_key_ids):
+        if require_signature or (trusted_keys is not None) or (trusted_key_ids is not None):
             raise TirSignatureError("package is unsigned (SIGNATURE missing)")
         return None
     return _verify_signature_bytes(

@@ -279,6 +279,13 @@ func TestImportWithOptions_RejectsUntrustedSigner(t *testing.T) {
 	if _, err := tir.ImportWithOptions(path, dest, opts); !errors.Is(err, tir.ErrSignature) {
 		t.Fatalf("expected ErrSignature for untrusted signer, got %v", err)
 	}
+	nodes, err := dest.ListNodes("t-export", "demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(nodes) != 0 {
+		t.Fatalf("expected 0 nodes in dest log on failed import, got %d", len(nodes))
+	}
 }
 
 func TestImportWithOptions_AcceptsTrustedSigner(t *testing.T) {
@@ -323,6 +330,13 @@ func TestImportWithOptions_EnforcesRequireSignature(t *testing.T) {
 	}
 	if _, err := tir.ImportWithOptions(path, dest, opts); !errors.Is(err, tir.ErrSignature) {
 		t.Fatalf("expected ErrSignature for unsigned package, got %v", err)
+	}
+	nodes, err := dest.ListNodes("t-export", "demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(nodes) != 0 {
+		t.Fatalf("expected 0 nodes in dest log on failed import, got %d", len(nodes))
 	}
 }
 
@@ -851,4 +865,205 @@ func stripZipMember(path, member string) error {
 		return err
 	}
 	return os.Rename(tmp, path)
+}
+
+func TestLoadReaderWithOptions(t *testing.T) {
+	src := openLog(t, "src.sqlite")
+	seedSample(t, src)
+	dir := t.TempDir()
+	signedPath := filepath.Join(dir, "signed.tir")
+	priv := testOnlySeed()
+	pub := priv.Public().(ed25519.PublicKey)
+	if _, err := tir.Export(src, "t-export", signedPath, tir.ExportOptions{
+		Mode:    tir.ModeThin,
+		SignKey: priv,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	unsignedPath := filepath.Join(dir, "unsigned.tir")
+	if _, err := tir.Export(src, "t-export", unsignedPath, tir.ExportOptions{
+		Mode: tir.ModeThin,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// 1. Valid signed package with trusted key
+	sf, err := os.Open(signedPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sf.Close()
+	sst, err := sf.Stat()
+	if err != nil {
+		t.Fatal(err)
+	}
+	pkg, err := tir.LoadReaderWithOptions(sf, sst.Size(), tir.VerifyOptions{
+		TrustedKeys: []ed25519.PublicKey{pub},
+	})
+	if err != nil {
+		t.Fatalf("LoadReaderWithOptions trusted key failed: %v", err)
+	}
+	if pkg.Signature == nil {
+		t.Fatal("expected non-nil Signature")
+	}
+
+	// 2. Signed package with untrusted key fails
+	otherPub, _, _ := ed25519.GenerateKey(nil)
+	if _, err := tir.LoadReaderWithOptions(sf, sst.Size(), tir.VerifyOptions{
+		TrustedKeys: []ed25519.PublicKey{otherPub},
+	}); !errors.Is(err, tir.ErrSignature) {
+		t.Fatalf("expected ErrSignature for untrusted key, got %v", err)
+	}
+
+	// 3. Unsigned package with RequireSignature fails
+	uf, err := os.Open(unsignedPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer uf.Close()
+	ust, err := uf.Stat()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tir.LoadReaderWithOptions(uf, ust.Size(), tir.VerifyOptions{
+		RequireSignature: true,
+	}); !errors.Is(err, tir.ErrSignature) {
+		t.Fatalf("expected ErrSignature for unsigned package with RequireSignature, got %v", err)
+	}
+
+	// 4. Unsigned package with empty trust store fails
+	if _, err := tir.LoadReaderWithOptions(uf, ust.Size(), tir.VerifyOptions{
+		TrustedKeys: []ed25519.PublicKey{},
+	}); !errors.Is(err, tir.ErrSignature) {
+		t.Fatalf("expected ErrSignature for unsigned package with empty TrustedKeys, got %v", err)
+	}
+}
+
+func TestEmptyTrustStore_RejectsUnsigned(t *testing.T) {
+	src := openLog(t, "src.sqlite")
+	seedSample(t, src)
+	out := filepath.Join(t.TempDir(), "unsigned.tir")
+	path, err := tir.Export(src, "t-export", out, tir.ExportOptions{Mode: tir.ModeThin})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify
+	if _, err := tir.Verify(path, tir.VerifyOptions{TrustedKeys: []ed25519.PublicKey{}}); !errors.Is(err, tir.ErrSignature) {
+		t.Fatalf("expected ErrSignature from Verify with empty TrustedKeys, got %v", err)
+	}
+	if _, err := tir.Verify(path, tir.VerifyOptions{TrustedKeyIDs: []string{}}); !errors.Is(err, tir.ErrSignature) {
+		t.Fatalf("expected ErrSignature from Verify with empty TrustedKeyIDs, got %v", err)
+	}
+
+	// LoadWithOptions
+	if _, err := tir.LoadWithOptions(path, tir.VerifyOptions{TrustedKeys: []ed25519.PublicKey{}}); !errors.Is(err, tir.ErrSignature) {
+		t.Fatalf("expected ErrSignature from LoadWithOptions with empty TrustedKeys, got %v", err)
+	}
+	if _, err := tir.LoadWithOptions(path, tir.VerifyOptions{TrustedKeyIDs: []string{}}); !errors.Is(err, tir.ErrSignature) {
+		t.Fatalf("expected ErrSignature from LoadWithOptions with empty TrustedKeyIDs, got %v", err)
+	}
+
+	// ImportWithOptions TrustedKeys
+	dest1 := openLog(t, "dest1.sqlite")
+	opts1 := tir.ImportOptions{
+		Verify: tir.VerifyOptions{
+			TrustedKeys: []ed25519.PublicKey{},
+		},
+	}
+	if _, err := tir.ImportWithOptions(path, dest1, opts1); !errors.Is(err, tir.ErrSignature) {
+		t.Fatalf("expected ErrSignature from ImportWithOptions with empty TrustedKeys, got %v", err)
+	}
+	nodes1, err := dest1.ListNodes("t-export", "demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(nodes1) != 0 {
+		t.Fatalf("expected 0 nodes in dest1, got %d", len(nodes1))
+	}
+
+	// ImportWithOptions TrustedKeyIDs
+	dest2 := openLog(t, "dest2.sqlite")
+	opts2 := tir.ImportOptions{
+		Verify: tir.VerifyOptions{
+			TrustedKeyIDs: []string{},
+		},
+	}
+	if _, err := tir.ImportWithOptions(path, dest2, opts2); !errors.Is(err, tir.ErrSignature) {
+		t.Fatalf("expected ErrSignature from ImportWithOptions with empty TrustedKeyIDs, got %v", err)
+	}
+	nodes2, err := dest2.ListNodes("t-export", "demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(nodes2) != 0 {
+		t.Fatalf("expected 0 nodes in dest2, got %d", len(nodes2))
+	}
+}
+
+func TestEmptyTrustStore_RejectsSigned(t *testing.T) {
+	src := openLog(t, "src.sqlite")
+	seedSample(t, src)
+	out := filepath.Join(t.TempDir(), "signed.tir")
+	priv := testOnlySeed()
+	path, err := tir.Export(src, "t-export", out, tir.ExportOptions{
+		Mode:    tir.ModeThin,
+		SignKey: priv,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify
+	if _, err := tir.Verify(path, tir.VerifyOptions{TrustedKeys: []ed25519.PublicKey{}}); !errors.Is(err, tir.ErrSignature) {
+		t.Fatalf("expected ErrSignature from Verify with empty TrustedKeys, got %v", err)
+	}
+	if _, err := tir.Verify(path, tir.VerifyOptions{TrustedKeyIDs: []string{}}); !errors.Is(err, tir.ErrSignature) {
+		t.Fatalf("expected ErrSignature from Verify with empty TrustedKeyIDs, got %v", err)
+	}
+
+	// LoadWithOptions
+	if _, err := tir.LoadWithOptions(path, tir.VerifyOptions{TrustedKeys: []ed25519.PublicKey{}}); !errors.Is(err, tir.ErrSignature) {
+		t.Fatalf("expected ErrSignature from LoadWithOptions with empty TrustedKeys, got %v", err)
+	}
+	if _, err := tir.LoadWithOptions(path, tir.VerifyOptions{TrustedKeyIDs: []string{}}); !errors.Is(err, tir.ErrSignature) {
+		t.Fatalf("expected ErrSignature from LoadWithOptions with empty TrustedKeyIDs, got %v", err)
+	}
+
+	// ImportWithOptions TrustedKeys
+	dest1 := openLog(t, "dest_s1.sqlite")
+	opts1 := tir.ImportOptions{
+		Verify: tir.VerifyOptions{
+			TrustedKeys: []ed25519.PublicKey{},
+		},
+	}
+	if _, err := tir.ImportWithOptions(path, dest1, opts1); !errors.Is(err, tir.ErrSignature) {
+		t.Fatalf("expected ErrSignature from ImportWithOptions with empty TrustedKeys, got %v", err)
+	}
+	nodes1, err := dest1.ListNodes("t-export", "demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(nodes1) != 0 {
+		t.Fatalf("expected 0 nodes in dest1, got %d", len(nodes1))
+	}
+
+	// ImportWithOptions TrustedKeyIDs
+	dest2 := openLog(t, "dest_s2.sqlite")
+	opts2 := tir.ImportOptions{
+		Verify: tir.VerifyOptions{
+			TrustedKeyIDs: []string{},
+		},
+	}
+	if _, err := tir.ImportWithOptions(path, dest2, opts2); !errors.Is(err, tir.ErrSignature) {
+		t.Fatalf("expected ErrSignature from ImportWithOptions with empty TrustedKeyIDs, got %v", err)
+	}
+	nodes2, err := dest2.ListNodes("t-export", "demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(nodes2) != 0 {
+		t.Fatalf("expected 0 nodes in dest2, got %d", len(nodes2))
+	}
 }

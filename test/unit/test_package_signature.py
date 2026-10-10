@@ -331,6 +331,7 @@ def test_import_tir_rejects_untrusted_signer(tmp_path):
     dest_log = NodeLog(tmp_path / "dest.sqlite")
     with pytest.raises(TirVerificationError, match="not in trust store"):
         import_tir(out, dest_log, trusted_keys=[other_pub])
+    assert len(dest_log.list_nodes("t1", tenant_id="demo")) == 0
 
 
 def test_import_tir_accepts_trusted_signer(tmp_path):
@@ -403,3 +404,60 @@ def test_import_tir_stripped_signature_fails_trust_store(tmp_path):
 
     with pytest.raises(TirSignatureError, match="unsigned"):
         verify_package(out, trusted_keys=[pub])
+
+
+def test_import_tir_empty_trust_store_rejects_unsigned(tmp_path):
+    from trajectory_ir.package.tir import TirVerificationError, import_tir, load_tir
+
+    src_log = NodeLog(tmp_path / "src.sqlite")
+    src_log.append("DECISION", 1, {"plan": {"tool_calls": []}}, "t1", "demo", 1)
+    out = tmp_path / "unsigned.tir"
+    export_tir(src_log, "t1", out, mode="thin")
+
+    dest_log = NodeLog(tmp_path / "dest.sqlite")
+    with pytest.raises(TirVerificationError, match="unsigned"):
+        import_tir(out, dest_log, trusted_keys=[])
+    assert len(dest_log.list_nodes("t1", tenant_id="demo")) == 0
+
+    dest_key_id = NodeLog(tmp_path / "dest_key_id.sqlite")
+    with pytest.raises(TirVerificationError, match="unsigned"):
+        import_tir(out, dest_key_id, trusted_key_ids=[])
+    assert len(dest_key_id.list_nodes("t1", tenant_id="demo")) == 0
+
+    with pytest.raises(TirVerificationError, match="unsigned"):
+        load_tir(out, trusted_keys=[])
+
+    with pytest.raises(TirVerificationError, match="unsigned"):
+        load_tir(out, trusted_key_ids=[])
+
+    with pytest.raises(TirSignatureError, match="unsigned"):
+        verify_package(out, trusted_keys=[])
+
+    with pytest.raises(TirSignatureError, match="unsigned"):
+        verify_package(out, trusted_key_ids=[])
+
+
+def test_import_tir_empty_trust_store_rejects_signed(tmp_path):
+    from trajectory_ir.package.tir import TirVerificationError, import_tir, load_tir
+
+    src_log = NodeLog(tmp_path / "src.sqlite")
+    src_log.append("DECISION", 1, {"plan": {"tool_calls": []}}, "t1", "demo", 1)
+    out = tmp_path / "signed.tir"
+    key = _test_only_private_key()
+    export_tir(src_log, "t1", out, mode="thin", sign_key=key)
+
+    dest_log = NodeLog(tmp_path / "dest.sqlite")
+    with pytest.raises(TirVerificationError, match="not in trust store"):
+        import_tir(out, dest_log, trusted_keys=[])
+    assert len(dest_log.list_nodes("t1", tenant_id="demo")) == 0
+
+    dest_key_id = NodeLog(tmp_path / "dest_key_id.sqlite")
+    with pytest.raises(TirVerificationError, match="not in trust store"):
+        import_tir(out, dest_key_id, trusted_key_ids=[])
+    assert len(dest_key_id.list_nodes("t1", tenant_id="demo")) == 0
+
+    with pytest.raises(TirVerificationError, match="not in trust store"):
+        load_tir(out, trusted_keys=[])
+
+    with pytest.raises(TirSignatureError, match="not in trust store"):
+        verify_package(out, trusted_keys=[])

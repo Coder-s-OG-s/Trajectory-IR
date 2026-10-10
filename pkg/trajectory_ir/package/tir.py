@@ -583,8 +583,14 @@ def _load_tir_impl(
         # Present but invalid SIGNATURE fails even for load_tir_unverified (tamper).
         # Unsigned packages skip the second decompress pass (match Go loadImpl).
         sig_info = None
-        requires_sig = require_signature or bool(trusted_keys) or bool(trusted_key_ids)
-        if SIGNATURE_MEMBER in name_set or requires_sig:
+        requires_sig = (
+            require_signature or (trusted_keys is not None) or (trusted_key_ids is not None)
+        )
+        has_sig = SIGNATURE_MEMBER in name_set
+        if requires_sig and not has_sig:
+            raise TirVerificationError("package is unsigned (SIGNATURE missing)")
+
+        if has_sig:
             try:
                 sig_info = verify_package_from_zip(
                     zf,

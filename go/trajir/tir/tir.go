@@ -947,8 +947,12 @@ func loadFromZipWithOptions(zr *zip.Reader, verify bool, opts VerifyOptions) (*P
 	// Present-but-invalid SIGNATURE fails even for LoadUnverified (tamper).
 	// Unsigned packages skip the second decompress pass (no SIGNATURE member).
 	var sigInfo *SignatureInfo
-	requiresSig := opts.RequireSignature || len(opts.TrustedKeys) > 0 || len(opts.TrustedKeyIDs) > 0
-	if _, hasSig := byName[SignatureMemberName]; hasSig || requiresSig {
+	requiresSig := opts.RequireSignature || opts.TrustedKeys != nil || opts.TrustedKeyIDs != nil
+	_, hasSig := byName[SignatureMemberName]
+	if requiresSig && !hasSig {
+		return nil, fmt.Errorf("%w: package is unsigned (SIGNATURE missing)", ErrSignature)
+	}
+	if hasSig {
 		sigInfo, err = verifySignatureFromZipFiles(zr.File, opts)
 		if err != nil {
 			return nil, err
