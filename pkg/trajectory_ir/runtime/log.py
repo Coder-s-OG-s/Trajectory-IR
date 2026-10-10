@@ -36,7 +36,9 @@ class NodeLog:
         # self._lock; only one thread mutates the connection at a time.
         self._lock = threading.RLock()
         self._conn = sqlite3.connect(db_path, check_same_thread=False)
-        self._conn.execute("PRAGMA journal_mode=WAL")
+        mode = self._conn.execute("PRAGMA journal_mode").fetchone()[0]
+        if mode not in ("wal", "memory"):
+            self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute(
             """
             CREATE TABLE IF NOT EXISTS nodes (

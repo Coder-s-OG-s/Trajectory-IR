@@ -1,4 +1,5 @@
 import os
+import sqlite3
 import tempfile
 import threading
 
@@ -87,6 +88,23 @@ def test_list_nodes_tenant_filter(log):
 def test_file_log_uses_wal(log):
     mode = log._conn.execute("PRAGMA journal_mode").fetchone()[0]
     assert mode == "wal"
+
+
+def test_node_log_opens_beside_an_existing_wal_connection(tmp_path):
+    path = tmp_path / "shared.sqlite"
+    setup = sqlite3.connect(path)
+    setup.execute("PRAGMA journal_mode=WAL")
+    setup.close()
+    holder = sqlite3.connect(path)
+    try:
+        log = NodeLog(str(path))
+        try:
+            mode = log._conn.execute("PRAGMA journal_mode").fetchone()[0]
+            assert mode == "wal"
+        finally:
+            log.close()
+    finally:
+        holder.close()
 
 
 def test_append_errors_when_slot_owner_missing(log):
