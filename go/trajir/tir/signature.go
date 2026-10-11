@@ -74,10 +74,11 @@ type SignatureInfo struct {
 // VerifyOptions control Verify (and optional strict policy for callers).
 type VerifyOptions struct {
 	// RequireSignature fails when the package has no SIGNATURE member.
+	// A non-nil TrustedKeys or TrustedKeyIDs implicitly requires a signature.
 	RequireSignature bool
-	// TrustedKeys, when non-empty, requires the package public key to match one entry.
+	// TrustedKeys, when non-nil, requires the package public key to match one entry.
 	TrustedKeys []ed25519.PublicKey
-	// TrustedKeyIDs, when non-empty, requires document signer.key_id to be listed
+	// TrustedKeyIDs, when non-nil, requires document signer.key_id to be listed
 	// (in addition to TrustedKeys if both are set — key must satisfy both).
 	TrustedKeyIDs []string
 }
@@ -184,7 +185,8 @@ func Sign(path string, privateKey ed25519.PrivateKey, meta SignerMeta) error {
 }
 
 // Verify checks package signature policy for path.
-// When SIGNATURE is absent and RequireSignature is false, returns (nil, nil).
+// When SIGNATURE is absent, returns (nil, nil) unless RequireSignature is true
+// or a trust store (TrustedKeys / TrustedKeyIDs) is configured.
 //
 // Prefer VerifyReader or verifySignatureFromZipFiles when the archive is
 // already open so signature metadata cannot come from a different file than
@@ -220,7 +222,7 @@ func verifySignatureFromZipFiles(files []*zip.File, opts VerifyOptions) (*Signat
 
 func verifyFromMembers(members map[string][]byte, sigRaw []byte, opts VerifyOptions) (*SignatureInfo, error) {
 	if sigRaw == nil {
-		if opts.RequireSignature {
+		if opts.RequireSignature || opts.TrustedKeys != nil || opts.TrustedKeyIDs != nil {
 			return nil, fmt.Errorf("%w: package is unsigned (SIGNATURE missing)", ErrSignature)
 		}
 		return nil, nil
@@ -277,7 +279,7 @@ func verifySignatureBytes(members map[string][]byte, sigRaw []byte, opts VerifyO
 		return nil, fmt.Errorf("%w: signer.key_id does not match public_key", ErrSignature)
 	}
 
-	if len(opts.TrustedKeys) > 0 {
+	if opts.TrustedKeys != nil {
 		ok := false
 		for _, tk := range opts.TrustedKeys {
 			if bytes.Equal(tk, pub) {
@@ -289,7 +291,7 @@ func verifySignatureBytes(members map[string][]byte, sigRaw []byte, opts VerifyO
 			return nil, fmt.Errorf("%w: public key not in trust store", ErrSignature)
 		}
 	}
-	if len(opts.TrustedKeyIDs) > 0 {
+	if opts.TrustedKeyIDs != nil {
 		ok := false
 		for _, id := range opts.TrustedKeyIDs {
 			if id == keyID {

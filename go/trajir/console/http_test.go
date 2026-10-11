@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -90,6 +91,30 @@ func TestUIShellServed(t *testing.T) {
 	srv.Handler().ServeHTTP(rr2, req2)
 	if rr2.Code != http.StatusOK {
 		t.Fatalf("js status=%d", rr2.Code)
+	}
+}
+
+func TestLogoAndFaviconServed(t *testing.T) {
+	t.Parallel()
+	st, err := OpenStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := NewServer(st, "")
+	for _, path := range []string{"/ui/logo.png", "/ui/logo_transparent.png", "/favicon.ico"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		rr := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("%s status=%d", path, rr.Code)
+		}
+		if rr.Body.Len() < 100 {
+			t.Fatalf("%s too small: %d", path, rr.Body.Len())
+		}
+		ct := rr.Header().Get("Content-Type")
+		if !strings.Contains(ct, "image/png") && !strings.Contains(ct, "image/") {
+			t.Fatalf("%s content-type %q", path, ct)
+		}
 	}
 }
 

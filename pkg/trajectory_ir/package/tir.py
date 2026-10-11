@@ -179,6 +179,22 @@ def _verify_node_record(rec: dict[str, Any]) -> None:
         )
 
 
+def _verify_single_tenant(manifest: dict[str, Any], nodes: list[dict[str, Any]]) -> None:
+    tenant_ids = {n.get("tenant_id") or "" for n in nodes}
+    if len(tenant_ids) > 1:
+        raise TirVerificationError("package contains mixed tenant_id values")
+    manifest_tenant = manifest.get("tenant_id")
+    if manifest_tenant:  # missing or "" => no opinion; align with Go
+        if not tenant_ids:
+            return
+        node_tenant = next(iter(tenant_ids))
+        if manifest_tenant != node_tenant:
+            raise TirVerificationError(
+                f"manifest tenant_id {manifest_tenant!r} does not match "
+                f"node tenant_id {node_tenant!r}"
+            )
+
+
 def _seals_from_nodes(nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """DECISION rows act as decision seals in the current runtime (content-addressed append)."""
     seals: list[dict[str, Any]] = []
@@ -427,7 +443,14 @@ def _notify_observer(cb, info: dict) -> None:
         )
 
 
-def load_tir(path: str | Path, *, verify: bool = True) -> TirPackage:
+def load_tir(
+    path: str | Path,
+    *,
+    verify: bool = True,
+    require_signature: bool = False,
+    trusted_keys: list[bytes] | None = None,
+    trusted_key_ids: list[str] | None = None,
+) -> TirPackage:
     """Load and verify a ``.tir`` zip without writing to a NodeLog.
 
     Verification is required for untrusted packages. To intentionally skip
@@ -440,7 +463,13 @@ def load_tir(path: str | Path, *, verify: bool = True) -> TirPackage:
             "use load_tir_unverified() (requires TRAJIR_ALLOW_UNVERIFIED=1) "
             "if you explicitly accept an unverified package"
         )
-    return _load_tir_impl(path, verify=True)
+    return _load_tir_impl(
+        path,
+        verify=True,
+        require_signature=require_signature,
+        trusted_keys=trusted_keys,
+        trusted_key_ids=trusted_key_ids,
+    )
 
 
 def load_tir_unverified(path: str | Path) -> TirPackage:
@@ -465,7 +494,14 @@ def load_tir_unverified(path: str | Path) -> TirPackage:
     return _load_tir_impl(path, verify=False)
 
 
-def _load_tir_impl(path: str | Path, *, verify: bool) -> TirPackage:
+def _load_tir_impl(
+    path: str | Path,
+    *,
+    verify: bool,
+    require_signature: bool = False,
+    trusted_keys: list[bytes] | None = None,
+    trusted_key_ids: list[str] | None = None,
+) -> TirPackage:
     path = Path(path)
     if not path.is_file():
         raise TirError(f"package not found: {path}")
@@ -524,6 +560,7 @@ def _load_tir_impl(path: str | Path, *, verify: bool) -> TirPackage:
                 raise TirVerificationError("package has no nodes")
             for n in nodes:
                 _verify_node_record(n)
+            _verify_single_tenant(manifest, nodes)
             expected_seals = _seals_from_nodes(nodes)
             by_id = {s["node_id"]: s for s in seals}
             for exp in expected_seals:
@@ -546,9 +583,21 @@ def _load_tir_impl(path: str | Path, *, verify: bool) -> TirPackage:
         # Present but invalid SIGNATURE fails even for load_tir_unverified (tamper).
         # Unsigned packages skip the second decompress pass (match Go loadImpl).
         sig_info = None
-        if SIGNATURE_MEMBER in name_set:
+        requires_sig = (
+            require_signature or (trusted_keys is not None) or (trusted_key_ids is not None)
+        )
+        has_sig = SIGNATURE_MEMBER in name_set
+        if requires_sig and not has_sig:
+            raise TirVerificationError("package is unsigned (SIGNATURE missing)")
+
+        if has_sig:
             try:
-                sig_info = verify_package_from_zip(zf)
+                sig_info = verify_package_from_zip(
+                    zf,
+                    require_signature=require_signature,
+                    trusted_keys=trusted_keys,
+                    trusted_key_ids=trusted_key_ids,
+                )
             except TirSignatureError as e:
                 raise TirVerificationError(str(e)) from e
 
@@ -567,6 +616,9 @@ def import_tir(
     node_log: NodeLog,
     *,
     verify: bool = True,
+    require_signature: bool = False,
+    trusted_keys: list[bytes] | None = None,
+    trusted_key_ids: list[str] | None = None,
     cas: Any | None = None,
     rehydrate: bool = False,
     on_imported: Any | None = None,
@@ -593,7 +645,13 @@ def import_tir(
         )
     if rehydrate and cas is None:
         raise TirError("import_tir(rehydrate=True) requires cas=")
-    pkg = load_tir(path, verify=True)
+    pkg = load_tir(
+        path,
+        verify=True,
+        require_signature=require_signature,
+        trusted_keys=trusted_keys,
+        trusted_key_ids=trusted_key_ids,
+    )
     if cas is not None and pkg.manifest.get("mode", "thin") == "thin" and pkg.artifacts_manifest:
         from trajectory_ir.storage.artifacts import ensure_artifacts_in_cas
         from trajectory_ir.storage.rehydrate import rehydrate_artifacts
