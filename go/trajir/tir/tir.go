@@ -317,6 +317,25 @@ func verifyNodeRecord(rec map[string]any) error {
 	return nil
 }
 
+func verifySingleTenant(manifest map[string]any, nodeList []map[string]any) error {
+	var seen string
+	haveSeen := false
+	for _, n := range nodeList {
+		tid, _ := asString(n["tenant_id"])
+		if !haveSeen {
+			seen, haveSeen = tid, true
+			continue
+		}
+		if tid != seen {
+			return fmt.Errorf("%w: package contains mixed tenant_id values", ErrVerification)
+		}
+	}
+	if mTenant, ok := asString(manifest["tenant_id"]); ok && mTenant != "" && mTenant != seen {
+		return fmt.Errorf("%w: manifest tenant_id %q does not match node tenant_id %q", ErrVerification, mTenant, seen)
+	}
+	return nil
+}
+
 func sealsFromNodes(nodeList []map[string]any) ([]map[string]any, error) {
 	seals := make([]map[string]any, 0)
 	for _, n := range nodeList {
@@ -652,18 +671,28 @@ func notifyExport(fn func(ExportNotice), n ExportNotice) {
 // Load reads and verifies a .tir zip without writing to a NodeLog.
 // Verification is always on; use LoadUnverified for explicit opt-out.
 func Load(path string) (*Package, error) {
-	return loadImpl(path, true)
+	return loadImplWithOptions(path, true, VerifyOptions{})
+}
+
+// LoadWithOptions reads and verifies a .tir zip with explicit signature verification policy.
+func LoadWithOptions(path string, opts VerifyOptions) (*Package, error) {
+	return loadImplWithOptions(path, true, opts)
 }
 
 // LoadReader reads and verifies a .tir zip from an already-open io.ReaderAt.
 // Use this instead of Load when the caller has already opened the file to
 // avoid a time-of-check to time-of-use race (TOCTOU / CWE-367).
 func LoadReader(r io.ReaderAt, size int64) (*Package, error) {
+	return LoadReaderWithOptions(r, size, VerifyOptions{})
+}
+
+// LoadReaderWithOptions reads and verifies a .tir zip from an already-open io.ReaderAt with signature policy.
+func LoadReaderWithOptions(r io.ReaderAt, size int64, opts VerifyOptions) (*Package, error) {
 	zr, err := zip.NewReader(r, size)
 	if err != nil {
 		return nil, fmt.Errorf("%w: open zip: %v", ErrTir, err)
 	}
-	return loadFromZip(zr, true)
+	return loadFromZipWithOptions(zr, true, opts)
 }
 
 // LoadUnverified loads without hash verification. UNSAFE for untrusted input.
@@ -680,10 +709,14 @@ func LoadUnverified(path string) (*Package, error) {
 		)
 	}
 	log.Printf("WARNING: LoadUnverified called: path=%s", path)
-	return loadImpl(path, false)
+	return loadImplWithOptions(path, false, VerifyOptions{})
 }
 
 func loadImpl(path string, verify bool) (*Package, error) {
+	return loadImplWithOptions(path, verify, VerifyOptions{})
+}
+
+func loadImplWithOptions(path string, verify bool, opts VerifyOptions) (*Package, error) {
 	st, err := os.Stat(path)
 	if err != nil || st.IsDir() {
 		return nil, fmt.Errorf("%w: package not found: %s", ErrTir, path)
@@ -694,10 +727,14 @@ func loadImpl(path string, verify bool) (*Package, error) {
 		return nil, fmt.Errorf("%w: open zip: %v", ErrTir, err)
 	}
 	defer zr.Close()
-	return loadFromZip(&zr.Reader, verify)
+	return loadFromZipWithOptions(&zr.Reader, verify, opts)
 }
 
 func loadFromZip(zr *zip.Reader, verify bool) (*Package, error) {
+	return loadFromZipWithOptions(zr, verify, VerifyOptions{})
+}
+
+func loadFromZipWithOptions(zr *zip.Reader, verify bool, opts VerifyOptions) (*Package, error) {
 
 	if len(zr.File) > MaxZipEntries {
 		return nil, fmt.Errorf("%w: too many zip entries: %d > %d", ErrLimit, len(zr.File), MaxZipEntries)
@@ -880,6 +917,9 @@ func loadFromZip(zr *zip.Reader, verify bool) (*Package, error) {
 				return nil, err
 			}
 		}
+		if err := verifySingleTenant(manifest, nodeList); err != nil {
+			return nil, err
+		}
 		expectedSeals, err := sealsFromNodes(nodeList)
 		if err != nil {
 			return nil, err
@@ -924,8 +964,13 @@ func loadFromZip(zr *zip.Reader, verify bool) (*Package, error) {
 	// Present-but-invalid SIGNATURE fails even for LoadUnverified (tamper).
 	// Unsigned packages skip the second decompress pass (no SIGNATURE member).
 	var sigInfo *SignatureInfo
-	if _, hasSig := byName[SignatureMemberName]; hasSig {
-		sigInfo, err = verifySignatureFromZipFiles(zr.File, VerifyOptions{})
+	requiresSig := opts.RequireSignature || opts.TrustedKeys != nil || opts.TrustedKeyIDs != nil
+	_, hasSig := byName[SignatureMemberName]
+	if requiresSig && !hasSig {
+		return nil, fmt.Errorf("%w: package is unsigned (SIGNATURE missing)", ErrSignature)
+	}
+	if hasSig {
+		sigInfo, err = verifySignatureFromZipFiles(zr.File, opts)
 		if err != nil {
 			return nil, err
 		}
@@ -950,13 +995,18 @@ func isHex(s string) bool {
 	return true
 }
 
-// Import verifies a package and appends its nodes into nodeLog (idempotent by id).
+// ImportOptions configures signature verification and trust store policies for Import.
+type ImportOptions struct {
+	Verify VerifyOptions
+}
+
+// ImportWithOptions verifies a package under opts and appends its nodes into nodeLog (idempotent by id).
 // Verification cannot be disabled — forged packages must not enter a durable log.
-func Import(path string, nodeLog *nodelog.NodeLog) (*Package, error) {
+func ImportWithOptions(path string, nodeLog *nodelog.NodeLog, opts ImportOptions) (*Package, error) {
 	if nodeLog == nil {
 		return nil, fmt.Errorf("%w: nil NodeLog", ErrTir)
 	}
-	pkg, err := Load(path)
+	pkg, err := LoadWithOptions(path, opts.Verify)
 	if err != nil {
 		return nil, err
 	}
@@ -992,4 +1042,10 @@ func Import(path string, nodeLog *nodelog.NodeLog) (*Package, error) {
 		}
 	}
 	return pkg, nil
+}
+
+// Import verifies a package and appends its nodes into nodeLog (idempotent by id).
+// Verification cannot be disabled — forged packages must not enter a durable log.
+func Import(path string, nodeLog *nodelog.NodeLog) (*Package, error) {
+	return ImportWithOptions(path, nodeLog, ImportOptions{})
 }

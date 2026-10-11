@@ -26,10 +26,12 @@ import (
 const SchemaVersion = "console-events-v1"
 
 const (
-	KindNodeAppended    = "node.appended"
-	KindSealCreated     = "seal.created"
-	KindExportCompleted = "export.completed"
-	KindImportCompleted = "import.completed"
+	KindNodeAppended     = "node.appended"
+	KindSealCreated      = "seal.created"
+	KindContextProjected = "context.projected"
+	KindExportCompleted  = "export.completed"
+	KindImportCompleted  = "import.completed"
+	ObservationBudget    = 50000
 )
 
 // Event is one console-events-v1 object.
@@ -75,6 +77,13 @@ func (f *FileSink) Emit(e Event) error {
 	e = normalize(e)
 	if err := validTrajectoryID(e.TrajectoryID); err != nil {
 		return err
+	}
+	if e.Kind == KindExportCompleted {
+		if src, _ := e.Payload["path"].(string); strings.TrimSpace(src) != "" {
+			if rel, err := StagePackage(f.Dir, e.TrajectoryID, src, e.ID); err == nil && rel != "" {
+				e.Payload["console_path"] = rel
+			}
+		}
 	}
 	dir := filepath.Join(f.Dir, "trajectories")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -215,6 +224,68 @@ func NotePackage(s Sink, f PackageFact) {
 	}
 	SafeEmit(s, Event{
 		Kind:         f.Kind,
+		Source:       source,
+		Runtime:      f.Runtime,
+		TrajectoryID: f.TrajectoryID,
+		TenantID:     f.TenantID,
+		Payload:      payload,
+	})
+}
+
+// ProjectionFact is the payload for context.projected.
+type ProjectionFact struct {
+	TrajectoryID     string
+	TenantID         string
+	StepN            int
+	Budget           int
+	Metric           string
+	SizeUnits        int
+	RawSizeUnits     int
+	IncludedIDs      []string
+	DroppedIDs       []string
+	RawCharLen       int
+	ProjectedCharLen int
+	Source           string
+	Runtime          string
+}
+
+// NoteProjection emits one context.projected event. Nil sink is a no-op.
+func NoteProjection(s Sink, f ProjectionFact) {
+	budget := f.Budget
+	if budget == 0 {
+		budget = ObservationBudget
+	}
+	metric := f.Metric
+	if metric == "" {
+		metric = "rfc8785_bytes"
+	}
+	included := f.IncludedIDs
+	if included == nil {
+		included = []string{}
+	}
+	dropped := f.DroppedIDs
+	if dropped == nil {
+		dropped = []string{}
+	}
+	payload := map[string]any{
+		"budget":             budget,
+		"metric":             metric,
+		"size_units":         f.SizeUnits,
+		"included_ids":       included,
+		"dropped_ids":        dropped,
+		"raw_size_units":     f.RawSizeUnits,
+		"raw_char_len":       f.RawCharLen,
+		"projected_char_len": f.ProjectedCharLen,
+	}
+	if f.StepN > 0 {
+		payload["step_n"] = f.StepN
+	}
+	source := f.Source
+	if source == "" {
+		source = "go"
+	}
+	SafeEmit(s, Event{
+		Kind:         KindContextProjected,
 		Source:       source,
 		Runtime:      f.Runtime,
 		TrajectoryID: f.TrajectoryID,

@@ -1,6 +1,8 @@
 module github.com/Coder-s-OG-s/Trajectory-IR/go
 
-go 1.26.9
+go 1.26.0
+
+toolchain go1.26.9
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
