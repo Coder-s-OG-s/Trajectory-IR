@@ -615,6 +615,11 @@ func Export(nodeLog *nodelog.NodeLog, trajectoryID, dest string, opts ExportOpti
 	if err := f.Close(); err != nil {
 		return "", err
 	}
+	// os.CreateTemp creates the file 0600; restore the 0644 mode that
+	// os.Create used to give exported packages (see rewriteZipWithSignature).
+	if err := os.Chmod(tmpName, 0o644); err != nil {
+		return "", err
+	}
 	if beforeExportReplace != nil {
 		if err := beforeExportReplace(); err != nil {
 			return "", err
