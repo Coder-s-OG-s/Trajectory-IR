@@ -78,6 +78,38 @@ def _decision_world_snapshot(
     return world_snapshot
 
 
+def _require_plan_object(plan: Any) -> dict:
+    if not isinstance(plan, dict):
+        raise ValueError(f"resume: plan: want object, got {type(plan).__name__}")
+    return plan
+
+
+def _tool_calls_from_plan(plan: dict) -> list[tuple[str, dict]]:
+    if "tool_calls" not in plan:
+        raise ValueError("resume: plan missing tool_calls")
+    raw = plan["tool_calls"]
+    if not isinstance(raw, list):
+        raise ValueError("resume: tool_calls must be a list")
+    calls: list[tuple[str, dict]] = []
+    for i, item in enumerate(raw):
+        if not isinstance(item, dict):
+            got = type(item).__name__
+            raise ValueError(f"resume: tool_calls[{i}]: want object, got {got}")
+        name = item.get("name")
+        if not isinstance(name, str) or name == "":
+            raise ValueError(f"resume: tool_calls[{i}] missing name")
+        if "args" in item and item["args"] is not None:
+            raw_args = item["args"]
+            if not isinstance(raw_args, dict):
+                got = type(raw_args).__name__
+                raise ValueError(f"resume: tool_calls[{i}].args: want object, got {got}")
+            args = raw_args
+        else:
+            args = {}
+        calls.append((name, args))
+    return calls
+
+
 def make_run_step(
     node_log,
     tenant_id,
@@ -131,7 +163,7 @@ def make_run_step(
         # is sealed would cause the backend to re-invoke model_call on resume even
         # though its output would be discarded once replay reaches DECISION.
         infer = durable_infer(model_call)
-        plan = infer(context)
+        plan = _require_plan_object(infer(context))
 
         # append() is idempotent by content, so this doubles as the "seal":
         # replaying it after a crash produces the same node id and is a no-op
@@ -167,9 +199,12 @@ def make_run_step(
                 observe_world(),
             )
 
+        calls = _tool_calls_from_plan(plan)
         results = []
-        for i, call in enumerate(plan["tool_calls"]):
-            tool = tool_registry[call["name"]]
+        for i, (name, args) in enumerate(calls):
+            if name not in tool_registry:
+                raise ValueError(f'resume: unknown tool "{name}"')
+            tool = tool_registry[name]
             # Two slots per tool call: TOOL_CALL at `seq`, its outcome
             # (TOOL_RESULT or ABORT) at `seq + 1`. Stride 1 would make tool i's
             # outcome collide with tool i+1's TOOL_CALL, which breaks seq as a
@@ -183,13 +218,13 @@ def make_run_step(
                 allow_override=tool.allow_open_world_override,
             )
             assert_open_world_effect(
-                call["name"],
+                name,
                 tool.effect_class,
                 allow_override=tool.allow_open_world_override,
             )
             assert_tool_allowed_in_mode(
                 run_mode,
-                tool_name=call["name"],
+                tool_name=name,
                 effect_class=tool.effect_class,
             )
             if requires_block_and_gate(tool.effect_class):
@@ -199,10 +234,10 @@ def make_run_step(
                     tenant_id,
                     step_n,
                     seq,
-                    call["name"],
+                    name,
                     tool.fn,
                 )
-                result = durable_tool(gated)(**call["args"])
+                result = durable_tool(gated)(**args)
             else:
                 plain = make_plain_tool_call(
                     node_log,
@@ -210,10 +245,10 @@ def make_run_step(
                     tenant_id,
                     step_n,
                     seq,
-                    call["name"],
+                    name,
                     tool.fn,
                 )
-                result = durable_tool(plain)(**call["args"])
+                result = durable_tool(plain)(**args)
             results.append(result)
 
         node_log.append(
@@ -222,7 +257,7 @@ def make_run_step(
             {},
             trajectory_id,
             tenant_id,
-            seq=2 + 2 * len(plan["tool_calls"]),
+            seq=2 + 2 * len(calls),
         )
         return results
 

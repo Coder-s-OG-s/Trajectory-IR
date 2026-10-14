@@ -8,7 +8,7 @@ Trajectory IR is a **semantic layer** for agent runs: content addressed nodes, e
 
 ## Prerequisites
 
-- **Go 1.25.x** (primary for Phase 1B)
+- **Go 1.26.9** (primary for Phase 1B)
 - Git
 - Optional: Python **3.11+** (reference port, parity, DBOS local profile)
 

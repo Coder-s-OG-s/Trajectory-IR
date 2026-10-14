@@ -27,7 +27,7 @@ import threading
 from typing import Any
 from urllib.parse import parse_qsl, urlparse
 
-from trajectory_ir.runtime.log import SlotConflictError
+from trajectory_ir.runtime.log import NodeNotStoredError, SlotConflictError
 from trajectory_ir.runtime.nodes import Node
 
 
@@ -171,15 +171,19 @@ class PostgresNodeLog:
                         seq=seq,
                         kind=kind,
                     )
-                    if owner is not None and owner != node.id:
+                    if owner != node.id:
                         self._conn.rollback()
-                        raise SlotConflictError(
-                            f"slot conflict trajectory={trajectory_id!r} step={step_n} "
-                            f"seq={seq} kind={kind!r}: different payload already stored"
+                        if owner is not None:
+                            raise SlotConflictError(
+                                f"slot conflict trajectory={trajectory_id!r} step={step_n} "
+                                f"seq={seq} kind={kind!r}: different payload already stored"
+                            )
+                        raise NodeNotStoredError(
+                            f"node not stored trajectory={trajectory_id!r} step={step_n} "
+                            f"seq={seq} kind={kind!r}"
                         )
                 self._conn.commit()
             except UniqueViolation:
-                # Slot unique index fired (different content id, same slot).
                 self._conn.rollback()
                 with self._conn.cursor() as cur:
                     owner = self._slot_owner_id(
@@ -190,12 +194,13 @@ class PostgresNodeLog:
                         seq=seq,
                         kind=kind,
                     )
-                if owner is not None and owner != node.id:
+                if owner is None:
+                    raise
+                if owner != node.id:
                     raise SlotConflictError(
                         f"slot conflict trajectory={trajectory_id!r} step={step_n} "
                         f"seq={seq} kind={kind!r}: different payload already stored"
                     ) from None
-                # Same id concurrent insert or unexpected unique path: treat as ok.
         return node
 
     def claim_tool_call(

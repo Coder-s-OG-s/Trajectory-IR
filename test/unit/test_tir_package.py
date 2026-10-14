@@ -437,3 +437,38 @@ def test_load_tir_unverified_allowed_with_env(
         pkg = load_tir_unverified(out)
     assert len(pkg.nodes) == 5
     assert any("load_tir_unverified" in str(w.message) for w in caught)
+
+
+def test_export_appends_tir_suffix(sample_log: NodeLog, tmp_path: Path) -> None:
+    plain = export_tir(sample_log, "t-export", tmp_path / "run", mode="thin")
+    assert plain == tmp_path / "run.tir"
+    assert plain.is_file()
+
+    already = export_tir(sample_log, "t-export", tmp_path / "kept.tir", mode="thin")
+    assert already == tmp_path / "kept.tir"
+
+    sibling = tmp_path / "run.v1.tir"
+    sibling.write_bytes(b"keep-me")
+    versioned = export_tir(sample_log, "t-export", tmp_path / "run.v1.2", mode="thin")
+    assert versioned == tmp_path / "run.v1.2.tir"
+    assert versioned.is_file()
+    assert sibling.read_bytes() == b"keep-me"
+    assert load_tir(versioned).manifest["trajectory_id"] == "t-export"
+
+    archive = export_tir(sample_log, "t-export", tmp_path / "archive.tar.gz", mode="thin")
+    assert archive == tmp_path / "archive.tar.gz.tir"
+    assert not (tmp_path / "archive.tar.tir").exists()
+
+    kept = tmp_path / "out.tir"
+    kept.write_bytes(b"keep-json")
+    from_json = export_tir(sample_log, "t-export", tmp_path / "out.json", mode="thin")
+    assert from_json == tmp_path / "out.json.tir"
+    assert kept.read_bytes() == b"keep-json"
+
+    upper = export_tir(sample_log, "t-export", tmp_path / "foo.TIR", mode="thin")
+    assert upper == tmp_path / "foo.TIR.tir"
+    assert not (tmp_path / "foo.tir").exists()
+
+    hidden = export_tir(sample_log, "t-export", tmp_path / ".tir", mode="thin")
+    assert hidden == tmp_path / ".tir"
+    assert hidden.is_file()

@@ -1,10 +1,11 @@
 import os
+import sqlite3
 import tempfile
 import threading
 
 import pytest
 
-from trajectory_ir.runtime.log import NodeLog, SlotConflictError
+from trajectory_ir.runtime.log import NodeLog, NodeNotStoredError, SlotConflictError
 
 
 @pytest.fixture
@@ -82,6 +83,41 @@ def test_list_nodes_tenant_filter(log):
     assert only_a[0]["tenant_id"] == "tenant-a"
     all_nodes = log.list_nodes_all_tenants("t1")
     assert len(all_nodes) == 2
+
+
+def test_file_log_uses_wal(log):
+    mode = log._conn.execute("PRAGMA journal_mode").fetchone()[0]
+    assert mode == "wal"
+
+
+def test_node_log_opens_beside_an_existing_wal_connection(tmp_path):
+    path = tmp_path / "shared.sqlite"
+    setup = sqlite3.connect(path)
+    setup.execute("PRAGMA journal_mode=WAL")
+    setup.close()
+    holder = sqlite3.connect(path)
+    try:
+        log = NodeLog(str(path))
+        try:
+            mode = log._conn.execute("PRAGMA journal_mode").fetchone()[0]
+            assert mode == "wal"
+        finally:
+            log.close()
+    finally:
+        holder.close()
+
+
+def test_append_errors_when_slot_owner_missing(log):
+    node = log.append("THOUGHT", 1, {"text": "hi"}, "traj", "tenant", 0)
+    log._conn.execute("UPDATE nodes SET step_n = 99 WHERE id = ?", (node.id,))
+    log._conn.commit()
+    with pytest.raises(NodeNotStoredError):
+        log.append("THOUGHT", 1, {"text": "hi"}, "traj", "tenant", 0)
+    row = log._conn.execute(
+        "SELECT step_n FROM nodes WHERE id = ?",
+        (node.id,),
+    ).fetchone()
+    assert row == (99,)
 
 
 def test_slot_conflict_different_payload(log):

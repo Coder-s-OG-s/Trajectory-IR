@@ -264,6 +264,9 @@ def export_tir(
 ) -> Path:
     """Export a trajectory from ``node_log`` to a ``.tir`` zip at ``dest``.
 
+    If the final extension is not ``.tir``, ``.tir`` is appended and the rest
+    of the name is kept.
+
     Args:
         tenant_id: When set, only that tenant's nodes are exported (isolation).
         redacted: When True, strip thoughts and fields that match a secret-like
@@ -364,8 +367,8 @@ def export_tir(
     ]
 
     dest_path = Path(dest)
-    if dest_path.suffix != ".tir":
-        dest_path = dest_path.with_suffix(".tir")
+    if not dest_path.name.endswith(".tir"):
+        dest_path = dest_path.with_name(dest_path.name + ".tir")
 
     dest_path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp_name = tempfile.mkstemp(prefix=f".{dest_path.name}.", dir=str(dest_path.parent))

@@ -12,6 +12,10 @@ class SlotConflictError(ValueError):
     seq, kind) slot."""
 
 
+class NodeNotStoredError(RuntimeError):
+    """Raised when an append does not leave this node in the slot."""
+
+
 class NodeLog:
     """Append-only, content-addressed node log backed by SQLite.
 
@@ -32,6 +36,9 @@ class NodeLog:
         # self._lock; only one thread mutates the connection at a time.
         self._lock = threading.RLock()
         self._conn = sqlite3.connect(db_path, check_same_thread=False)
+        mode = self._conn.execute("PRAGMA journal_mode").fetchone()[0]
+        if mode not in ("wal", "memory"):
+            self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute(
             """
             CREATE TABLE IF NOT EXISTS nodes (
@@ -103,11 +110,16 @@ class NodeLog:
                 (tenant_id, trajectory_id, step_n, seq, kind),
             )
             row = cur.fetchone()
-            if row is not None and row[0] != node.id:
+            if row is None or row[0] != node.id:
                 self._conn.rollback()
-                raise SlotConflictError(
-                    f"slot conflict trajectory={trajectory_id!r} step={step_n} "
-                    f"seq={seq} kind={kind!r}: different payload already stored"
+                if row is not None:
+                    raise SlotConflictError(
+                        f"slot conflict trajectory={trajectory_id!r} step={step_n} "
+                        f"seq={seq} kind={kind!r}: different payload already stored"
+                    )
+                raise NodeNotStoredError(
+                    f"node not stored trajectory={trajectory_id!r} step={step_n} "
+                    f"seq={seq} kind={kind!r}"
                 )
             self._conn.commit()
         return node

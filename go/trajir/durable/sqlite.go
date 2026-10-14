@@ -21,7 +21,7 @@ type LocalSQLite struct {
 
 // OpenLocal opens or creates a SQLite memo database at path.
 func OpenLocal(path string) (*LocalSQLite, error) {
-	db, err := sql.Open("sqlite", path)
+	db, err := sql.Open("sqlite", path+"?_busy_timeout=5000")
 	if err != nil {
 		return nil, fmt.Errorf("durable sqlite open: %w", err)
 	}
