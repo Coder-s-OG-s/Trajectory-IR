@@ -21,6 +21,8 @@ type Server struct {
 	Store *Store
 	Token string // empty disables auth (local demos only)
 	Mux   *http.ServeMux
+	// DemoTimeout bounds the LangGraph demo subprocess. Zero uses 60s.
+	DemoTimeout time.Duration
 }
 
 // NewServer builds routes. Token defaults from TRAJIR_CONSOLE_TOKEN.

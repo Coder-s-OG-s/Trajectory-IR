@@ -346,22 +346,35 @@
     return Number(n).toFixed(6);
   }
 
+  const reservedPriceKeys = new Set(["__proto__", "constructor", "prototype"]);
+
+  function priceKeyAllowed(model) {
+    return !reservedPriceKeys.has(String(model || "").trim());
+  }
+
   function loadPrices() {
+    const all = Object.create(null);
     try {
       const raw = localStorage.getItem("trajir_console_prices");
-      if (!raw) return {};
+      if (!raw) return all;
       const parsed = JSON.parse(raw);
-      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
-      return parsed;
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return all;
+      Object.keys(parsed).forEach((key) => {
+        if (!priceKeyAllowed(key)) return;
+        const entry = parsed[key];
+        if (!entry || typeof entry !== "object" || Array.isArray(entry)) return;
+        all[key] = entry;
+      });
     } catch (_) {
-      return {};
+      return Object.create(null);
     }
+    return all;
   }
 
   function priceComplete(price) {
     if (!price || typeof price !== "object") return false;
     const model = String(price.model || "").trim();
-    if (!model || model.length > 200) return false;
+    if (!model || model.length > 200 || !priceKeyAllowed(model)) return false;
     const input = Number(price.input_usd_per_million);
     const output = Number(price.output_usd_per_million);
     if (!Number.isFinite(input) || !Number.isFinite(output) || input < 0 || output < 0) return false;
@@ -462,8 +475,8 @@
               tokenFact("Times trimmed", esc(fmt(run.projection_hits))),
               tokenFact("Raw chars", esc(fmt(run.raw_char_len))),
               tokenFact("Projected chars", esc(fmt(run.projected_char_len))),
-              tokenFact("Provider input", esc(fmt(run.prompt_tokens))),
-              tokenFact("Provider output", esc(fmt(run.completion_tokens))),
+              tokenFact("Latest provider input", esc(fmt(run.prompt_tokens))),
+              tokenFact("Latest provider output", esc(fmt(run.completion_tokens))),
               tokenFact("Model", esc(fmtText(run.model))),
               tokenFact("List price used", esc(listPriceLabel(run.model, prices))),
               tokenFact("List-price illustration", illustrationHTML(run, prices)),
@@ -485,7 +498,7 @@
         <div><h3>Latest trim</h3><p>The newest projection only. Re-trimming the same step does not change this cell.</p></div>
         <div><h3>Lifetime sum</h3><p>Every projection on that run, added. The home total uses this column.</p></div>
         <div><h3>Character counts</h3><p>Raw chars and projected chars from the newest projection. Check them against the estimates.</p></div>
-        <div><h3>Provider counts</h3><p>Flat prompt_tokens, completion_tokens, and model on the event. A nested usage object is not read.</p></div>
+        <div><h3>Provider counts</h3><p>Latest provider input and output are the last event that sent those counts. Earlier steps are not added. A nested usage object is not read. none means the field was never sent.</p></div>
       </div>
     </section>`;
   }
@@ -1022,7 +1035,7 @@
       : "";
     const charNote = `Latest raw characters ${fmt(economy.raw_char_len)}. Latest projected characters ${fmt(economy.projected_char_len)}. The estimates above are the server figures for those counts.`;
     const prices = loadPrices();
-    const providerNote = `Provider input ${fmt(economy.prompt_tokens)}. Provider output ${fmt(economy.completion_tokens)}. Model ${fmtText(economy.model)}. A nested usage object is not read. List-price illustration: ${illustrationText(economy, prices)}. Edit the list price on All runs. It stays in this browser.`;
+    const providerNote = `Latest provider input ${fmt(economy.prompt_tokens)}. Latest provider output ${fmt(economy.completion_tokens)}. These are the last event that sent the count, not a sum of steps. Model ${fmtText(economy.model)}. A nested usage object is not read. List-price illustration uses those latest counts only: ${illustrationText(economy, prices)}. It is not the character estimate. Edit the list price on All runs. It stays in this browser.`;
     $("panel-economy").innerHTML = `
       <p class="lede muted">We count how much context we dropped before calling the model. estimated_tokens uses ceil of chars divided by 4 on the server. This is not a provider invoice.</p>
       <p class="muted">${esc(charNote)}</p>

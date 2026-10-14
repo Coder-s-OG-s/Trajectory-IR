@@ -30,8 +30,10 @@ type Summary struct {
 	RawCharLen       *int `json:"raw_char_len"`
 	ProjectedCharLen *int `json:"projected_char_len"`
 
-	// Provider usage from flat payload keys. A later event that omits a key
-	// does not clear it. A nested usage object is not read.
+	// Latest provider usage from flat payload keys. These are the last event
+	// that sent each key, not a sum of steps. A later event that omits a key
+	// does not clear it. A nested usage object is not read. Do not price the
+	// character estimate from these fields.
 	PromptTokens     *int   `json:"prompt_tokens"`
 	CompletionTokens *int   `json:"completion_tokens"`
 	Model            string `json:"model,omitempty"`
@@ -147,8 +149,9 @@ func applyProjection(s *Summary, raw json.RawMessage) {
 	}
 }
 
-// applyProviderUsage keeps the last flat prompt_tokens, completion_tokens,
-// or model key. Missing keys on a later event are left alone.
+// applyProviderUsage keeps the latest flat prompt_tokens, completion_tokens,
+// or model key. It does not add steps together. Missing keys on a later
+// event are left alone. A nested usage object is not read.
 func applyProviderUsage(s *Summary, raw json.RawMessage) {
 	if n, ok := payloadIntOK(raw, "prompt_tokens"); ok {
 		s.PromptTokens = copyInt(&n)

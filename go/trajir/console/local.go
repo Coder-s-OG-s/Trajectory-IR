@@ -1,6 +1,7 @@
 package console
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,6 +13,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 )
 
 // startLocal launches a local process and does not wait. Tests replace it.
@@ -196,7 +198,9 @@ func (s *Server) handleRunLangGraphDemo(w http.ResponseWriter, r *http.Request) 
 		host = "127.0.0.1:8787"
 	}
 	consoleURL := "http://" + host
-	cmd := exec.Command(py, demo) // #nosec G204 -- fixed demo path, not request input
+	ctx, cancel := context.WithTimeout(r.Context(), s.demoTimeout())
+	defer cancel()
+	cmd := exec.CommandContext(ctx, py, demo) // #nosec G204 -- fixed demo path, not request input
 	cmd.Dir = root
 	sep := string(os.PathListSeparator)
 	cmd.Env = append(os.Environ(),
@@ -204,6 +208,9 @@ func (s *Server) handleRunLangGraphDemo(w http.ResponseWriter, r *http.Request) 
 		"TRAJIR_CONSOLE_URL="+consoleURL,
 		"PYTHONPATH="+root+sep+filepath.Join(root, "pkg"),
 	)
+	if s.Token != "" {
+		cmd.Env = append(cmd.Env, envAuthToken+"="+s.Token)
+	}
 	out, err := cmd.CombinedOutput()
 	trimmed := strings.TrimSpace(string(out))
 	if len(trimmed) > 4000 {
@@ -227,6 +234,13 @@ func (s *Server) handleRunLangGraphDemo(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
+func (s *Server) demoTimeout() time.Duration {
+	if s != nil && s.DemoTimeout > 0 {
+		return s.DemoTimeout
+	}
+	return 60 * time.Second
+}
+
 func resolveEvidenceRoot(consoleDataRoot string) (string, error) {
 	if v := strings.TrimSpace(os.Getenv("TRAJIR_EVIDENCE_ROOT")); v != "" {
 		if !isDir(v) {
@@ -234,13 +248,17 @@ func resolveEvidenceRoot(consoleDataRoot string) (string, error) {
 		}
 		return filepath.Clean(v), nil
 	}
-	// Sibling worktree: Trajectory-IR-wt-evidence next to this console checkout.
-	consoleRoot := filepath.Dir(consoleDataRoot)
-	sibling := filepath.Clean(filepath.Join(consoleRoot, "..", "Trajectory-IR-wt-evidence"))
-	if isDir(sibling) {
-		return sibling, nil
+	// A normal checkout keeps .console-data inside the repo that has the demo.
+	checkout := filepath.Dir(consoleDataRoot)
+	if demoScriptExists(checkout) {
+		return checkout, nil
 	}
-	return "", fmt.Errorf("set TRAJIR_EVIDENCE_ROOT to the evidence worktree (looked for %s)", sibling)
+	return "", fmt.Errorf("set TRAJIR_EVIDENCE_ROOT to the checkout that contains integrations/langgraph/demo_stub.py")
+}
+
+func demoScriptExists(root string) bool {
+	info, err := os.Stat(filepath.Join(root, "integrations", "langgraph", "demo_stub.py"))
+	return err == nil && !info.IsDir()
 }
 
 func resolvePython(evidenceRoot string) string {
@@ -250,8 +268,6 @@ func resolvePython(evidenceRoot string) string {
 	candidates := []string{
 		filepath.Join(evidenceRoot, ".venv", "Scripts", "python.exe"),
 		filepath.Join(evidenceRoot, ".venv", "bin", "python"),
-		filepath.Join(filepath.Dir(evidenceRoot), "Trajectory-IR", ".venv", "Scripts", "python.exe"),
-		filepath.Join(filepath.Dir(evidenceRoot), ".venv", "Scripts", "python.exe"),
 	}
 	for _, c := range candidates {
 		if st, err := os.Stat(c); err == nil && !st.IsDir() {
