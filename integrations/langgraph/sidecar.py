@@ -1,8 +1,9 @@
 """In-process evidence wrap: seal, then classify, then hashed key, then the tool.
 
 The wrap seals before the tool body runs. A post-hoc OTel collector cannot
-replace this wrap. Each distinct tool plan is one turn: a later plan commits
-the open step and seals the next step.
+replace this wrap. Each model turn is its own step, even when the plan matches
+the previous turn. Parallel tools that still have unused calls in that plan
+share the step.
 """
 
 from __future__ import annotations
@@ -64,8 +65,9 @@ class TrajIRToolGuard:
 
     Or call ``run_sealed`` from tests without LangGraph installed.
 
-    One plan is one turn. Parallel tools that share that plan take a lock so
-    each call gets its own sequence number. A different plan commits the open
+    One model turn is one step, even when the plan matches the previous turn.
+    Parallel tools that still have unused calls in that plan take a lock so
+    each call gets its own sequence number. A later turn commits the open
     step and seals ``step_n + 1``.
     """
 
@@ -81,6 +83,7 @@ class TrajIRToolGuard:
     _traj: Any = field(init=False, repr=False, default=None)
     _sealed: bool = field(init=False, repr=False, default=False)
     _plan_key: str = field(init=False, repr=False, default="")
+    _plan_len: int = field(init=False, repr=False, default=0)
     _tool_i: int = field(init=False, repr=False, default=0)
     _step_committed: bool = field(init=False, repr=False, default=False)
     _closed: bool = field(init=False, repr=False, default=False)
@@ -90,6 +93,7 @@ class TrajIRToolGuard:
         root = Path(self.work_dir)
         root.mkdir(parents=True, exist_ok=True)
         self._db_path = str(root / "nodes.sqlite")
+        self.step_n = self._resume_step()
         sink = from_env()
         self._traj = open_trajectory(
             self.tenant_id,
@@ -124,10 +128,42 @@ class TrajIRToolGuard:
         commit_step(self._traj, self.step_n, seq=2 + 2 * self._tool_i)
         self._step_committed = True
 
+    def _resume_step(self) -> int:
+        """Start after the last stored step so a second process does not reuse seq 0.
+
+        An unfinished step stays in the log. This is not exactly-once replay.
+        """
+        if not os.path.exists(self._db_path):
+            return self.step_n
+        log = NodeLog(self._db_path)
+        try:
+            rows = log.list_nodes(self.trajectory_id, tenant_id=self.tenant_id)
+        finally:
+            log.close()
+        steps = [int(row["step_n"]) for row in rows if row.get("step_n") is not None]
+        if not steps:
+            return self.step_n
+        return max(self.step_n, max(steps) + 1)
+
     def _seal_plan(self, tool_calls: Sequence[Mapping[str, Any]]) -> None:
-        """Caller holds ``_lock``. Same plan is a no-op. A new plan is a new step."""
+        """Caller holds ``_lock``.
+
+        Unused calls in the current plan stay on this step, so parallel tools
+        share one seal. Once those calls are used, or the step is committed,
+        the next call is a new turn and seals the next step even if the plan
+        matches.
+        """
         key, plan_calls = _plan_key_and_calls(tool_calls)
-        if self._sealed and key == self._plan_key:
+        plan_len = len(plan_calls)
+        if plan_len < 1:
+            plan_len = 1
+        same_turn = (
+            self._sealed
+            and key == self._plan_key
+            and not self._step_committed
+            and self._tool_i < self._plan_len
+        )
+        if same_turn:
             return
         if self._sealed:
             self._commit_open_step()
@@ -137,11 +173,13 @@ class TrajIRToolGuard:
             self.step_n = next_step
             self._tool_i = 0
             self._plan_key = key
+            self._plan_len = plan_len
             self._sealed = True
             self._step_committed = False
             return
         seal_decision(self._traj, self.step_n, {"tool_calls": plan_calls})
         self._plan_key = key
+        self._plan_len = plan_len
         self._sealed = True
         self._step_committed = False
 

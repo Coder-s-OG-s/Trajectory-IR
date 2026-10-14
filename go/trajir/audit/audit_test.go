@@ -1,6 +1,8 @@
 package audit_test
 
 import (
+	"crypto/ed25519"
+	"crypto/rand"
 	"os"
 	"path/filepath"
 	"strings"
@@ -314,5 +316,138 @@ func TestVerifyRequireSignature(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("findings=%v", res.Findings)
+	}
+}
+
+func TestVerifyReadOnlyLabelStillNeedsADecision(t *testing.T) {
+	dir := t.TempDir()
+	nl, err := nodelog.Open(filepath.Join(dir, "nodes.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer nl.Close()
+	step := 1
+	if _, err := nl.Append("PROJECT_CONTEXT", &step, map[string]any{"goal": "x"}, "t-label", "demo", 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := nl.Append("TOOL_CALL", &step, map[string]any{
+		"tool":         "write_file",
+		"args":         map[string]any{"path": "a.txt"},
+		"effect_class": "READ_ONLY",
+	}, "t-label", "demo", 2); err != nil {
+		t.Fatal(err)
+	}
+	out := filepath.Join(dir, "label.tir")
+	tenant := "demo"
+	if _, err := tir.Export(nl, "t-label", out, tir.ExportOptions{Mode: tir.ModeThin, TenantID: &tenant}); err != nil {
+		t.Fatal(err)
+	}
+	res, err := audit.VerifyFile(out, audit.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.OK {
+		t.Fatal("a self-labeled READ_ONLY write still needs a DECISION")
+	}
+	found := false
+	for _, f := range res.Findings {
+		if f.Code == "SEAL_BEFORE_EXECUTE" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("findings=%v", res.Findings)
+	}
+}
+
+func TestVerifyPlanToolKeyCannotHideOpenWorld(t *testing.T) {
+	dir := t.TempDir()
+	nl, err := nodelog.Open(filepath.Join(dir, "nodes.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer nl.Close()
+	step := 1
+	if _, err := nl.Append("DECISION", &step, map[string]any{
+		"plan": map[string]any{"tool_calls": []any{
+			map[string]any{"tool": "shell", "effect": "READ_ONLY"},
+		}},
+	}, "t-toolkey", "demo", 1); err != nil {
+		t.Fatal(err)
+	}
+	out := filepath.Join(dir, "toolkey.tir")
+	tenant := "demo"
+	if _, err := tir.Export(nl, "t-toolkey", out, tir.ExportOptions{Mode: tir.ModeThin, TenantID: &tenant}); err != nil {
+		t.Fatal(err)
+	}
+	res, err := audit.VerifyFile(out, audit.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined := ""
+	for _, f := range res.Findings {
+		joined += f.Code + " "
+	}
+	if !strings.Contains(joined, "OPEN_WORLD_LIE") {
+		t.Fatalf("findings=%v", res.Findings)
+	}
+}
+
+func TestVerifyTrustStoreRejectsOtherKey(t *testing.T) {
+	dir := t.TempDir()
+	nl, err := nodelog.Open(filepath.Join(dir, "nodes.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer nl.Close()
+	step := 1
+	if _, err := nl.Append("PROJECT_CONTEXT", &step, map[string]any{"goal": "x"}, "t-trust", "demo", 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := nl.Append("DECISION", &step, map[string]any{
+		"plan": map[string]any{"tool_calls": []any{
+			map[string]any{"name": "echo", "args": map[string]any{"msg": "hi"}},
+		}},
+	}, "t-trust", "demo", 1); err != nil {
+		t.Fatal(err)
+	}
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, otherPriv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := filepath.Join(dir, "trust.tir")
+	tenant := "demo"
+	if _, err := tir.Export(nl, "t-trust", out, tir.ExportOptions{
+		Mode:     tir.ModeThin,
+		TenantID: &tenant,
+		SignKey:  priv,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	other := otherPriv.Public().(ed25519.PublicKey)
+	bad, err := audit.VerifyFile(out, audit.Options{TrustedKeys: []ed25519.PublicKey{other}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bad.OK {
+		t.Fatal("a pack signed by another key must fail the trust store")
+	}
+	joined := ""
+	for _, f := range bad.Findings {
+		joined += f.Code + " " + f.Message + "\n"
+	}
+	if !strings.Contains(joined, "SIGNATURE_REQUIRED") || !strings.Contains(joined, "trust store") {
+		t.Fatalf("findings=%v", bad.Findings)
+	}
+	good, err := audit.VerifyFile(out, audit.Options{TrustedKeys: []ed25519.PublicKey{pub}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !good.OK {
+		t.Fatalf("trusted key should pass, findings=%v", good.Findings)
 	}
 }

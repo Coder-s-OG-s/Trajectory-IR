@@ -205,3 +205,70 @@ def test_wrap_returns_tool_message_when_body_skipped(
     assert getattr(msg, "content", None) == "from-resume"
     assert getattr(msg, "tool_call_id", None) == "call-9"
     assert getattr(msg, "type", None) == "tool"
+
+
+def _steps(tmp_path: Path, trajectory_id: str) -> tuple[list[int], list[int]]:
+    log = NodeLog(str(tmp_path / "nodes.sqlite"))
+    try:
+        rows = log.list_nodes(trajectory_id, tenant_id="demo")
+    finally:
+        log.close()
+    decisions = [r["step_n"] for r in rows if r["kind"] == "DECISION"]
+    tools = [r["step_n"] for r in rows if r["kind"] == "TOOL_CALL"]
+    return decisions, tools
+
+
+def test_later_turn_with_the_same_plan_seals_a_new_step(tmp_path: Path) -> None:
+    with TrajIRToolGuard(
+        tenant_id="demo",
+        trajectory_id="ut-same",
+        work_dir=tmp_path,
+        effect_hints={"echo": EffectClass.PURE},
+    ) as guard:
+        guard.run_sealed("echo", {"msg": "x"}, lambda msg: msg)
+        guard.run_sealed("echo", {"msg": "x"}, lambda msg: msg)
+        guard.finish()
+    decisions, tools = _steps(tmp_path, "ut-same")
+    assert decisions == [1, 2]
+    assert tools == [1, 2]
+
+
+def test_sequential_tools_on_one_plan_share_a_step(tmp_path: Path) -> None:
+    plan = [
+        {"name": "echo", "args": {"msg": "a"}},
+        {"name": "echo", "args": {"msg": "b"}},
+    ]
+    with TrajIRToolGuard(
+        tenant_id="demo",
+        trajectory_id="ut-share",
+        work_dir=tmp_path,
+        effect_hints={"echo": EffectClass.PURE},
+    ) as guard:
+        guard.run_sealed("echo", {"msg": "a"}, lambda msg: msg, plan_calls=plan)
+        guard.run_sealed("echo", {"msg": "b"}, lambda msg: msg, plan_calls=plan)
+        guard.finish()
+    decisions, tools = _steps(tmp_path, "ut-share")
+    assert decisions == [1]
+    assert tools == [1, 1]
+
+
+def test_resume_starts_after_the_last_logged_step(tmp_path: Path) -> None:
+    with TrajIRToolGuard(
+        tenant_id="demo",
+        trajectory_id="ut-resume",
+        work_dir=tmp_path,
+        effect_hints={"echo": EffectClass.PURE},
+    ) as guard:
+        guard.run_sealed("echo", {"msg": "x"}, lambda msg: msg)
+        guard.finish()
+    with TrajIRToolGuard(
+        tenant_id="demo",
+        trajectory_id="ut-resume",
+        work_dir=tmp_path,
+        effect_hints={"echo": EffectClass.PURE},
+    ) as guard:
+        guard.run_sealed("echo", {"msg": "x"}, lambda msg: msg)
+        guard.finish()
+    decisions, tools = _steps(tmp_path, "ut-resume")
+    assert decisions == [1, 2]
+    assert tools == [1, 2]

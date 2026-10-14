@@ -70,7 +70,7 @@ path = guard.export_tir(".local-evidence/lg-live.tir")
 guard.close()
 ```
 
-Each distinct tool plan is one turn. The guard seals that plan, then runs the tools. A later model call with a different plan commits the open step and seals the next step. Parallel tools on the same plan share one seal and take separate sequence numbers. If resume skips the tool body, the wrap returns a tool message from the sealed result.
+Each model turn seals a new step, even when the plan matches the previous turn. The guard seals that plan, then runs the tools. Parallel tools that still have unused calls in that plan share one seal and take separate sequence numbers. Opening the same work directory again continues after the last stored step instead of starting at step 1. If resume skips the tool body, the wrap returns a tool message from the sealed result.
 
 Then:
 
@@ -78,7 +78,11 @@ Then:
 go\trajir.exe verify .local-evidence\lg-live.tir
 # or JSON for console / CI
 go\trajir.exe verify --json .local-evidence\lg-live.tir
+# pin the signer. A pack signed by any other key fails.
+go\trajir.exe verify --require-signature --trust-key <hex-public-key> .local-evidence\lg-live.tir
 ```
+
+`--require-signature` fails when the SIGNATURE member is missing. `--trust-key` turns the trust store on. Repeat it for more than one key. `--trust-key-id` checks `signer.key_id`. With no trust store, verify does not pin a key. This is not Sigstore.
 
 ---
 

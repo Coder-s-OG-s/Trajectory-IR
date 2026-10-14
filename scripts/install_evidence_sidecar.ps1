@@ -8,13 +8,20 @@ Write-Host "== Evidence Sidecar install =="
 Write-Host "  root: $root"
 
 Write-Host "== build trajir verify CLI =="
+$prevEap = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
 Push-Location (Join-Path $root "go")
-go build -o trajir.exe ./cmd/trajir
+& go build -o trajir.exe ./cmd/trajir
+$buildCode = $LASTEXITCODE
 Pop-Location
+$ErrorActionPreference = $prevEap
+if ($buildCode -ne 0) { throw "go build failed with exit $buildCode" }
 $exe = Join-Path $root "go\trajir.exe"
-if (-not (Test-Path $exe)) { throw "missing $exe" }
+if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) { throw "missing $exe" }
 Write-Host "  OK $exe"
-& $exe verify -h 2>&1 | Select-Object -First 5
+$ErrorActionPreference = "Continue"
+& $exe verify -h 2>&1 | Select-Object -First 5 | ForEach-Object { Write-Host $_ }
+$ErrorActionPreference = "Stop"
 
 Write-Host ""
 Write-Host "Next:"

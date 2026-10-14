@@ -5,7 +5,9 @@
 package audit
 
 import (
+	"crypto/ed25519"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -14,10 +16,15 @@ import (
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/tir"
 )
 
-// Options control VerifyPackage.
+// Options control VerifyFile. A nil trust store means the store is not
+// configured. An empty non-nil store rejects both unsigned and signed packs.
 type Options struct {
 	// RequireSignature fails when the package has no SIGNATURE member.
 	RequireSignature bool
+	// TrustedKeys, when non-nil, requires the package public key to match one entry.
+	TrustedKeys []ed25519.PublicKey
+	// TrustedKeyIDs, when non-nil, requires document signer.key_id to be listed.
+	TrustedKeyIDs []string
 }
 
 // Finding is one audit failure.
@@ -37,15 +44,25 @@ type Result struct {
 	Findings []Finding `json:"findings"`
 }
 
-// VerifyFile loads path with hash verification, then runs policy checks.
+// VerifyFile loads path with hash verification and the trust store, then runs
+// policy checks. --require-signature and a configured trust store are enforced
+// inside LoadWithOptions, so a pack signed by an untrusted key does not pass.
 func VerifyFile(path string, opts Options) (*Result, error) {
-	pkg, err := tir.Load(path)
+	pkg, err := tir.LoadWithOptions(path, tir.VerifyOptions{
+		RequireSignature: opts.RequireSignature,
+		TrustedKeys:      opts.TrustedKeys,
+		TrustedKeyIDs:    opts.TrustedKeyIDs,
+	})
 	if err != nil {
+		code := "LOAD_FAILED"
+		if errors.Is(err, tir.ErrSignature) {
+			code = "SIGNATURE_REQUIRED"
+		}
 		return &Result{
 			Path: path,
 			OK:   false,
 			Findings: []Finding{{
-				Code:    "LOAD_FAILED",
+				Code:    code,
 				Message: err.Error(),
 			}},
 		}, nil
@@ -135,24 +152,8 @@ func checkSealBeforeExecute(nodes []map[string]any) []Finding {
 		}
 		payload, _ := n["payload"].(map[string]any)
 		toolName := toolNameFromPayload(payload)
-		needsSeal := true
-		if eff, ok := effectFromPayload(payload); ok {
-			// Only force seal for mutating / open-world / spawn / sensitive.
-			switch effects.EffectClass(eff) {
-			case effects.PURE, effects.READ_ONLY, effects.IDEMPOTENT_WRITE:
-				if !effects.IsOpenWorldPrimitive(toolName) {
-					needsSeal = false
-				}
-			}
-		} else if toolName != "" && !effects.IsOpenWorldPrimitive(toolName) {
-			// No effect recorded: still require a DECISION for every TOOL_CALL.
-			// That is the Chain-of-Evidence rule (seal before execute_tool).
-			needsSeal = true
-		}
-
-		if !needsSeal {
-			continue
-		}
+		// The payload effect_class is the agent's own label. A write tagged
+		// READ_ONLY or IDEMPOTENT_WRITE still needs a DECISION sealed first.
 		decSeq, has := decisionSeq[step]
 		if !has || decSeq >= seq {
 			name := toolName
@@ -213,10 +214,7 @@ func checkPlanMembership(nodes []map[string]any) []Finding {
 			if !ok {
 				continue
 			}
-			name, _ := call["name"].(string)
-			if name == "" {
-				name, _ = call["tool"].(string)
-			}
+			name := callName(call)
 			if name == "" {
 				continue
 			}
@@ -314,7 +312,7 @@ func checkOpenWorldLies(nodes []map[string]any) []Finding {
 				if !ok {
 					continue
 				}
-				name, _ := call["name"].(string)
+				name := callName(call)
 				eff, ok := effectFromCall(call)
 				if !ok || name == "" {
 					continue
@@ -329,6 +327,19 @@ func checkOpenWorldLies(nodes []map[string]any) []Finding {
 		}
 	}
 	return out
+}
+
+func callName(call map[string]any) string {
+	if call == nil {
+		return ""
+	}
+	if name, ok := call["name"].(string); ok && name != "" {
+		return name
+	}
+	if name, ok := call["tool"].(string); ok {
+		return name
+	}
+	return ""
 }
 
 func toolNameFromPayload(payload map[string]any) string {
