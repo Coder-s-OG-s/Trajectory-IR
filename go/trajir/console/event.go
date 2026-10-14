@@ -25,7 +25,7 @@ const (
 	KindExportStarted    = "export.started"
 	KindExportCompleted  = "export.completed"
 	KindImportCompleted  = "import.completed"
-	// KindAuditCompleted is trajir verify output from the LangGraph evidence demo.
+	// KindAuditCompleted is trajir verify / evidence auditor output (TURNING_POINT).
 	KindAuditCompleted = "audit.completed"
 )
 
