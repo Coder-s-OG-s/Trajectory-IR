@@ -32,7 +32,7 @@ func testSignKey() ed25519.PrivateKey {
 	return ed25519.NewKeyFromSeed(sum[:])
 }
 
-func TestExportSignFailureRemovesUnsignedPackage(t *testing.T) {
+func TestExportSignFailureKeepsExistingPackage(t *testing.T) {
 	nl := exportSampleLog(t)
 	dir := t.TempDir()
 	out := filepath.Join(dir, "out.tir")
@@ -41,6 +41,9 @@ func TestExportSignFailureRemovesUnsignedPackage(t *testing.T) {
 	}
 
 	signExport = func(path string, _ ed25519.PrivateKey, _ SignerMeta) error {
+		if path == out {
+			return errors.New("signed the destination instead of the temp")
+		}
 		zr, zerr := zip.OpenReader(path)
 		if zerr != nil {
 			return zerr
@@ -63,24 +66,50 @@ func TestExportSignFailureRemovesUnsignedPackage(t *testing.T) {
 	defer func() { signExport = Sign }()
 
 	var notice ExportNotice
-	sawFile := false
 	_, err := Export(nl, "t-export", out, ExportOptions{
-		Mode:    ModeThin,
-		SignKey: testSignKey(),
-		OnExported: func(n ExportNotice) {
-			notice = n
-			_, statErr := os.Stat(n.Path)
-			sawFile = statErr == nil
-		},
+		Mode:       ModeThin,
+		SignKey:    testSignKey(),
+		OnExported: func(n ExportNotice) { notice = n },
 	})
 	if err == nil || !strings.Contains(err.Error(), "disk full") {
 		t.Fatalf("err=%v", err)
 	}
-	if notice.OK || !strings.Contains(notice.Error, "disk full") || notice.Bytes <= 0 || !sawFile {
-		t.Fatalf("notice=%+v sawFile=%v", notice, sawFile)
+	if notice.OK || !strings.Contains(notice.Error, "disk full") || notice.Bytes <= 0 {
+		t.Fatalf("notice=%+v", notice)
 	}
-	if _, statErr := os.Stat(out); !os.IsNotExist(statErr) {
-		t.Fatalf("dest after failed sign: %v", statErr)
+	got, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatalf("dest after failed sign: %v", err)
+	}
+	if string(got) != "OLD" {
+		t.Fatalf("dest=%q", got)
+	}
+	for _, pat := range []string{".tir-export-*", "tir-sign-*.tmp"} {
+		left, err := filepath.Glob(filepath.Join(dir, pat))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(left) != 0 {
+			t.Fatalf("temp left behind: %v", left)
+		}
+	}
+}
+
+func TestExportSignFailureWithoutExistingLeavesNothing(t *testing.T) {
+	nl := exportSampleLog(t)
+	dir := t.TempDir()
+	out := filepath.Join(dir, "fresh.tir")
+
+	signExport = func(string, ed25519.PrivateKey, SignerMeta) error {
+		return errors.New("disk full")
+	}
+	defer func() { signExport = Sign }()
+
+	if _, err := Export(nl, "t-export", out, ExportOptions{Mode: ModeThin, SignKey: testSignKey()}); err == nil {
+		t.Fatal("expected sign error")
+	}
+	if _, err := os.Stat(out); !os.IsNotExist(err) {
+		t.Fatalf("unsigned package published: %v", err)
 	}
 	left, err := filepath.Glob(filepath.Join(dir, ".tir-export-*"))
 	if err != nil {

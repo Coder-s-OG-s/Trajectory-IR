@@ -620,16 +620,6 @@ func Export(nodeLog *nodelog.NodeLog, trajectoryID, dest string, opts ExportOpti
 	if err := os.Chmod(tmpName, 0o644); err != nil {
 		return "", err
 	}
-	if beforeExportReplace != nil {
-		if err := beforeExportReplace(); err != nil {
-			return "", err
-		}
-	}
-	if err := installFile(tmpName, destPath); err != nil {
-		return "", err
-	}
-	published = true
-
 	memberCount := 5
 	if mode == ModeFat {
 		memberCount += len(artifactBytes)
@@ -641,18 +631,30 @@ func Export(nodeLog *nodelog.NodeLog, trajectoryID, dest string, opts ExportOpti
 		MemberCount: memberCount,
 		NodeCount:   len(nodeList),
 	}
+	// Sign the temp before it is installed so a failed sign never touches
+	// destPath: an existing package stays in place and no unsigned zip is
+	// ever published.
 	if len(opts.SignKey) != 0 {
-		if err := signExport(destPath, opts.SignKey, opts.SignerMeta); err != nil {
+		if err := signExport(tmpName, opts.SignKey, opts.SignerMeta); err != nil {
 			notice.OK = false
 			notice.Error = err.Error()
-			if st, statErr := os.Stat(destPath); statErr == nil {
+			if st, statErr := os.Stat(tmpName); statErr == nil {
 				notice.Bytes = st.Size()
 			}
 			notifyExport(opts.OnExported, notice)
-			_ = os.Remove(destPath)
 			return "", err
 		}
 	}
+	if beforeExportReplace != nil {
+		if err := beforeExportReplace(); err != nil {
+			return "", err
+		}
+	}
+	if err := installFile(tmpName, destPath); err != nil {
+		return "", err
+	}
+	published = true
+
 	if st, err := os.Stat(destPath); err == nil {
 		notice.Bytes = st.Size()
 	}
