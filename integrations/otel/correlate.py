@@ -31,7 +31,7 @@ def current_span() -> Any:
     if pinned is not None:
         return pinned
     try:
-        from opentelemetry import trace
+        from opentelemetry import trace  # type: ignore[import-not-found]
     except ImportError:
         return None
     try:
