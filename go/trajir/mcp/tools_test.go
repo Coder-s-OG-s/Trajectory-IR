@@ -167,7 +167,7 @@ func TestToolsViaInMemoryMCP(t *testing.T) {
 
 	// path escape must fail
 	escape, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
-		Name: "trajectory_import_tir",
+		Name:      "trajectory_import_tir",
 		Arguments: map[string]any{"path": filepath.Join(t.TempDir(), "evil.tir")},
 	})
 	if err != nil {
@@ -179,7 +179,7 @@ func TestToolsViaInMemoryMCP(t *testing.T) {
 
 	// import
 	im, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
-		Name: "trajectory_import_tir",
+		Name:      "trajectory_import_tir",
 		Arguments: map[string]any{"path": dest},
 	})
 	if err != nil {
@@ -191,7 +191,7 @@ func TestToolsViaInMemoryMCP(t *testing.T) {
 
 	// verify unsigned
 	vr, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
-		Name: "trajectory_verify_signature",
+		Name:      "trajectory_verify_signature",
 		Arguments: map[string]any{"path": dest},
 	})
 	if err != nil {
@@ -217,7 +217,7 @@ func TestToolsViaInMemoryMCP(t *testing.T) {
 	// require_signature on unsigned reports a structured failure (not a
 	// protocol error), so status:"failed" actually reaches the wire.
 	if strict, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
-		Name: "trajectory_verify_signature",
+		Name:      "trajectory_verify_signature",
 		Arguments: map[string]any{"path": dest, "require_signature": true},
 	}); err != nil {
 		t.Fatal(err)
@@ -229,7 +229,7 @@ func TestToolsViaInMemoryMCP(t *testing.T) {
 
 	// missing tenant
 	if miss, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
-		Name: "trajectory_status",
+		Name:      "trajectory_status",
 		Arguments: map[string]any{"work_dir": work, "tenant_id": "", "trajectory_id": "mcp-traj"},
 	}); err != nil {
 		t.Fatal(err)
@@ -353,7 +353,6 @@ func TestStatusRejectsSymlinkNodesDB(t *testing.T) {
 		t.Fatal("expected symlink nodes.sqlite to fail status")
 	}
 }
-
 
 func mustJSON(t *testing.T, v any) string {
 	t.Helper()

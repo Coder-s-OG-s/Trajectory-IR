@@ -229,6 +229,71 @@ func TestMockClaimToolCallWinAndLose(t *testing.T) {
 	}
 }
 
+func TestMockClaimToolCallInsertUniqueViolationReturnsFalse(t *testing.T) {
+	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherRegexp))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	expectDDL(mock)
+
+	nl, err := OpenDB(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT 1 FROM nodes").WillReturnError(sql.ErrNoRows)
+	mock.ExpectExec("INSERT INTO nodes").WillReturnError(errors.New("ERROR: duplicate key value violates unique constraint \"idx_nodes_slot\" (SQLSTATE 23505)"))
+	mock.ExpectRollback()
+
+	claimed, err := nl.ClaimToolCall(1, map[string]any{"tool": "x"}, "t1", "demo", 2)
+	if err != nil {
+		t.Fatalf("unexpected err on unique violation: %v", err)
+	}
+	if claimed {
+		t.Fatal("expected lose claim on unique violation")
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestMockClaimToolCallInsertNonConflictErrorPropagates(t *testing.T) {
+	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherRegexp))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	expectDDL(mock)
+
+	nl, err := OpenDB(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT 1 FROM nodes").WillReturnError(sql.ErrNoRows)
+	mock.ExpectExec("INSERT INTO nodes").WillReturnError(errors.New("connection reset by peer"))
+	mock.ExpectRollback()
+
+	claimed, err := nl.ClaimToolCall(1, map[string]any{"tool": "x"}, "t1", "demo", 2)
+	if err == nil {
+		t.Fatal("expected non-conflict error to be propagated, got nil")
+	}
+	if !strings.Contains(err.Error(), "connection reset by peer") {
+		t.Fatalf("expected error to mention 'connection reset by peer', got %v", err)
+	}
+	if claimed {
+		t.Fatal("expected claimed=false on error")
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestMockAppendSlotConflict(t *testing.T) {
 	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherRegexp))
 	if err != nil {
@@ -311,5 +376,24 @@ func TestMockAppendInsertErrorKeepsTheDriverError(t *testing.T) {
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestSanitizePGErrRedactsPassword(t *testing.T) {
+	rawDSN := "postgres://user:super_secret_password123@localhost:5432/trajir_db"
+	errWithSecret := errors.New("failed to connect to server: super_secret_password123 was rejected")
+	sanitized := sanitizePGErr(errWithSecret, rawDSN)
+	if strings.Contains(sanitized.Error(), "super_secret_password123") {
+		t.Fatalf("sanitized error leaked password: %v", sanitized)
+	}
+	if !strings.Contains(sanitized.Error(), "[REDACTED]") {
+		t.Fatalf("expected [REDACTED] in error, got: %v", sanitized)
+	}
+
+	rawKV := "host=localhost user=admin password=another_secret dbname=db"
+	errWithKV := errors.New("connection failed: password=another_secret invalid")
+	sanitizedKV := sanitizePGErr(errWithKV, rawKV)
+	if strings.Contains(sanitizedKV.Error(), "another_secret") {
+		t.Fatalf("sanitized KV leaked password: %v", sanitizedKV)
 	}
 }

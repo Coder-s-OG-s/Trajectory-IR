@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/emit"
+	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/workdir"
 )
 
 const packagesDir = emit.PackagesDir
@@ -114,20 +115,13 @@ func (s *Store) PackagePath(trajectoryID, name string) (string, error) {
 }
 
 func underRoot(root, candidate string) bool {
-	rootAbs, err := filepath.Abs(root)
+	rootCanon, err := workdir.ResolveViaExistingAncestor(root)
 	if err != nil {
 		return false
 	}
-	candAbs, err := filepath.Abs(candidate)
+	candCanon, err := workdir.ResolveViaExistingAncestor(candidate)
 	if err != nil {
 		return false
 	}
-	rel, err := filepath.Rel(rootAbs, candAbs)
-	if err != nil {
-		return false
-	}
-	if rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
-		return false
-	}
-	return true
+	return workdir.IsSubpath(rootCanon, candCanon)
 }

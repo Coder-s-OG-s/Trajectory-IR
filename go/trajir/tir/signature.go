@@ -7,9 +7,9 @@ package tir
 
 import (
 	"archive/zip"
-	"bytes"
 	"crypto/ed25519"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
@@ -251,7 +251,7 @@ func verifySignatureBytes(members map[string][]byte, sigRaw []byte, opts VerifyO
 	}
 	gotHashHex := strings.ToLower(strings.TrimSpace(doc.PayloadHash))
 	wantHashHex := hex.EncodeToString(wantHash[:])
-	if gotHashHex != wantHashHex {
+	if subtle.ConstantTimeCompare([]byte(gotHashHex), []byte(wantHashHex)) != 1 {
 		return nil, fmt.Errorf("%w: payload_hash mismatch", ErrSignature)
 	}
 
@@ -274,7 +274,7 @@ func verifySignatureBytes(members map[string][]byte, sigRaw []byte, opts VerifyO
 	keyID := doc.Signer.KeyID
 	if keyID == "" {
 		keyID = KeyID(pub)
-	} else if keyID != KeyID(pub) {
+	} else if subtle.ConstantTimeCompare([]byte(keyID), []byte(KeyID(pub))) != 1 {
 		// Allow document key_id if it matches recomputed; reject mismatch as tamper.
 		return nil, fmt.Errorf("%w: signer.key_id does not match public_key", ErrSignature)
 	}
@@ -282,7 +282,7 @@ func verifySignatureBytes(members map[string][]byte, sigRaw []byte, opts VerifyO
 	if opts.TrustedKeys != nil {
 		ok := false
 		for _, tk := range opts.TrustedKeys {
-			if bytes.Equal(tk, pub) {
+			if subtle.ConstantTimeCompare(tk, pub) == 1 {
 				ok = true
 				break
 			}
@@ -294,7 +294,7 @@ func verifySignatureBytes(members map[string][]byte, sigRaw []byte, opts VerifyO
 	if opts.TrustedKeyIDs != nil {
 		ok := false
 		for _, id := range opts.TrustedKeyIDs {
-			if id == keyID {
+			if subtle.ConstantTimeCompare([]byte(id), []byte(keyID)) == 1 {
 				ok = true
 				break
 			}
@@ -357,17 +357,15 @@ func collectZipMembers(files []*zip.File) (members map[string][]byte, signature 
 				ErrLimit, name, f.UncompressedSize64, MaxUncompressedEntryBytes,
 			)
 		}
-		if int(f.UncompressedSize64) > budget {
-			return nil, nil, fmt.Errorf(
-				"%w: zip total uncompressed size would exceed limit %d",
-				ErrLimit, MaxTotalUncompressedBytes,
-			)
+		readLimit := int64(budget)
+		if int64(MaxUncompressedEntryBytes) < readLimit {
+			readLimit = int64(MaxUncompressedEntryBytes)
 		}
 		rc, err := f.Open()
 		if err != nil {
 			return nil, nil, err
 		}
-		limited := io.LimitReader(rc, int64(MaxUncompressedEntryBytes)+1)
+		limited := io.LimitReader(rc, readLimit+1)
 		data, err := io.ReadAll(limited)
 		_ = rc.Close()
 		if err != nil {
@@ -375,6 +373,9 @@ func collectZipMembers(files []*zip.File) (members map[string][]byte, signature 
 		}
 		if len(data) > MaxUncompressedEntryBytes {
 			return nil, nil, fmt.Errorf("%w: zip member %q expanded beyond per-entry limit", ErrLimit, name)
+		}
+		if len(data) > budget {
+			return nil, nil, fmt.Errorf("%w: zip total uncompressed size would exceed limit %d", ErrLimit, MaxTotalUncompressedBytes)
 		}
 		budget -= len(data)
 		if name == SignatureMemberName {

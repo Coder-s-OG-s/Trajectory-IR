@@ -10,7 +10,10 @@ import (
 )
 
 func TestPathConfinementRejectsEscape(t *testing.T) {
-	root := t.TempDir()
+	root, err := workdir.CanonicalizeDir(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
 	t.Setenv(EnvWorkspaceRoot, root)
 
 	// Create an outside dir we must not touch.
@@ -249,4 +252,3 @@ func TestOpenBoundedTIR(t *testing.T) {
 		}
 	}
 }
-
