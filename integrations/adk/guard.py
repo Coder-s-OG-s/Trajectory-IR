@@ -2,12 +2,20 @@
 
     from integrations.adk import AdkToolGuard
 
-    guard = AdkToolGuard(tenant_id="demo", trajectory_id="adk-live", work_dir=".local-evidence/adk-live")
-    agent = Agent(tools=my_tools, before_tool_callback=guard.before_tool_callback, after_tool_callback=guard.after_tool_callback)
+    guard = AdkToolGuard(
+        tenant_id="demo",
+        trajectory_id="adk-live",
+        work_dir=".local-evidence/adk-live",
+    )
+    agent = Agent(
+        tools=my_tools,
+        before_tool_callback=guard.before_tool_callback,
+        after_tool_callback=guard.after_tool_callback,
+    )
 
 ``before_tool_callback`` seals and returns None so ADK runs the tool.
 ``after_tool_callback`` stores the response ADK already has. Neither callback
-calls the tool.
+calls the tool. A missing call id raises ValueError.
 """
 
 from __future__ import annotations
@@ -32,7 +40,7 @@ def _use_id(tool: Any, args: Any, tool_context: Any) -> str:
             value = source.get(attr) if isinstance(source, dict) else getattr(source, attr, None)
             if value:
                 return str(value)
-    return _tool_name(tool) or "adk-tool"
+    raise ValueError("tool call id is required")
 
 
 def _args(args: Any) -> dict[str, Any]:
@@ -56,7 +64,7 @@ class AdkToolGuard:
             _args(args),
             _use_id(tool, args, tool_context),
         )
-        return None
+        return
 
     def after_tool_callback(
         self,
@@ -74,4 +82,4 @@ class AdkToolGuard:
             _use_id(tool, args, tool_context),
             tool_response,
         )
-        return None
+        return

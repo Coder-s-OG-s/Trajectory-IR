@@ -10,7 +10,7 @@ pwsh -File scripts\install_claude.ps1
 ./go/trajir.exe verify pack.tir
 ```
 
-The PreToolUse hook seals the decision. The host then runs the tool. The PostToolUse hook records the result. `trajir verify` checks the pack offline.
+The PreToolUse hook seals the decision. The host then runs the tool. The PostToolUse hook records the result. PostToolUseFailure records a failed tool and clears its pending row. The hook writes the log directly and does not start DBOS. On this path the tool-call row is stored after the host tool, so it records the call. The LangGraph wrap is the path that gates the tool body. `trajir verify` checks the pack offline.
 
 A LangGraph process uses the wrap that is already on main:
 
@@ -30,4 +30,4 @@ An unknown tool, and any tool named Bash, is `NON_IDEMPOTENT_WRITE`. A crash aft
 
 Token numbers on the console are `ceil(chars/4)` estimates. They are not a provider invoice. The adopter list is empty. This is not exactly-once, not a process sandbox, and not Sigstore. OpenTelemetry labels are copied only after the in-process seal.
 
-The Article 12 field map is [ARTICLE_12_FIELD_MAP.md](../../docs/ARTICLE_12_FIELD_MAP.md). It names the pack fields. It is not a compliance claim.
+The Article 12 field map is [Article 12 field map](article-12-field-map.md). It names the pack fields. It is not a compliance claim.

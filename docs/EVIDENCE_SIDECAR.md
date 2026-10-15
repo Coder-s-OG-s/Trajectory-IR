@@ -30,8 +30,9 @@ The script builds `go\trajir.exe` and `go\trajir-mcp.exe`, writes
 `.claude\settings.local.json` and `.mcp.json` in this worktree, and verifies
 one smoke pack. It does not edit the user profile Claude config and it does
 not start a console. The PreToolUse hook seals the decision. Claude then runs
-the tool. The PostToolUse hook records the result. Bash stays
-`NON_IDEMPOTENT_WRITE`.
+the tool. The PostToolUse hook records the result. PostToolUseFailure records
+a failed tool and clears its pending row. The hook writes NodeLog directly
+and does not start DBOS. Bash stays `NON_IDEMPOTENT_WRITE`.
 
 The field map for an Article 12 style question list is
 [ARTICLE_12_FIELD_MAP.md](ARTICLE_12_FIELD_MAP.md). It is a map of pack

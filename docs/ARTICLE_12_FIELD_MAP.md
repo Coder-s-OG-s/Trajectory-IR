@@ -4,6 +4,8 @@ This is a map from a `.tir` pack to the questions in Article 12. It is not a com
 
 The pack is evidence only when the decision was sealed in process before the tool body. A log that arrives after the tool finished does not answer these questions.
 
+On the Claude and ADK hook path, the DECISION row is sealed before the host runs the tool. The TOOL_CALL row is written after the host has already run the tool, so that row records the call and does not gate it. The in-process LangGraph wrap writes TOOL_CALL before the tool body, and that wrap is the gate.
+
 | Question | Where it is in the pack | What it is not |
 | --- | --- | --- |
 | Who acted | `tenant_id` on every node | A user directory or an employer name. The tenant string is whatever the host passed in. |

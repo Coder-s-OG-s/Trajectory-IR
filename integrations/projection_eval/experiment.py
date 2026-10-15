@@ -12,7 +12,6 @@ from typing import Any
 
 from trajectory_ir.runtime.projector import project_context
 
-
 ANSWER = "NORTH"
 
 
@@ -85,7 +84,8 @@ def run_experiment() -> dict[str, Any]:
         "winner_on_provider_tokens": winner,
         "note": (
             "Provider prompt_tokens and completion_tokens were not sent, so they stay none. "
-            "The console estimate is ceil of the projected context's character length divided by 4. "
+            "The console estimate is ceil of the projected context's "
+            "character length divided by 4. "
             "A lower estimate is not a savings claim."
         ),
     }
@@ -97,7 +97,10 @@ def render_markdown(result: dict[str, Any]) -> str:
         "",
         "One fixed diary. Two arms. No model call.",
         "",
-        "| Arm | Task score | Provider prompt_tokens | Provider completion_tokens | Console estimate |",
+        (
+            "| Arm | Task score | Provider prompt_tokens | "
+            "Provider completion_tokens | Console estimate |"
+        ),
         "| --- | --- | --- | --- | --- |",
     ]
     for arm in result["arms"]:
@@ -114,7 +117,8 @@ def render_markdown(result: dict[str, Any]) -> str:
             result["note"],
             "",
             "Task score is 1 when the constraint text NORTH is still in the projected context.",
-            "CONSTRAINT is never dropped to fit a budget. If it cannot fit, projection raises BUDGET_IMPOSSIBLE.",
+            "CONSTRAINT is never dropped to fit a budget. If it cannot fit, "
+            "projection raises BUDGET_IMPOSSIBLE.",
             "",
             "Winner on provider tokens: none. The provider columns were not measured.",
             "",

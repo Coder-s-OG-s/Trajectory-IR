@@ -32,4 +32,4 @@ def tool_use_id(event: dict) -> str:
     raw = event.get("tool_use_id")
     if raw:
         return str(raw)
-    return str(event.get("tool_name") or "tool")
+    raise ValueError("tool_use_id is required")
