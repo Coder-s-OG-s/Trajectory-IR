@@ -7,7 +7,10 @@ Attach sealed TrajIR identifiers onto spans you already create.
 ## Rule
 
 Seal happens in `integrations/langgraph` (or your own `execute_tool` wrap).
-This package only **labels** the span after that seal.
+This package only labels the span after that seal.
+`label_after_seal` copies nothing when the decision node id is empty.
+The LangGraph wrap calls it after `seal_decision` and before the tool body
+when `TRAJIR_OTEL_CORRELATE` is on.
 
 An OTLP collector that receives `execute_tool` after the tool finished is a
 logger. It cannot claim Chain-of-Evidence.

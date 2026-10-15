@@ -75,6 +75,7 @@ nav:
       - Adoption host + .tir: demos/adoption-host.md
       - Sandbox mode: demos/sandbox.md
   - Getting started: getting-started.md
+  - One step: one-step.md
   - Architecture: architecture.md
   - Talk:
       - Speaker runbook: talk/speaker-runbook.md
