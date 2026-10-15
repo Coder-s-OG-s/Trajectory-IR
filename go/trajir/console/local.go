@@ -3,6 +3,7 @@ package console
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -61,6 +62,9 @@ func isSameOriginLocal(r *http.Request) bool {
 	if !isLoopbackHost(r.Host) {
 		return false
 	}
+	if mode := r.Header.Get("Sec-Fetch-Mode"); mode == "navigate" {
+		return false
+	}
 	if site := r.Header.Get("Sec-Fetch-Site"); site != "" && site != "same-origin" && site != "none" {
 		return false
 	}
@@ -102,8 +106,12 @@ func (s *Server) resolveLocalPath(act localAction) (string, error) {
 
 func parseLocalAction(r *http.Request) (localAction, error) {
 	var act localAction
-	if r.Body == nil {
+	if r.Body == nil || r.Body == http.NoBody || r.ContentLength == 0 {
 		return localAction{Root: true}, nil
+	}
+	ct := strings.ToLower(r.Header.Get("Content-Type"))
+	if !strings.HasPrefix(ct, "application/json") {
+		return act, errors.New("content-type must be application/json")
 	}
 	dec := json.NewDecoder(r.Body)
 	if err := dec.Decode(&act); err != nil {

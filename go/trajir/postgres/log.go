@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -19,6 +20,7 @@ import (
 
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/nodes"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
@@ -34,6 +36,27 @@ var ErrNotStored = errors.New("node not stored")
 type NodeLog struct {
 	db *sql.DB
 	mu sync.Mutex
+}
+
+var (
+	reURLPassword = regexp.MustCompile(`://([^:]+):([^@]+)@`)
+	reKVPassword  = regexp.MustCompile(`(?i)(password=)\S+`)
+)
+
+func sanitizePGErr(err error, rawDSN string) error {
+	if err == nil {
+		return nil
+	}
+	msg := err.Error()
+	if cfg, parseErr := pgconn.ParseConfig(rawDSN); parseErr == nil && cfg.Password != "" {
+		msg = strings.ReplaceAll(msg, cfg.Password, "[REDACTED]")
+	}
+	msg = reURLPassword.ReplaceAllString(msg, "://$1:[REDACTED]@")
+	msg = reKVPassword.ReplaceAllString(msg, "$1[REDACTED]")
+	if msg != err.Error() {
+		return errors.New(msg)
+	}
+	return err
 }
 
 // OpenDSN opens a Postgres NodeLog from a connection string.
@@ -53,7 +76,7 @@ func OpenDSN(dsn string) (*NodeLog, error) {
 	}
 	db, err := sql.Open("pgx", effective)
 	if err != nil {
-		return nil, fmt.Errorf("postgres: open: %w", err)
+		return nil, fmt.Errorf("postgres: open: %w", sanitizePGErr(err, dsn))
 	}
 	db.SetMaxOpenConns(4)
 	pingCtx, pingCancel := context.WithTimeout(context.Background(), timeout)
@@ -61,7 +84,7 @@ func OpenDSN(dsn string) (*NodeLog, error) {
 	pingCancel()
 	if err != nil {
 		_ = db.Close()
-		return nil, fmt.Errorf("postgres: ping: %w", err)
+		return nil, fmt.Errorf("postgres: ping: %w", sanitizePGErr(err, dsn))
 	}
 	nl := &NodeLog{db: db}
 	schemaCtx, schemaCancel := context.WithTimeout(context.Background(), timeout)
@@ -69,7 +92,7 @@ func OpenDSN(dsn string) (*NodeLog, error) {
 	schemaCancel()
 	if err != nil {
 		_ = db.Close()
-		return nil, err
+		return nil, sanitizePGErr(err, dsn)
 	}
 	return nl, nil
 }
@@ -101,7 +124,7 @@ func dsnWithConnectTimeout(dsn string, timeout time.Duration) (string, error) {
 	if strings.Contains(dsn, "://") {
 		u, err := url.Parse(dsn)
 		if err != nil {
-			return "", fmt.Errorf("postgres: parse dsn: %w", err)
+			return "", errors.New("postgres: parse dsn: invalid connection URL")
 		}
 		q := u.Query()
 		if q.Get("connect_timeout") == want {
@@ -333,8 +356,11 @@ func (l *NodeLog) ClaimToolCall(
 		n.ID, n.TrajectoryID, n.TenantID, stepN, n.Seq, n.Kind, string(payloadJSON), n.TS,
 	)
 	if err != nil {
-		// Unique violation under race: not claimed.
-		return false, nil
+		if isUniqueViolation(err) {
+			// Another writer won the slot between our SELECT and INSERT.
+			return false, nil
+		}
+		return false, fmt.Errorf("postgres: insert tool_call: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
 		return false, err
@@ -342,12 +368,29 @@ func (l *NodeLog) ClaimToolCall(
 	return true, nil
 }
 
+func isUniqueViolation(err error) bool {
+	if err == nil {
+		return false
+	}
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return pgErr.Code == "23505"
+	}
+	return strings.Contains(strings.ToLower(err.Error()), "duplicate key")
+}
+
 // Has reports whether a node of kind exists for trajectory and step scoped to tenantID.
 // When seq is non nil, the match is limited to that sequence slot.
 // tenantID must be non-empty; use HasAllTenants for cross-tenant administrative checks.
 func (l *NodeLog) Has(trajectoryID, tenantID string, stepN int, kind string, seq *int) (bool, error) {
-	if tenantID == "" {
-		return false, fmt.Errorf("tenantID must be a non-empty string")
+	if err := nodes.ValidateIDComponent("tenant_id", tenantID); err != nil {
+		return false, err
+	}
+	if err := nodes.ValidateIDComponent("trajectory_id", trajectoryID); err != nil {
+		return false, err
+	}
+	if err := nodes.ValidateIDComponent("kind", kind); err != nil {
+		return false, err
 	}
 	return l.has(trajectoryID, &tenantID, stepN, kind, seq)
 }
@@ -355,6 +398,12 @@ func (l *NodeLog) Has(trajectoryID, tenantID string, stepN int, kind string, seq
 // HasAllTenants reports whether a node of kind exists for trajectory and step across any tenant.
 // This bypasses tenant isolation and is intended for administrative or diagnostic tools only.
 func (l *NodeLog) HasAllTenants(trajectoryID string, stepN int, kind string, seq *int) (bool, error) {
+	if err := nodes.ValidateIDComponent("trajectory_id", trajectoryID); err != nil {
+		return false, err
+	}
+	if err := nodes.ValidateIDComponent("kind", kind); err != nil {
+		return false, err
+	}
 	return l.has(trajectoryID, nil, stepN, kind, seq)
 }
 
@@ -383,11 +432,20 @@ func (l *NodeLog) has(trajectoryID string, tenantID *string, stepN int, kind str
 
 // ListNodes returns nodes for a trajectory scoped to tenantID.
 func (l *NodeLog) ListNodes(trajectoryID, tenantID string) ([]map[string]any, error) {
+	if err := nodes.ValidateIDComponent("tenant_id", tenantID); err != nil {
+		return nil, err
+	}
+	if err := nodes.ValidateIDComponent("trajectory_id", trajectoryID); err != nil {
+		return nil, err
+	}
 	return l.listNodes(trajectoryID, &tenantID)
 }
 
 // ListNodesAllTenants returns nodes for a trajectory across all tenants.
 func (l *NodeLog) ListNodesAllTenants(trajectoryID string) ([]map[string]any, error) {
+	if err := nodes.ValidateIDComponent("trajectory_id", trajectoryID); err != nil {
+		return nil, err
+	}
 	return l.listNodes(trajectoryID, nil)
 }
 
@@ -422,7 +480,9 @@ func (l *NodeLog) listNodes(trajectoryID string, tenantID *string) ([]map[string
 			return nil, err
 		}
 		var payload map[string]any
-		if err := json.Unmarshal([]byte(payloadJSON), &payload); err != nil {
+		dec := json.NewDecoder(strings.NewReader(payloadJSON))
+		dec.UseNumber()
+		if err := dec.Decode(&payload); err != nil {
 			return nil, err
 		}
 		rec := map[string]any{

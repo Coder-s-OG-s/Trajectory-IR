@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -117,19 +118,20 @@ func (s *Store) ReadEvents(trajectoryID string) ([]Event, error) {
 		return nil, err
 	}
 	s.mu.RLock()
-	raw, err := os.ReadFile(path)
-	s.mu.RUnlock()
+	defer s.mu.RUnlock()
+	f, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, fmt.Errorf("%w: %s", ErrNotFound, trajectoryID)
 		}
 		return nil, fmt.Errorf("console: read %s: %w", path, err)
 	}
-	return parseNDJSON(raw)
+	defer f.Close()
+	return readEventsFromReader(f)
 }
 
-func parseNDJSON(raw []byte) ([]Event, error) {
-	sc := bufio.NewScanner(bytes.NewReader(raw))
+func readEventsFromReader(r io.Reader) ([]Event, error) {
+	sc := bufio.NewScanner(r)
 	// Events can be large; allow up to 4 MiB per line.
 	buf := make([]byte, 0, 64*1024)
 	sc.Buffer(buf, 4<<20)

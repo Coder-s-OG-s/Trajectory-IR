@@ -3,6 +3,7 @@ package client_test
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -513,5 +514,18 @@ func TestExecToolFnWithMetaSeesHashedKey(t *testing.T) {
 	h := resume.IdempotencyKeyHeader(seen.IdempotencyKey)
 	if h["Idempotency-Key"] != want {
 		t.Fatalf("header=%v", h)
+	}
+}
+
+func TestOpenTrajectoryExternalPathEscapesWorkDir(t *testing.T) {
+	workDir := t.TempDir()
+	otherDir := t.TempDir()
+	extPath := filepath.Join(otherDir, "nodes.sqlite")
+	_, err := client.OpenTrajectory("demo", "escape-1", client.Options{
+		WorkDir:   workDir,
+		NodesPath: extPath,
+	})
+	if err == nil || !strings.Contains(err.Error(), "escapes workdir") {
+		t.Fatalf("expected escapes workdir error, got: %v", err)
 	}
 }

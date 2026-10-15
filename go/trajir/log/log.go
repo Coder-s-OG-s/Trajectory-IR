@@ -8,13 +8,15 @@ package nodelog
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/nodes"
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/postgres"
 
-	_ "modernc.org/sqlite"
+	"modernc.org/sqlite"
 )
 
 var (
@@ -212,9 +214,12 @@ func (l *NodeLog) ClaimToolCall(
 		n.TS,
 	)
 	if err != nil {
-		// Unique slot conflict under race: treat as not claimed.
 		_ = tx.Rollback()
-		return false, nil
+		if isUniqueConstraintError(err) {
+			// Unique slot conflict under race: treat as not claimed.
+			return false, nil
+		}
+		return false, fmt.Errorf("sqlite: insert tool_call: %w", err)
 	}
 	if err = tx.Commit(); err != nil {
 		return false, err
@@ -222,12 +227,36 @@ func (l *NodeLog) ClaimToolCall(
 	return true, nil
 }
 
+func isUniqueConstraintError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var sqliteErr *sqlite.Error
+	if errors.As(err, &sqliteErr) {
+		// Extended result codes in SQLite:
+		// SQLITE_CONSTRAINT_UNIQUE is 2067 (19 | (8 << 8))
+		// SQLITE_CONSTRAINT_PRIMARYKEY is 1555 (19 | (6 << 8))
+		code := sqliteErr.Code()
+		if code == 2067 || code == 1555 {
+			return true
+		}
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "unique constraint failed") || strings.Contains(msg, "primary key constraint failed")
+}
+
 // Has reports whether a node of kind exists for trajectory and step scoped to tenantID.
 // When seq is non nil, the match is limited to that sequence slot.
 // tenantID must be non-empty; use HasAllTenants for cross-tenant administrative checks.
 func (l *NodeLog) Has(trajectoryID, tenantID string, stepN int, kind string, seq *int) (bool, error) {
-	if tenantID == "" {
-		return false, fmt.Errorf("tenantID must be a non-empty string")
+	if err := nodes.ValidateIDComponent("tenant_id", tenantID); err != nil {
+		return false, err
+	}
+	if err := nodes.ValidateIDComponent("trajectory_id", trajectoryID); err != nil {
+		return false, err
+	}
+	if err := nodes.ValidateIDComponent("kind", kind); err != nil {
+		return false, err
 	}
 	return l.has(trajectoryID, &tenantID, stepN, kind, seq)
 }
@@ -235,6 +264,12 @@ func (l *NodeLog) Has(trajectoryID, tenantID string, stepN int, kind string, seq
 // HasAllTenants reports whether a node of kind exists for trajectory and step across any tenant.
 // This bypasses tenant isolation and is intended for administrative or diagnostic tools only.
 func (l *NodeLog) HasAllTenants(trajectoryID string, stepN int, kind string, seq *int) (bool, error) {
+	if err := nodes.ValidateIDComponent("trajectory_id", trajectoryID); err != nil {
+		return false, err
+	}
+	if err := nodes.ValidateIDComponent("kind", kind); err != nil {
+		return false, err
+	}
 	return l.has(trajectoryID, nil, stepN, kind, seq)
 }
 
@@ -280,6 +315,12 @@ func (l *NodeLog) Count(nodeID string) (int, error) {
 // Callers that genuinely need rows across tenants (e.g. tir.Export's own
 // mixed-tenant check) must use ListNodesAllTenants explicitly instead.
 func (l *NodeLog) ListNodes(trajectoryID, tenantID string) ([]map[string]any, error) {
+	if err := nodes.ValidateIDComponent("tenant_id", tenantID); err != nil {
+		return nil, err
+	}
+	if err := nodes.ValidateIDComponent("trajectory_id", trajectoryID); err != nil {
+		return nil, err
+	}
 	return l.listNodes(trajectoryID, &tenantID)
 }
 
@@ -288,6 +329,9 @@ func (l *NodeLog) ListNodes(trajectoryID, tenantID string) ([]map[string]any, er
 // performs its own tenant-scoping check on the result, such as tir.Export
 // detecting a trajectory with mixed tenant_id values.
 func (l *NodeLog) ListNodesAllTenants(trajectoryID string) ([]map[string]any, error) {
+	if err := nodes.ValidateIDComponent("trajectory_id", trajectoryID); err != nil {
+		return nil, err
+	}
 	return l.listNodes(trajectoryID, nil)
 }
 
@@ -322,7 +366,9 @@ func (l *NodeLog) listNodes(trajectoryID string, tenantID *string) ([]map[string
 			return nil, err
 		}
 		var payload map[string]any
-		if err := json.Unmarshal([]byte(payloadJSON), &payload); err != nil {
+		dec := json.NewDecoder(strings.NewReader(payloadJSON))
+		dec.UseNumber()
+		if err := dec.Decode(&payload); err != nil {
 			return nil, err
 		}
 		rec := map[string]any{

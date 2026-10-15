@@ -129,6 +129,17 @@ func TestHTTPPackagesAndLoopback(t *testing.T) {
 		t.Fatalf("shell status=%d body=%s", rr6.Code, rr6.Body.String())
 	}
 
+	// Untyped body without application/json (e.g. CSRF via untyped Blob) is rejected.
+	reqUntyped := httptest.NewRequest(http.MethodPost, "/v1/local/reveal", strings.NewReader(`{"root":true}`))
+	reqUntyped.RemoteAddr = "127.0.0.1:9"
+	reqUntyped.Host = "127.0.0.1:8787"
+	reqUntyped.Header.Set("Origin", "http://127.0.0.1:8787")
+	rrUntyped := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rrUntyped, reqUntyped)
+	if rrUntyped.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400 for missing content-type with body, got: %d", rrUntyped.Code)
+	}
+
 	// A page on another site can reach 127.0.0.1 too. It must not start a process.
 	started = nil
 	crossSite := []func(*http.Request){

@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	nodelog "github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/log"
@@ -179,6 +180,74 @@ func TestClaimToolCallSingleWinner(t *testing.T) {
 	ok, err := nl.Has("t1", "demo", 1, "TOOL_CALL", &seq)
 	if err != nil || !ok {
 		t.Fatalf("TOOL_CALL present=%v err=%v", ok, err)
+	}
+}
+
+func TestClaimToolCallNonConstraintErrorPropagates(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nodes.sqlite")
+	nl, err := nodelog.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = nl.Close() })
+
+	side, err := sql.Open("sqlite", path+"?_busy_timeout=5000")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = side.Close() })
+
+	// Add an abort trigger on insert that does NOT represent a unique constraint
+	if _, err := side.Exec(`CREATE TRIGGER abort_insert BEFORE INSERT ON nodes BEGIN SELECT RAISE(ABORT, 'forced abort error'); END;`); err != nil {
+		t.Fatal(err)
+	}
+
+	claimed, err := nl.ClaimToolCall(1, map[string]any{"tool": "a"}, "t1", "demo", 2)
+	if err == nil {
+		t.Fatal("expected non-constraint error to be propagated, got nil")
+	}
+	if !strings.Contains(err.Error(), "forced abort error") {
+		t.Fatalf("expected error to contain 'forced abort error', got %v", err)
+	}
+	if claimed {
+		t.Fatal("expected claimed=false when insert fails")
+	}
+}
+
+func TestClaimToolCallUniqueConstraintRaceLostReturnsFalse(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nodes.sqlite")
+	nl, err := nodelog.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = nl.Close() })
+
+	side, err := sql.Open("sqlite", path+"?_busy_timeout=5000")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = side.Close() })
+
+	// Simulate a race loser where another transaction slips in an identical slot
+	// right before our INSERT executes, causing an idx_nodes_slot unique violation on INSERT.
+	_, err = side.Exec(`
+		CREATE TRIGGER race_insert BEFORE INSERT ON nodes
+		WHEN NEW.id != 'winner'
+		BEGIN
+			INSERT INTO nodes (id, trajectory_id, tenant_id, step_n, seq, kind, payload_json, ts)
+			VALUES ('winner', NEW.trajectory_id, NEW.tenant_id, NEW.step_n, NEW.seq, 'TOOL_CALL', '{}', NEW.ts);
+		END;
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	claimed, err := nl.ClaimToolCall(1, map[string]any{"tool": "a"}, "t1", "demo", 2)
+	if err != nil {
+		t.Fatalf("expected nil error on unique constraint collision, got: %v", err)
+	}
+	if claimed {
+		t.Fatal("expected claimed=false when losing race to unique constraint")
 	}
 }
 

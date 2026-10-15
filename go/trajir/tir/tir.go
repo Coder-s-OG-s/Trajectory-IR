@@ -790,42 +790,6 @@ func loadFromZipWithOptions(zr *zip.Reader, verify bool, opts VerifyOptions) (*P
 	}
 
 	budget := MaxTotalUncompressedBytes
-	readMember := func(name string) ([]byte, error) {
-		f, ok := byName[name]
-		if !ok {
-			return nil, fmt.Errorf("%w: missing %s", ErrTir, name)
-		}
-		if f.UncompressedSize64 > MaxUncompressedEntryBytes {
-			return nil, fmt.Errorf(
-				"%w: zip member %q uncompressed size %d exceeds limit %d",
-				ErrLimit, name, f.UncompressedSize64, MaxUncompressedEntryBytes,
-			)
-		}
-		if int(f.UncompressedSize64) > budget {
-			return nil, fmt.Errorf(
-				"%w: zip total uncompressed size would exceed limit %d",
-				ErrLimit, MaxTotalUncompressedBytes,
-			)
-		}
-		rc, err := f.Open()
-		if err != nil {
-			return nil, err
-		}
-		defer rc.Close()
-		// Cap read so a lying local header cannot OOM us.
-		limited := io.LimitReader(rc, int64(MaxUncompressedEntryBytes)+1)
-		data, err := io.ReadAll(limited)
-		if err != nil {
-			return nil, err
-		}
-		if len(data) > MaxUncompressedEntryBytes {
-			return nil, fmt.Errorf("%w: zip member %q expanded beyond per-entry limit", ErrLimit, name)
-		}
-		budget -= len(data)
-		return data, nil
-	}
-
-	// Also allow reading artifact members not in the initial required set.
 	readAny := func(f *zip.File) ([]byte, error) {
 		if f.UncompressedSize64 > MaxUncompressedEntryBytes {
 			return nil, fmt.Errorf(
@@ -833,18 +797,17 @@ func loadFromZipWithOptions(zr *zip.Reader, verify bool, opts VerifyOptions) (*P
 				ErrLimit, f.Name, f.UncompressedSize64, MaxUncompressedEntryBytes,
 			)
 		}
-		if int(f.UncompressedSize64) > budget {
-			return nil, fmt.Errorf(
-				"%w: zip total uncompressed size would exceed limit %d",
-				ErrLimit, MaxTotalUncompressedBytes,
-			)
+		readLimit := int64(budget)
+		if int64(MaxUncompressedEntryBytes) < readLimit {
+			readLimit = int64(MaxUncompressedEntryBytes)
 		}
 		rc, err := f.Open()
 		if err != nil {
 			return nil, err
 		}
 		defer rc.Close()
-		limited := io.LimitReader(rc, int64(MaxUncompressedEntryBytes)+1)
+		// Cap read so a lying local header cannot OOM us or blow past total budget.
+		limited := io.LimitReader(rc, readLimit+1)
 		data, err := io.ReadAll(limited)
 		if err != nil {
 			return nil, err
@@ -852,8 +815,19 @@ func loadFromZipWithOptions(zr *zip.Reader, verify bool, opts VerifyOptions) (*P
 		if len(data) > MaxUncompressedEntryBytes {
 			return nil, fmt.Errorf("%w: zip member %q expanded beyond per-entry limit", ErrLimit, f.Name)
 		}
+		if len(data) > budget {
+			return nil, fmt.Errorf("%w: zip total uncompressed size would exceed limit %d", ErrLimit, MaxTotalUncompressedBytes)
+		}
 		budget -= len(data)
 		return data, nil
+	}
+
+	readMember := func(name string) ([]byte, error) {
+		f, ok := byName[name]
+		if !ok {
+			return nil, fmt.Errorf("%w: missing %s", ErrTir, name)
+		}
+		return readAny(f)
 	}
 
 	rawManifest, err := readMember("manifest.json")

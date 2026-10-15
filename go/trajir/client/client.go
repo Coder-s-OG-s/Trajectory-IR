@@ -22,6 +22,7 @@ import (
 	nodelog "github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/log"
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/resume"
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/sandbox"
+	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/workdir"
 )
 
 // Options configure workdir paths and optional durable backend injection.
@@ -97,6 +98,24 @@ func OpenTrajectory(tenantID, trajectoryID string, opts Options) (*Trajectory, e
 	}
 	if mode != sandbox.ModeLive && mode != sandbox.ModeSandbox {
 		return nil, fmt.Errorf("client: unsupported mode %q", mode)
+	}
+
+	checkPath := func(path string) error {
+		if opts.WorkDir != "" {
+			if !workdir.IsSubpath(opts.WorkDir, path) {
+				return fmt.Errorf("path %q escapes workdir %q", path, opts.WorkDir)
+			}
+			return workdir.RequireNonSymlinkLeaf(opts.WorkDir, path)
+		}
+		return workdir.RequireNonSymlinkLeaf(filepath.Dir(path), path)
+	}
+	if err := checkPath(nodesPath); err != nil {
+		return nil, fmt.Errorf("client: nodes path: %w", err)
+	}
+	if opts.Backend == nil {
+		if err := checkPath(memoPath); err != nil {
+			return nil, fmt.Errorf("client: memo path: %w", err)
+		}
 	}
 
 	nl, err := nodelog.Open(nodesPath)
