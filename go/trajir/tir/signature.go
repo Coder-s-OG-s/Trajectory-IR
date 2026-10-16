@@ -479,8 +479,14 @@ func replaceFileViaBackup(src, dest string) error {
 }
 
 func installFile(src, dest string) error {
-	if err := os.Rename(src, dest); err == nil {
+	err := os.Rename(src, dest)
+	if err == nil {
 		return nil
+	}
+	// If dest is missing, the backup path would only mask err with
+	// "no such file or directory" from moving dest aside.
+	if _, statErr := os.Stat(dest); os.IsNotExist(statErr) {
+		return err
 	}
 	return installFileViaBackup(src, dest)
 }

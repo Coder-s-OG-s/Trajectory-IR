@@ -369,6 +369,8 @@ def export_tir(
 
     dest_path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp_name = tempfile.mkstemp(prefix=f".{dest_path.name}.", dir=str(dest_path.parent))
+    published = False
+    member_count = 5 + (len(artifact_bytes) if mode == "fat" else 0)
     try:
         with os.fdopen(fd, "wb") as raw:
             with zipfile.ZipFile(raw, "w", compression=zipfile.ZIP_DEFLATED) as zf:
@@ -387,35 +389,35 @@ def export_tir(
                         zf.writestr(f"artifacts/cas/{shard}/{h}", data)
             raw.flush()
             os.fsync(raw.fileno())
+        # mkstemp is 0600; match Go export mode 0644 before install.
+        os.chmod(tmp_name, 0o644)
+        # Sign the temp before it replaces dest so a failed sign never
+        # touches an existing package and never publishes an unsigned zip.
+        if sign_key is not None:
+            try:
+                sign_package(tmp_name, sign_key, signer_meta)
+            except Exception as exc:
+                _notify_observer(
+                    on_exported,
+                    {
+                        "path": str(dest_path),
+                        "mode": mode,
+                        "redacted": bool(redacted),
+                        "bytes": Path(tmp_name).stat().st_size if Path(tmp_name).exists() else 0,
+                        "member_count": member_count,
+                        "node_count": len(nodes),
+                        "ok": False,
+                        "error": type(exc).__name__,
+                    },
+                )
+                raise
         os.replace(tmp_name, dest_path)
+        published = True
     except Exception:
-        with contextlib.suppress(OSError):
-            os.unlink(tmp_name)
-        raise
-
-    member_count = 5 + (len(artifact_bytes) if mode == "fat" else 0)
-    if sign_key is not None:
-        try:
-            sign_package(dest_path, sign_key, signer_meta)
-        except Exception as exc:
-            # Any failure after the unsigned zip is on disk (crypto, IO, disk full)
-            # must not leave a half signed package behind.
-            _notify_observer(
-                on_exported,
-                {
-                    "path": str(dest_path),
-                    "mode": mode,
-                    "redacted": bool(redacted),
-                    "bytes": dest_path.stat().st_size if dest_path.exists() else 0,
-                    "member_count": member_count,
-                    "node_count": len(nodes),
-                    "ok": False,
-                    "error": type(exc).__name__,
-                },
-            )
+        if not published:
             with contextlib.suppress(OSError):
-                dest_path.unlink()
-            raise
+                os.unlink(tmp_name)
+        raise
 
     _notify_observer(
         on_exported,

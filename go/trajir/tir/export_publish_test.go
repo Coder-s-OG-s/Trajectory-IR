@@ -223,3 +223,34 @@ func TestExportSignedOverwriteHasSignature(t *testing.T) {
 		}
 	}
 }
+
+func TestExportInstallFailureNotifiesObserver(t *testing.T) {
+	nl := exportSampleLog(t)
+	dir := t.TempDir()
+	out := filepath.Join(dir, "out.tir")
+
+	beforeExportReplace = func() error {
+		matches, globErr := filepath.Glob(filepath.Join(dir, ".tir-export-*"))
+		if globErr != nil {
+			return globErr
+		}
+		if len(matches) != 1 {
+			return errors.New("export temp missing")
+		}
+		// Remove the temp so installFile's rename fails with dest absent.
+		return os.Remove(matches[0])
+	}
+	defer func() { beforeExportReplace = nil }()
+
+	var notice ExportNotice
+	_, err := Export(nl, "t-export", out, ExportOptions{
+		Mode:       ModeThin,
+		OnExported: func(n ExportNotice) { notice = n },
+	})
+	if err == nil {
+		t.Fatal("expected install failure")
+	}
+	if notice.OK || notice.Error == "" {
+		t.Fatalf("observer not notified on install failure: %+v", notice)
+	}
+}

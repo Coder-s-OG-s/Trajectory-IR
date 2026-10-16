@@ -651,6 +651,12 @@ func Export(nodeLog *nodelog.NodeLog, trajectoryID, dest string, opts ExportOpti
 		}
 	}
 	if err := installFile(tmpName, destPath); err != nil {
+		notice.OK = false
+		notice.Error = err.Error()
+		if st, statErr := os.Stat(tmpName); statErr == nil {
+			notice.Bytes = st.Size()
+		}
+		notifyExport(opts.OnExported, notice)
 		return "", err
 	}
 	published = true

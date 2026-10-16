@@ -74,3 +74,53 @@ def test_exported_package_still_loads(tmp_path, sample_log):
     export_tir(sample_log, "t-atomic", dest, mode="fat", tenant_id="demo")
     pkg = load_tir(dest)
     assert pkg.manifest["mode"] == "fat"
+
+
+def test_export_sign_failure_keeps_existing_package(tmp_path, sample_log, monkeypatch):
+    export_dir = tmp_path / "export"
+    export_dir.mkdir()
+    dest = export_dir / "run.tir"
+    export_tir(sample_log, "t-atomic", dest, mode="thin", tenant_id="demo")
+    original = dest.read_bytes()
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("simulated sign failure")
+
+    monkeypatch.setattr("trajectory_ir.package.tir.sign_package", boom)
+
+    notices = []
+    key = b"\x00" * 64
+    with pytest.raises(RuntimeError, match="simulated sign failure"):
+        export_tir(
+            sample_log,
+            "t-atomic",
+            dest,
+            mode="thin",
+            tenant_id="demo",
+            sign_key=key,
+            on_exported=notices.append,
+        )
+
+    assert dest.read_bytes() == original
+    leftovers = [p for p in dest.parent.iterdir() if p != dest]
+    assert leftovers == []
+    assert len(notices) == 1
+    assert notices[0]["ok"] is False
+    assert notices[0]["error"] == "RuntimeError"
+
+
+def test_export_sign_failure_without_existing_leaves_nothing(tmp_path, sample_log, monkeypatch):
+    dest = tmp_path / "fresh.tir"
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("simulated sign failure")
+
+    monkeypatch.setattr("trajectory_ir.package.tir.sign_package", boom)
+
+    key = b"\x00" * 64
+    with pytest.raises(RuntimeError, match="simulated sign failure"):
+        export_tir(sample_log, "t-atomic", dest, mode="thin", tenant_id="demo", sign_key=key)
+
+    assert not dest.exists()
+    leftovers = [p for p in dest.parent.iterdir() if p.is_file()]
+    assert leftovers == []
