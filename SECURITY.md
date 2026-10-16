@@ -37,7 +37,7 @@ Based on the [Infrastructure Blueprint](infrastructure.md) and [Master Spec](doc
 ### A. Execution & Tool Safety Plane
 - **Safety Boundary Bypasses**: Exploits that trick the system into classifying a `NON_IDEMPOTENT_WRITE` tool as `PURE` or `READ_ONLY`, bypassing the Fail-Closed default.
 - **Block-and-Gate Evasion**: Flaws that allow an interrupted non-idempotent tool to automatically retry without explicit human/policy resolution.
-- **Backend Injection**: Any flaw in `drivers/durable-backend/dbos/` that allows arbitrary code execution outside of the locked DBOS/Restate step wrapper context.
+- **Backend Injection**: Any flaw in `pkg/trajectory_ir/drivers/durable_backend/dbos/` that allows arbitrary code execution outside of the locked DBOS/Restate step wrapper context.
 
 ### B. State & Durability Plane
 - **Seal Tampering**: Vulnerabilities allowing a node payload to be mutated without breaking the RFC 8785 (JCS) + SHA256 identity hashing.

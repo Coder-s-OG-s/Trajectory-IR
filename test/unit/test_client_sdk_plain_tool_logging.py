@@ -1,6 +1,6 @@
 import pytest
 
-from client.python.trajectory_client import exec_tool, open_trajectory
+from trajectory_ir.client.python.trajectory_client import exec_tool, open_trajectory
 from trajectory_ir.effects import EffectClass
 from trajectory_ir.runtime.log import NodeLog
 from trajectory_ir.runtime.tool import Tool

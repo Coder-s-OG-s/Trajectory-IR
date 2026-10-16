@@ -14,7 +14,7 @@ pip install -e ".[dev]"
 pytest test/unit -q
 pytest test/e2e -q
 pytest conformance/ -q
-ruff check pkg drivers client test conformance examples
+ruff check pkg test conformance examples
 
 # Go primary (if you touched go/)
 cd go && go test ./... -count=1

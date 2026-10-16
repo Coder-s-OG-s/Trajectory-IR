@@ -44,7 +44,7 @@ The script:
 
 1. Starts compose services (postgres + minio; Temporal optional)
 2. Waits until Postgres and MinIO answer health probes
-3. Creates the `trajir` bucket via Python (`drivers.s3`) if missing
+3. Creates the `trajir` bucket via Python (`trajectory_ir.drivers.s3`) if missing
 4. Runs Python and Go live tests
 
 ## Manual start
@@ -72,7 +72,7 @@ export TRAJIR_S3_ENDPOINT_URL=http://127.0.0.1:9000
 export TRAJIR_S3_BUCKET=trajir
 export AWS_ACCESS_KEY_ID=minioadmin
 export AWS_SECRET_ACCESS_KEY=minioadmin
-python -c "from drivers.s3.cas import build_s3_client_from_env; c=build_s3_client_from_env(); c.create_bucket(Bucket='trajir')"
+python -c "from trajectory_ir.drivers.s3.cas import build_s3_client_from_env; c=build_s3_client_from_env(); c.create_bucket(Bucket='trajir')"
 ```
 
 Temporal may take longer on first pull. Frontend: `localhost:7233`.

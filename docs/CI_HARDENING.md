@@ -43,7 +43,7 @@ listed in [maintainer-branch-protection.md](maintainer-branch-protection.md).
 ```bash
 # Python reference
 pip install -e ".[dev]"
-ruff check pkg drivers client test conformance examples
+ruff check pkg test conformance examples
 pytest test/unit -q
 pytest test/e2e conformance/ -q
 

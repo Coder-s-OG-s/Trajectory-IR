@@ -233,7 +233,7 @@ pip install -e ".[dev,postgres]"
 ### B2. Append nodes on Postgres
 
 ```python
-from drivers.postgres.log import open_postgres_node_log
+from trajectory_ir.drivers.postgres.log import open_postgres_node_log
 
 log = open_postgres_node_log()  # reads TRAJIR_DATABASE_URL
 traj, tenant = "e2e-pg-1", "demo"
@@ -252,7 +252,7 @@ export (list/filter nodes). `PostgresNodeLog` matches SQLite semantics:
 ```python
 from pathlib import Path
 
-from drivers.postgres.log import open_postgres_node_log
+from trajectory_ir.drivers.postgres.log import open_postgres_node_log
 from trajectory_ir.package import export_tir, load_tir
 from trajectory_ir.storage import FileSystemCAS, put_artifact, rehydrate_artifacts
 
@@ -299,13 +299,13 @@ export TRAJIR_S3_BUCKET=trajir
 export AWS_ACCESS_KEY_ID=minioadmin
 export AWS_SECRET_ACCESS_KEY=minioadmin
 pip install -e ".[dev,s3]"
-python -c "from drivers.s3.cas import build_s3_client_from_env; c=build_s3_client_from_env(); c.create_bucket(Bucket='trajir')"
+python -c "from trajectory_ir.drivers.s3.cas import build_s3_client_from_env; c=build_s3_client_from_env(); c.create_bucket(Bucket='trajir')"
 ```
 
 ### C2. Put + rehydrate against S3CAS
 
 ```python
-from drivers.s3.cas import S3CAS, build_s3_client_from_env
+from trajectory_ir.drivers.s3.cas import S3CAS, build_s3_client_from_env
 from trajectory_ir.storage import put_artifact, rehydrate_artifacts
 
 client = build_s3_client_from_env()

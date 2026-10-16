@@ -156,7 +156,7 @@ fi
 echo "==> ensure MinIO bucket exists"
 python - <<'PY'
 import os
-from drivers.s3.cas import build_s3_client_from_env
+from trajectory_ir.drivers.s3.cas import build_s3_client_from_env
 
 bucket = os.environ["TRAJIR_S3_BUCKET"]
 client = build_s3_client_from_env()

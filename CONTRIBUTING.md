@@ -19,7 +19,7 @@ Also read: [MAINTAINERS.md](MAINTAINERS.md), [GOVERNANCE.md](GOVERNANCE.md),
 2. Do not implement behavior that is not defined in the master specification.
 3. Do not reimplement durable execution (retry, lease, custom crash engines).
    That belongs under `go/trajir/durable` (Temporal production for Go) or
-   `drivers/durable_backend/` (DBOS for the Python reference port).
+   `pkg/trajectory_ir/drivers/durable_backend/` (DBOS for the Python reference port).
 4. If something is ambiguous, open a **Spec question** issue and wait.
 
 ## 1.1 Phase 1B language rule (Go first)
@@ -131,7 +131,7 @@ export AWS_ACCESS_KEY_ID=minioadmin
 export AWS_SECRET_ACCESS_KEY=minioadmin
 pip install -e ".[dev,s3]"
 # create bucket once (Python one-liner or mc)
-python -c "from drivers.s3.cas import build_s3_client_from_env; c=build_s3_client_from_env(); c.create_bucket(Bucket='trajir')"
+python -c "from trajectory_ir.drivers.s3.cas import build_s3_client_from_env; c=build_s3_client_from_env(); c.create_bucket(Bucket='trajir')"
 pytest test/integration/test_s3_minio_live.py -q
 ```
 
@@ -204,8 +204,8 @@ pip install -e ".[dev]"
 Useful commands:
 
 ```bash
-ruff check pkg drivers client test conformance examples
-ruff format pkg drivers client test conformance examples
+ruff check pkg test conformance examples
+ruff format pkg test conformance examples
 mypy
 pytest test/unit/test_hash_vectors.py -q
 pytest test/unit -q

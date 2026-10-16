@@ -17,7 +17,7 @@ import pytest
 
 pytest.importorskip("boto3")
 
-from drivers.s3.cas import S3CAS, build_s3_client_from_env
+from trajectory_ir.drivers.s3.cas import S3CAS, build_s3_client_from_env
 from trajectory_ir.storage.cas import CASIntegrityError, CASNotFoundError, content_hash
 from trajectory_ir.storage.rehydrate import rehydrate_artifacts
 

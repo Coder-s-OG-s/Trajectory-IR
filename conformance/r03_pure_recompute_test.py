@@ -82,7 +82,7 @@ def test_r03_pure_run_step_does_not_block_on_second_invocation(tmp_path, monkeyp
     """R03 via make_run_step: two durable steps with PURE never raise the gate."""
     from dbos import SetWorkflowID
 
-    from drivers.durable_backend.dbos.adapter import init_backend
+    from trajectory_ir.drivers.durable_backend.dbos.adapter import init_backend
     from trajectory_ir.resume.step import make_run_step
     from trajectory_ir.runtime.tool import Tool
 

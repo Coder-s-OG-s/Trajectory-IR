@@ -2,7 +2,7 @@
 
 import pytest
 
-from client.python.trajectory_client import (
+from trajectory_ir.client.python.trajectory_client import (
     WorldDrift,
     check_world,
     open_trajectory,
@@ -86,7 +86,7 @@ def test_run_step_observe_world_drift(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     from dbos import SetWorkflowID
 
-    from drivers.durable_backend.dbos.adapter import init_backend
+    from trajectory_ir.drivers.durable_backend.dbos.adapter import init_backend
 
     db = str(tmp_path / "nodes.sqlite")
     log = NodeLog(db)

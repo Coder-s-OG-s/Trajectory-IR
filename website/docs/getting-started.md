@@ -33,4 +33,4 @@ go run ./examples/kill_mid_deploy \
 
 ## Python reference
 
-Python remains the Phase 1A reference / parity port (`examples/`, `client/python/`). Prefer Go for new demos and drivers unless you are explicitly working on Python parity.
+Python remains the Phase 1A reference / parity port (`examples/`, `pkg/trajectory_ir/client/python/`). Prefer Go for new demos and drivers unless you are explicitly working on Python parity.
