@@ -142,17 +142,12 @@ jobs:
           from trajectory_ir.runtime.log import NodeLog; \
           from trajectory_ir.storage import FileSystemCAS, content_hash; \
           from trajectory_ir.client.python.trajectory_client import open_trajectory; \
-          import importlib; \
+          import importlib.util; \
           import trajectory_ir.drivers.sqlite; \
           assert content_hash(b'') == 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'; \
           assert open_trajectory; \
-          for name in ('client', 'drivers'): \
-              try: \
-                  importlib.import_module(name); \
-              except ModuleNotFoundError: \
-                  pass; \
-              else: \
-                  raise SystemExit(name); \
+          assert importlib.util.find_spec('client') is None; \
+          assert importlib.util.find_spec('drivers') is None; \
           log = NodeLog(':memory:'); \
           rec = log.append('DECISION', 1, {'plan': {}}, 't1', 'tenant1', seq=1); \
           assert rec.id; \
