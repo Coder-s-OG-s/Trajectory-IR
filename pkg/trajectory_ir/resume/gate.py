@@ -1,4 +1,10 @@
+import hashlib
+import json
+
 from trajectory_ir.resume.idempotency import CallMeta, bind_call_meta
+from trajectory_ir.runtime.nodes import UnsafeInteger, reject_unsafe_integers
+
+_INTEGER_DOMAIN = "integer_domain"
 
 
 class BlockedNeedsGate(Exception):
@@ -25,6 +31,67 @@ class BlockedNeedsGate(Exception):
         # Exception reduce would replay only `args` (the message) into a
         # two-argument __init__ and raise TypeError instead of the block.
         return (self.__class__, (self.step_n, self.tool_name))
+
+
+def _result_digest(result) -> str:
+    try:
+        text = json.dumps(result, sort_keys=True, separators=(",", ":"), default=str)
+    except (TypeError, ValueError):
+        text = repr(result)
+    return hashlib.sha256(text.encode()).hexdigest()
+
+
+def _integer_failure_payload(message: str, result) -> dict:
+    return {
+        "error": _INTEGER_DOMAIN,
+        "message": message,
+        "result_digest": _result_digest(result),
+    }
+
+
+def _stored_integer_failure(node_log, trajectory_id, tenant_id, step_n, seq):
+    for row in node_log.list_nodes(trajectory_id, tenant_id=tenant_id):
+        if row["step_n"] != step_n or row["seq"] != seq or row["kind"] != "TOOL_RESULT":
+            continue
+        payload = row["payload"]
+        if (
+            isinstance(payload, dict)
+            and payload.get("error") == _INTEGER_DOMAIN
+            and isinstance(payload.get("result_digest"), str)
+        ):
+            return payload
+    return None
+
+
+def _raise_stored_integer_failure(payload: dict) -> None:
+    message = payload.get("message")
+    if not isinstance(message, str) or message == "":
+        message = "integer exceeds safe integer domain for JSON floats"
+    raise UnsafeInteger(message)
+
+
+def _append_tool_result(node_log, trajectory_id, tenant_id, step_n, seq, result) -> None:
+    payload = {"result": result}
+    try:
+        reject_unsafe_integers(payload)
+    except UnsafeInteger as exc:
+        node_log.append(
+            "TOOL_RESULT",
+            step_n,
+            _integer_failure_payload(str(exc), result),
+            trajectory_id,
+            tenant_id,
+            seq,
+        )
+        raise
+    node_log.append(
+        "TOOL_RESULT",
+        step_n,
+        payload,
+        trajectory_id,
+        tenant_id,
+        seq,
+    )
 
 
 def make_gated_tool_call(node_log, trajectory_id, tenant_id, step_n, seq, tool_name, tool_fn):
@@ -56,6 +123,7 @@ def make_gated_tool_call(node_log, trajectory_id, tenant_id, step_n, seq, tool_n
         # appended and committed to SQLite before the durable backend records
         # the step's memoized output, so a crash in that window leaves *both*
         # nodes present. A `not TOOL_RESULT` conjunct fails open there.
+        reject_unsafe_integers({"args": kwargs})
         meta = CallMeta.make(tenant_id, trajectory_id, step_n, seq)
         claimed = node_log.claim_tool_call(
             step_n,
@@ -69,6 +137,9 @@ def make_gated_tool_call(node_log, trajectory_id, tenant_id, step_n, seq, tool_n
             seq,
         )
         if not claimed:
+            failed = _stored_integer_failure(node_log, trajectory_id, tenant_id, step_n, seq + 1)
+            if failed is not None:
+                _raise_stored_integer_failure(failed)
             node_log.append(
                 "ABORT",
                 step_n,
@@ -80,14 +151,7 @@ def make_gated_tool_call(node_log, trajectory_id, tenant_id, step_n, seq, tool_n
             raise BlockedNeedsGate(step_n, tool_name)
 
         result = bind_call_meta(meta, tool_fn, kwargs)
-        node_log.append(
-            "TOOL_RESULT",
-            step_n,
-            {"result": result},
-            trajectory_id,
-            tenant_id,
-            seq + 1,
-        )
+        _append_tool_result(node_log, trajectory_id, tenant_id, step_n, seq + 1, result)
         return result
 
     return gated
@@ -102,6 +166,7 @@ def make_plain_tool_call(node_log, trajectory_id, tenant_id, step_n, seq, tool_n
     """
 
     def plain(**kwargs):
+        reject_unsafe_integers({"args": kwargs})
         meta = CallMeta.make(tenant_id, trajectory_id, step_n, seq)
         node_log.append(
             "TOOL_CALL",
@@ -117,15 +182,7 @@ def make_plain_tool_call(node_log, trajectory_id, tenant_id, step_n, seq, tool_n
         )
 
         result = bind_call_meta(meta, tool_fn, kwargs)
-
-        node_log.append(
-            "TOOL_RESULT",
-            step_n,
-            {"result": result},
-            trajectory_id,
-            tenant_id,
-            seq=seq + 1,
-        )
+        _append_tool_result(node_log, trajectory_id, tenant_id, step_n, seq + 1, result)
         return result
 
     return plain
