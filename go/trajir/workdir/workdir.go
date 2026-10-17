@@ -100,19 +100,21 @@ func IsSubpath(root, target string) bool {
 func RequireNonSymlinkLeaf(root, leafPath string) error {
 	info, err := os.Lstat(leafPath)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
+		if !os.IsNotExist(err) {
+			return fmt.Errorf("workdir: inspect %q: %w", filepath.Base(leafPath), err)
 		}
-		return fmt.Errorf("workdir: inspect %q: %w", filepath.Base(leafPath), err)
-	}
-	if info.Mode()&os.ModeSymlink != 0 {
+	} else if info.Mode()&os.ModeSymlink != 0 {
 		return fmt.Errorf("workdir: %q must not be a symlink", filepath.Base(leafPath))
+	}
+	rootCanon, err := ResolveViaExistingAncestor(root)
+	if err != nil {
+		return fmt.Errorf("workdir: resolve root %q: %w", root, err)
 	}
 	abs, err := ResolveViaExistingAncestor(leafPath)
 	if err != nil {
 		return err
 	}
-	if !IsSubpath(root, abs) {
+	if !IsSubpath(rootCanon, abs) {
 		return fmt.Errorf("workdir: %q escapes root %q", filepath.Base(leafPath), root)
 	}
 	return nil

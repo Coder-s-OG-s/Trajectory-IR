@@ -216,8 +216,12 @@ func openBoundedTIR(rawPath string) (*os.File, error) {
 	clean := filepath.Clean(rawPath)
 	var rel string
 	if filepath.IsAbs(clean) {
-		r, err := filepath.Rel(root, clean)
-		if err != nil || !workdir.IsSubpath(root, clean) {
+		resolved, err := workdir.ResolveViaExistingAncestor(clean)
+		if err != nil {
+			return nil, fmt.Errorf("mcp: resolve %q: %w", rawPath, err)
+		}
+		r, err := filepath.Rel(root, resolved)
+		if err != nil || !workdir.IsSubpath(root, resolved) {
 			return nil, fmt.Errorf("mcp: path %q escapes workspace root %q", rawPath, root)
 		}
 		rel = r
