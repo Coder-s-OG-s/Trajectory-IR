@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -181,6 +182,43 @@ func TestMockAppendHasListClose(t *testing.T) {
 		t.Fatalf("all tenants rows=%d", len(rows))
 	}
 
+	mock.ExpectClose()
+	if err := nl.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestListNodesKeepsIntegerLiteral(t *testing.T) {
+	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherRegexp))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	expectDDL(mock)
+
+	nl, err := OpenDB(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mock.ExpectQuery("SELECT id, trajectory_id, tenant_id, step_n, seq, kind, payload_json, ts").
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id", "trajectory_id", "tenant_id", "step_n", "seq", "kind", "payload_json", "ts",
+		}).AddRow("id-1", "t1", "demo", 1, 1, "TOOL_RESULT", `{"n":9007199254740993}`, 1.5))
+	rows, err := nl.ListNodes("t1", "demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, _ := rows[0]["payload"].(map[string]any)
+	num, ok := payload["n"].(json.Number)
+	if !ok || num != "9007199254740993" {
+		t.Fatalf("n=%#v", payload["n"])
+	}
+	if _, err := nodes.PayloadHash(payload); err == nil {
+		t.Fatal("hashed a rounded integer")
+	}
 	mock.ExpectClose()
 	if err := nl.Close(); err != nil {
 		t.Fatal(err)

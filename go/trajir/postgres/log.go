@@ -421,8 +421,8 @@ func (l *NodeLog) listNodes(trajectoryID string, tenantID *string) ([]map[string
 		if err := rows.Scan(&id, &traj, &tenant, &stepN, &seq, &kind, &payloadJSON, &ts); err != nil {
 			return nil, err
 		}
-		var payload map[string]any
-		if err := json.Unmarshal([]byte(payloadJSON), &payload); err != nil {
+		payload, err := nodes.DecodeObject([]byte(payloadJSON))
+		if err != nil {
 			return nil, err
 		}
 		rec := map[string]any{

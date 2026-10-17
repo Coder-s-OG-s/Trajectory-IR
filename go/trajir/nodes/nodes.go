@@ -7,10 +7,13 @@
 package nodes
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -66,6 +69,9 @@ func PayloadHash(payload map[string]any) (string, error) {
 	if _, ok := payload["ts"]; ok {
 		return "", fmt.Errorf("wall-clock ts must never be hashed (spec 6.3)")
 	}
+	if err := rejectUnsafeIntegers(payload); err != nil {
+		return "", err
+	}
 	// encoding/json emits a legal JSON encoding; jcs.Transform applies RFC 8785.
 	raw, err := json.Marshal(payload)
 	if err != nil {
@@ -77,6 +83,159 @@ func PayloadHash(payload map[string]any) (string, error) {
 	}
 	sum := sha256.Sum256(canon)
 	return hex.EncodeToString(sum[:]), nil
+}
+
+const maxSafeInteger int64 = 1<<53 - 1
+
+// DecodeObject parses one JSON object and preserves number literals.
+func DecodeObject(raw []byte) (map[string]any, error) {
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.UseNumber()
+	var obj map[string]any
+	if err := dec.Decode(&obj); err != nil {
+		return nil, err
+	}
+	var extra json.RawMessage
+	if err := dec.Decode(&extra); err != io.EOF {
+		if err == nil {
+			return nil, fmt.Errorf("invalid character after top-level value")
+		}
+		return nil, err
+	}
+	return obj, nil
+}
+
+func rejectUnsafeIntegers(v any) error {
+	if v == nil {
+		return nil
+	}
+	if n, ok := v.(json.Number); ok {
+		return checkJSONNumber(n)
+	}
+	if _, ok := v.(time.Time); ok {
+		return nil
+	}
+	rv := reflect.ValueOf(v)
+	switch rv.Kind() {
+	case reflect.Interface, reflect.Pointer:
+		if rv.IsNil() {
+			return nil
+		}
+		return rejectUnsafeIntegers(rv.Elem().Interface())
+	case reflect.Map:
+		iter := rv.MapRange()
+		for iter.Next() {
+			if err := rejectUnsafeIntegers(iter.Value().Interface()); err != nil {
+				return err
+			}
+		}
+		return nil
+	case reflect.Slice, reflect.Array:
+		if rv.Kind() == reflect.Slice {
+			if raw, ok := v.(json.RawMessage); ok {
+				return rejectRawMessage(raw)
+			}
+			if rv.Type().Elem().Kind() == reflect.Uint8 {
+				return nil
+			}
+		}
+		for i := 0; i < rv.Len(); i++ {
+			if err := rejectUnsafeIntegers(rv.Index(i).Interface()); err != nil {
+				return err
+			}
+		}
+		return nil
+	case reflect.Struct:
+		rt := rv.Type()
+		for i := 0; i < rt.NumField(); i++ {
+			sf := rt.Field(i)
+			if !sf.IsExported() {
+				continue
+			}
+			tag := sf.Tag.Get("json")
+			if tag == "-" || strings.HasPrefix(tag, "-,") {
+				continue
+			}
+			if err := rejectUnsafeIntegers(rv.Field(i).Interface()); err != nil {
+				return err
+			}
+		}
+		return nil
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return checkSigned(rv.Int())
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return checkUnsigned(rv.Uint())
+	default:
+		return nil
+	}
+}
+
+func rejectRawMessage(raw json.RawMessage) error {
+	if len(bytes.TrimSpace(raw)) == 0 {
+		return nil
+	}
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.UseNumber()
+	var parsed any
+	if err := dec.Decode(&parsed); err != nil {
+		return nil
+	}
+	return rejectUnsafeIntegers(parsed)
+}
+
+func checkSigned(n int64) error {
+	if n > maxSafeInteger || n < -maxSafeInteger {
+		return fmt.Errorf("%d exceeds safe integer domain for JSON floats", n)
+	}
+	return nil
+}
+
+func checkUnsigned(n uint64) error {
+	if n > uint64(maxSafeInteger) {
+		return fmt.Errorf("%d exceeds safe integer domain for JSON floats", n)
+	}
+	return nil
+}
+
+func checkJSONNumber(n json.Number) error {
+	s := string(n)
+	if jsonIntegerLiteral(s) && jsonIntegerOutOfRange(s) {
+		return fmt.Errorf("%s exceeds safe integer domain for JSON floats", s)
+	}
+	return nil
+}
+
+func jsonIntegerLiteral(s string) bool {
+	if s == "" {
+		return false
+	}
+	i := 0
+	if s[0] == '-' {
+		if len(s) == 1 {
+			return false
+		}
+		i = 1
+	}
+	if s[i] == '0' {
+		return len(s) == i+1
+	}
+	for ; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func jsonIntegerOutOfRange(s string) bool {
+	if s[0] == '-' {
+		s = s[1:]
+	}
+	const maxDigits = "9007199254740991"
+	if len(s) != len(maxDigits) {
+		return len(s) > len(maxDigits)
+	}
+	return s > maxDigits
 }
 
 // NodeID builds the content-addressed id string used by the Python reference.
