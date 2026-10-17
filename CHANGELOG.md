@@ -47,6 +47,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A Python plan with an integer outside the RFC 8785 safe range is not left
+  in the durable memo, so a step with no `DECISION` can infer again. A tool
+  result with one of those integers is stored as a hashable `TOOL_RESULT`
+  with a digest, and resume raises that storage error instead of
+  `BLOCKED_NEEDS_GATE` (#463).
 - Postgres open paths bound ping and schema setup (default 10s, DSN
   `connect_timeout`, or `TRAJIR_PG_CONNECT_TIMEOUT`). S3 clients set an
   explicit 10s connect timeout and 60s read deadline (#406).

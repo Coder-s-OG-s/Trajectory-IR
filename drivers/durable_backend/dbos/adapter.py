@@ -1,7 +1,10 @@
 import os
 import sqlite3
+from functools import wraps
 
 from dbos import DBOS, DBOSConfig
+
+from trajectory_ir.runtime.nodes import UnsafePlan
 
 
 def _sqlite_file(url: str) -> str | None:
@@ -36,7 +39,16 @@ def init_backend(
 # model is silently re-invoked even though its output is discarded once
 # execution reaches the memoized DECISION step. Do not simplify this away.
 def durable_infer(fn):
-    return DBOS.step()(fn)
+    @wraps(fn)
+    def checked(*args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        except UnsafePlan as exc:
+            if exc.workflow_id is None:
+                exc.workflow_id = DBOS.workflow_id
+            raise
+
+    return DBOS.step()(checked)
 
 
 # Tool calls MUST go through this wrapper -- never invoked raw inside a
@@ -46,4 +58,16 @@ def durable_tool(fn):
 
 
 def durable_workflow(fn):
-    return DBOS.workflow()(fn)
+    wrapped = DBOS.workflow()(fn)
+
+    @wraps(fn)
+    def outer(*args, **kwargs):
+        try:
+            return wrapped(*args, **kwargs)
+        except UnsafePlan as exc:
+            workflow_id = exc.workflow_id
+            if workflow_id:
+                DBOS.delete_workflow(workflow_id)
+            raise
+
+    return outer
