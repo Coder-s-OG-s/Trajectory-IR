@@ -9,7 +9,7 @@ from __future__ import annotations
 import pytest
 from psycopg.errors import UniqueViolation
 
-from drivers.postgres.log import PostgresNodeLog
+from trajectory_ir.drivers.postgres.log import PostgresNodeLog
 
 
 class _RaisingCursor:

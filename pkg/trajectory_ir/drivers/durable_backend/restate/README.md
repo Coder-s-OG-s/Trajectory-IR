@@ -7,7 +7,7 @@ Optional second durable execution backend for Trajectory IR (issue #66).
 The master README names DBOS as the Phase 1A default and welcomes Restate
 once the adapter interface is stable. This package provides:
 
-1. The **same call surface** as `drivers.durable_backend.dbos.adapter`
+1. The **same call surface** as `trajectory_ir.drivers.durable_backend.dbos.adapter`
    (`init_backend`, `durable_infer`, `durable_tool`, `durable_workflow`)
 2. A **process local memo** implementation for development and unit tests
 3. Injection into `make_run_step` without hardcoding Restate into the IR core
@@ -19,7 +19,7 @@ IR only needs step memoization for model and tool calls.
 ## Local memo (default in this package)
 
 ```python
-from drivers.durable_backend.restate import (
+from trajectory_ir.drivers.durable_backend.restate import (
     durable_infer,
     durable_tool,
     durable_workflow,

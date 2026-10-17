@@ -5,7 +5,12 @@ from pathlib import Path
 
 import pytest
 
-from client.python.trajectory_client import exec_tool, open_trajectory, project, seal_decision
+from trajectory_ir.client.python.trajectory_client import (
+    exec_tool,
+    open_trajectory,
+    project,
+    seal_decision,
+)
 from trajectory_ir.console_emit import (
     FileSink,
     emit,

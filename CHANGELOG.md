@@ -29,6 +29,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Python `client` and `drivers` are packages under `trajectory_ir`
+  (`trajectory_ir.client`, `trajectory_ir.drivers`). The wheel no longer
+  installs top-level modules with those names (#459).
 - **Docs honesty:** landing README, scope card, master spec §7.2/§7.3/§8.3/§8.4
   now state the actual invariants. Honest resume freezes the plan, not the
   world. Block-and-gate is at-most-one automatic attempt, not "the world still

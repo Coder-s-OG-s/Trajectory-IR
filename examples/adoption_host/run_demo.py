@@ -30,7 +30,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from client.python.trajectory_client import (
+from trajectory_ir.client.python.trajectory_client import (
     commit_step,
     exec_tool,
     open_trajectory,

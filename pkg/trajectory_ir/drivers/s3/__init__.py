@@ -13,7 +13,7 @@ Credentials and endpoint come from the environment or an injected client.
 Never hardcode secrets in repository code.
 """
 
-from drivers.s3.cas import S3CAS, build_s3_client_from_env
+from trajectory_ir.drivers.s3.cas import S3CAS, build_s3_client_from_env
 
 __all__ = [
     "S3CAS",

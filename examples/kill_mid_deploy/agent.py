@@ -27,7 +27,7 @@ import time
 
 from dbos import SetWorkflowID
 
-from drivers.durable_backend.dbos.adapter import init_backend
+from trajectory_ir.drivers.durable_backend.dbos.adapter import init_backend
 from trajectory_ir.effects import EffectClass
 from trajectory_ir.resume.gate import BlockedNeedsGate
 from trajectory_ir.resume.step import make_run_step

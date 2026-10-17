@@ -121,9 +121,9 @@ When building, code must be placed strictly according to this physical infrastru
 * **`pkg/trajectory_ir/runtime/`**: Core logic (Nodes, Trajectory logic, JCS hashing). No DBOS/backend code belongs here.
 * **`pkg/trajectory_ir/effects/`**: Tool safety classes and MCP mappings.
 * **`pkg/trajectory_ir/resume/`**: The block-and-gate protocol semantics.
-* **`drivers/durable-backend/dbos/`**: The ONLY place where DBOS imports and workflow step wrappers exist.
+* **`pkg/trajectory_ir/drivers/durable_backend/dbos/`**: The ONLY place where DBOS imports and workflow step wrappers exist.
 * **`conformance/`**: The R01-R08 tests that prove the drivers work. 
 * **`examples/kill_mid_deploy/`**: A runnable E2E harness demonstrating crash-safety in the real world.
 
 > [!WARNING]
-> **Boundary Violation Rule**: The `pkg/trajectory_ir/runtime/` module must **never** import `dbos`. All durable execution logic must remain completely isolated behind the interface in `drivers/durable-backend/`.
+> **Boundary Violation Rule**: The `pkg/trajectory_ir/runtime/` module must **never** import `dbos`. All durable execution logic must remain completely isolated behind the interface in `pkg/trajectory_ir/drivers/durable_backend/`.

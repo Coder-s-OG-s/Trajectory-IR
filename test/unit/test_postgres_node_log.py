@@ -9,7 +9,7 @@ from typing import Any
 
 import pytest
 
-from drivers.postgres.log import PostgresNodeLog, open_postgres_node_log
+from trajectory_ir.drivers.postgres.log import PostgresNodeLog, open_postgres_node_log
 from trajectory_ir.runtime.log import NodeNotStoredError, SlotConflictError
 from trajectory_ir.runtime.nodes import Node
 
@@ -377,7 +377,7 @@ def _capture_connect(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
         return FakePgConnection()
 
     monkeypatch.setattr(
-        "drivers.postgres.log._require_psycopg",
+        "trajectory_ir.drivers.postgres.log._require_psycopg",
         lambda: (type("Psycopg", (), {"connect": staticmethod(connect)})(), None),
     )
     return seen

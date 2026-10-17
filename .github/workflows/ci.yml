@@ -84,10 +84,10 @@ jobs:
           pip install -e ".[dev]"
 
       - name: Ruff lint
-        run: ruff check pkg drivers client test conformance examples
+        run: ruff check pkg test conformance examples
 
       - name: Ruff format check
-        run: ruff format --check pkg drivers client test conformance examples
+        run: ruff format --check pkg test conformance examples
 
       - name: Mypy
         run: mypy
@@ -99,8 +99,6 @@ jobs:
         run: |
           pytest test/unit -q \
             --cov=trajectory_ir \
-            --cov=drivers \
-            --cov=client \
             --cov-report=term \
             --cov-report=xml:coverage-python.xml \
             --cov-fail-under=${{ env.PYTHON_COV_FAIL_UNDER }}
@@ -143,7 +141,13 @@ jobs:
           from trajectory_ir.runtime.nodes import Node, payload_hash; \
           from trajectory_ir.runtime.log import NodeLog; \
           from trajectory_ir.storage import FileSystemCAS, content_hash; \
+          from trajectory_ir.client.python.trajectory_client import open_trajectory; \
+          import importlib.util; \
+          import trajectory_ir.drivers.sqlite; \
           assert content_hash(b'') == 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'; \
+          assert open_trajectory; \
+          assert importlib.util.find_spec('client') is None; \
+          assert importlib.util.find_spec('drivers') is None; \
           log = NodeLog(':memory:'); \
           rec = log.append('DECISION', 1, {'plan': {}}, 't1', 'tenant1', seq=1); \
           assert rec.id; \
@@ -397,7 +401,7 @@ jobs:
 
       - name: Create bucket (idempotent, s3mock also creates it from initialBuckets)
         run: |
-          python -c "from drivers.s3.cas import build_s3_client_from_env; c=build_s3_client_from_env();
+          python -c "from trajectory_ir.drivers.s3.cas import build_s3_client_from_env; c=build_s3_client_from_env();
           try:
             c.create_bucket(Bucket='trajir')
           except Exception as e:

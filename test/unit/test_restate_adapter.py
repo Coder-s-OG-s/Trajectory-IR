@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import pytest
 
-from drivers.durable_backend.restate import (
+from trajectory_ir.drivers.durable_backend.restate import (
     durable_infer,
     durable_tool,
     durable_workflow,
     init_backend,
 )
-from drivers.durable_backend.restate.local_memo import clear_memo, workflow_scope
+from trajectory_ir.drivers.durable_backend.restate.local_memo import clear_memo, workflow_scope
 from trajectory_ir.effects import EffectClass
 from trajectory_ir.resume.step import make_run_step
 from trajectory_ir.runtime.log import NodeLog

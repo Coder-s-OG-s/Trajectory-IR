@@ -85,7 +85,7 @@ Set in `.github/workflows/ci.yml` as `env:`:
 
 | Variable | Default | Applies to |
 |----------|---------|------------|
-| `PYTHON_COV_FAIL_UNDER` | `80` | unit suite on `trajectory_ir` + `drivers` + `client` |
+| `PYTHON_COV_FAIL_UNDER` | `80` | unit suite on `trajectory_ir` |
 | `GO_COV_FAIL_UNDER` | `80` | `go/trajir/...` except `durable/temporal` via `scripts/check_go_coverage.sh` |
 
 Raise only after a measured green baseline; do not drop floors without a PR.

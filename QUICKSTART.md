@@ -49,7 +49,7 @@ PyPI publish of ``trajectory-ir`` is a maintainer step after the git tag (see ``
 ## 2. Minimal Python flow (client + NodeLog, reference port)
 
 ```python
-from client.python.trajectory_client import (
+from trajectory_ir.client.python.trajectory_client import (
     open_trajectory,
     project,
     seal_decision,
@@ -134,7 +134,7 @@ else:
 ## 5. Sandbox mode (R06)
 
 ```python
-from client.python.trajectory_client import open_trajectory, exec_tool
+from trajectory_ir.client.python.trajectory_client import open_trajectory, exec_tool
 from trajectory_ir.effects import EffectClass
 from trajectory_ir.runtime.tool import Tool
 
@@ -222,7 +222,7 @@ pip install -e ".[dev,postgres]"
 ```
 
 ```python
-from drivers.postgres.log import open_postgres_node_log
+from trajectory_ir.drivers.postgres.log import open_postgres_node_log
 
 log = open_postgres_node_log()  # TRAJIR_DATABASE_URL
 log.append("DECISION", 1, {"plan": {}}, "e2e-pg", "demo", seq=1)
@@ -243,7 +243,7 @@ pip install -e ".[dev,s3]"
 ```
 
 ```python
-from drivers.s3.cas import S3CAS, build_s3_client_from_env
+from trajectory_ir.drivers.s3.cas import S3CAS, build_s3_client_from_env
 from trajectory_ir.storage import put_artifact, rehydrate_artifacts
 
 store = S3CAS(build_s3_client_from_env(), bucket="trajir")

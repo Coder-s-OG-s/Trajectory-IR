@@ -11,7 +11,12 @@ from __future__ import annotations
 
 import pytest
 
-from client.python.trajectory_client import exec_tool, open_trajectory, resume, seal_decision
+from trajectory_ir.client.python.trajectory_client import (
+    exec_tool,
+    open_trajectory,
+    resume,
+    seal_decision,
+)
 from trajectory_ir.effects import EffectClass
 from trajectory_ir.resume.gate import BlockedNeedsGate
 from trajectory_ir.runtime.tool import Tool
@@ -37,7 +42,7 @@ def test_resume_raises_on_trajectory_with_no_history(tmp_path):
 def test_resume_raises_on_empty_history_and_closes_connection(tmp_path, monkeypatch):
     import sqlite3
 
-    from client.python.trajectory_client import Trajectory
+    from trajectory_ir.client.python.trajectory_client import Trajectory
 
     db_path = str(tmp_path / "trajectory.sqlite")
     closed_conns = []

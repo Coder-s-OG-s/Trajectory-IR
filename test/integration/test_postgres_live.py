@@ -10,7 +10,7 @@ import pytest
 
 pytest.importorskip("psycopg")
 
-from drivers.postgres.log import open_postgres_node_log
+from trajectory_ir.drivers.postgres.log import open_postgres_node_log
 from trajectory_ir.runtime.log import SlotConflictError
 
 pytestmark = pytest.mark.skipif(

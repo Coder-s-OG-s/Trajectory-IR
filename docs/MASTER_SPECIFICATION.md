@@ -114,7 +114,7 @@ Tracked under epic #113.
 - Treat **Go as the primary SDK** for new features, storage drivers, and adoption demos (`go/trajir`, `go/examples`).
 - Keep **Python as the reference and parity port** (DBOS local profile, existing client and conformance stay green).
 - Go production durable backend remains **Temporal** (`go/trajir/durable/temporal`); LocalSQLite and Memory stay test fakes for coding.
-- Go Postgres NodeLog and S3 compatible CAS drivers (parity with Python `drivers.postgres` / `drivers.s3`).
+- Go Postgres NodeLog and S3 compatible CAS drivers (parity with Python `trajectory_ir.drivers.postgres` / `trajectory_ir.drivers.s3`).
 - Go first QUICKSTART and adoption host demo so a newcomer can succeed without installing Python.
 - CONTRIBUTING process: implement new Phase 1B work in Go first, or dual language in one PR.
 
@@ -547,7 +547,7 @@ This section is binding for implementation choices. Do not introduce alternative
 - **DBOS**, the Phase 1A default for the **Python** SDK. Embeds as a Python library backed by SQLite (local) or PostgreSQL (server profiles); no separate server process to operate, which matters for an early stage project with limited operational capacity. `DECISION` and `TOOL_CALL` steps are wrapped as DBOS workflow/step functions so that crash safe, at most once execution and lease/heartbeat handling come from DBOS rather than a bespoke implementation.
 - **Temporal**, the recognized production backend for the **Go** port (`go/trajir/durable/temporal`, issues #16, #24), behind the same internal adapter interface. Chosen for Go/Kubernetes style server deployments where a standalone durable execution cluster is the ecosystem norm; not a Phase 1A Python requirement and not a substitute for DBOS as the Python default (§3.1).
 - **Restate**, an optional additional adapter behind the same internal interface, appropriate for deployments that want a standalone durable execution server rather than an embedded library. Not required for Phase 1A; must not be started for the Python SDK until the DBOS adapter is conformant (R01/R02 passing).
-- The backend is selected by deployment profile (§11.4), never hardcoded into `pkg/runtime`, see the adapter interface in `drivers/durable-backend/` (§13).
+- The backend is selected by deployment profile (§11.4), never hardcoded into `pkg/runtime`, see the adapter interface in `pkg/trajectory_ir/drivers/durable_backend/` (§13).
 
 ### 12.1 Languages
 
@@ -671,7 +671,7 @@ When developing Trajectory IR using AI coding assistants, human maintainers and 
 Treat every numbered rule below as an immutable constraint, not a suggestion:
 
 1. **This document is the spec.** Do not derive undefined behavior from general familiarity with similar systems (event sourcing frameworks, other IR designs, etc.). Where this document is silent on a design point, do not invent one, open a `SPEC-QUESTION` issue or comment and stop short of implementing the undefined behavior. This is distinct from rule 2 below: the durable execution backend is not "a similar system to avoid copying", it is a declared, intentional dependency, and its documented behavior should be relied on, not reimplemented.
-2. **Never implement custom crash detection, retry, or lease/heartbeat logic.** This is the single most important rule in this section. That responsibility belongs entirely to the durable execution backend adapter (§3.1, §12.0). If a task seems to need it, the adapter interface is incomplete, extend `drivers/durable-backend/`, and if the chosen backend (DBOS) genuinely cannot provide what's needed, raise an issue before writing a parallel mechanism in `pkg/resume/`. A pull request that adds retry loops, polling, or timeout tracking outside the adapter is a defect, not a feature, regardless of how small it looks.
+2. **Never implement custom crash detection, retry, or lease/heartbeat logic.** This is the single most important rule in this section. That responsibility belongs entirely to the durable execution backend adapter (§3.1, §12.0). If a task seems to need it, the adapter interface is incomplete, extend `pkg/trajectory_ir/drivers/durable_backend/`, and if the chosen backend (DBOS) genuinely cannot provide what's needed, raise an issue before writing a parallel mechanism in `pkg/resume/`. A pull request that adds retry loops, polling, or timeout tracking outside the adapter is a defect, not a feature, regardless of how small it looks.
 3. **Do not create parallel schemas.** The node kinds in §6.2 are the complete set for this phase. Do not add new node kinds, rename existing ones, or introduce an alternative representation (e.g. a "simplified" event format) for convenience.
 4. **Hashing must be exact and cross language stable.** Any node identity or content hash computation must follow §6.3 precisely, using a conformant RFC 8785 JCS implementation. Do not substitute a custom "sorted keys" JSON serialization, this is the single most likely source of silent, hard to debug divergence between components written by different agents or sessions.
 5. **Respect the linear known args rule (§8.1).** Do not implement, suggest, or work around it with symbolic argument references, speculative execution, or a hidden dependency graph. If a task seems to require it, stop and raise it as an issue rather than solving it locally.

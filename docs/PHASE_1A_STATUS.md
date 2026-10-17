@@ -7,13 +7,13 @@ Honest inventory of what is **on `main`** versus what remains **out of scope** o
 | Area | Location / notes |
 |------|------------------|
 | Python IR core | `pkg/trajectory_ir/` — nodes, NodeLog, effects, gate, run_step |
-| DBOS adapter | `drivers/durable_backend/dbos/` |
-| Restate adapter (local memo) | `drivers/durable_backend/restate/` + injectable `make_run_step` hooks |
-| Python client | `client/python/trajectory_client.py` (open/project/seal/exec/commit/resume; sandbox mode) |
+| DBOS adapter | `pkg/trajectory_ir/drivers/durable_backend/dbos/` |
+| Restate adapter (local memo) | `pkg/trajectory_ir/drivers/durable_backend/restate/` + injectable `make_run_step` hooks |
+| Python client | `pkg/trajectory_ir/client/python/trajectory_client.py` (open/project/seal/exec/commit/resume; sandbox mode) |
 | `.tir` thin/fat | `pkg/trajectory_ir/package/`, Go `go/trajir/tir` |
 | FS CAS + thin rehydrate | `trajectory_ir.storage`, `put_artifact` |
-| S3 CAS | `drivers.s3.S3CAS` |
-| Postgres NodeLog | `drivers.postgres.PostgresNodeLog` |
+| S3 CAS | `trajectory_ir.drivers.s3.S3CAS` |
+| Postgres NodeLog | `trajectory_ir.drivers.postgres.PostgresNodeLog` |
 | Projector (R04) + policy file | `runtime/projector.py`, `runtime/policy.py`, Go `trajir/projector` |
 | Sandbox (R06) | `runtime/sandbox.py`, Go `trajir/sandbox` |
 | Graft (R07) | `runtime/graft.py`, Go `trajir/graft` |

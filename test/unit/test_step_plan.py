@@ -1,16 +1,16 @@
 import pytest
 
-from drivers.durable_backend.restate.local_memo import (
+from trajectory_ir.drivers.durable_backend.restate.local_memo import (
     clear_memo,
     workflow_scope,
 )
-from drivers.durable_backend.restate.local_memo import (
+from trajectory_ir.drivers.durable_backend.restate.local_memo import (
     durable_infer as restate_infer,
 )
-from drivers.durable_backend.restate.local_memo import (
+from trajectory_ir.drivers.durable_backend.restate.local_memo import (
     durable_tool as restate_tool,
 )
-from drivers.durable_backend.restate.local_memo import (
+from trajectory_ir.drivers.durable_backend.restate.local_memo import (
     durable_workflow as restate_workflow,
 )
 from trajectory_ir.effects import EffectClass

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from client.python.trajectory_client import exec_tool, open_trajectory
+from trajectory_ir.client.python.trajectory_client import exec_tool, open_trajectory
 from trajectory_ir.effects import EffectClass
 from trajectory_ir.runtime.sandbox import RunMode, SandboxForbidden
 from trajectory_ir.runtime.tool import Tool

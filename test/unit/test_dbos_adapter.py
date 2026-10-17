@@ -1,4 +1,4 @@
-from drivers.durable_backend.dbos.adapter import (
+from trajectory_ir.drivers.durable_backend.dbos.adapter import (
     durable_infer,
     durable_workflow,
     init_backend,

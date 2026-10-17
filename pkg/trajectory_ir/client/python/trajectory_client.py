@@ -4,13 +4,13 @@ from dataclasses import dataclass, field
 from types import SimpleNamespace
 from typing import Any
 
-from drivers.durable_backend.dbos.adapter import init_backend
 from trajectory_ir.console_emit import (
     OBSERVATION_BUDGET,
     note_node,
     note_projection,
     note_seal,
 )
+from trajectory_ir.drivers.durable_backend.dbos.adapter import init_backend
 from trajectory_ir.effects import assert_open_world_effect, requires_block_and_gate
 from trajectory_ir.resume.gate import make_gated_tool_call, make_plain_tool_call
 from trajectory_ir.resume.world import WorldDrift, decision_payload

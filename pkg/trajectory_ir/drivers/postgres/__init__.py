@@ -13,7 +13,7 @@ Connection strings come from ``DATABASE_URL`` / ``TRAJIR_DATABASE_URL`` or an
 explicit DSN. Never commit credentials.
 """
 
-from drivers.postgres.log import PostgresNodeLog, open_postgres_node_log
+from trajectory_ir.drivers.postgres.log import PostgresNodeLog, open_postgres_node_log
 
 __all__ = [
     "PostgresNodeLog",

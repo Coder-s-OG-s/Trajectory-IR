@@ -9,7 +9,7 @@ The key is never injected into tool kwargs.
 import json
 from pathlib import Path
 
-from client.python.trajectory_client import exec_tool, open_trajectory
+from trajectory_ir.client.python.trajectory_client import exec_tool, open_trajectory
 from trajectory_ir.effects import EffectClass
 from trajectory_ir.resume.gate import make_gated_tool_call, make_plain_tool_call
 from trajectory_ir.resume.idempotency import (
