@@ -38,3 +38,36 @@ def test_correlate_sets_attrs(monkeypatch) -> None:
     assert span.attrs["trajir.control"] == "in_process_wrap"
     assert span.attrs["trajir.idempotency_key"] == "deadbeef"
     assert os.environ.get("TRAJIR_OTEL_CORRELATE") == "1"
+
+
+def test_label_after_seal_refuses_empty_decision(monkeypatch) -> None:
+    from integrations.otel.correlate import label_after_seal
+
+    monkeypatch.setenv("TRAJIR_OTEL_CORRELATE", "1")
+    span = _FakeSpan()
+    label_after_seal(
+        span,
+        decision_node_id="",
+        trajectory_id="t",
+        tenant_id="demo",
+        step_n=1,
+    )
+    assert span.attrs == {}
+
+
+def test_label_after_seal_copies_decision_id(monkeypatch) -> None:
+    from integrations.otel.correlate import label_after_seal
+
+    monkeypatch.setenv("TRAJIR_OTEL_CORRELATE", "1")
+    span = _FakeSpan()
+    label_after_seal(
+        span,
+        decision_node_id="dec-1",
+        trajectory_id="t",
+        tenant_id="demo",
+        step_n=1,
+        effect_class="READ_ONLY",
+        tool_name="echo",
+    )
+    assert span.attrs["trajir.node_id"] == "dec-1"
+    assert span.attrs["trajir.control"] == "in_process_wrap"

@@ -84,13 +84,16 @@ jobs:
           pip install -e ".[dev]"
 
       - name: Ruff lint
-        run: ruff check pkg drivers client test conformance examples
+        run: ruff check pkg drivers client test conformance examples integrations/hosthook integrations/adk integrations/claude integrations/projection_eval scripts/write_claude_local_config.py
 
       - name: Ruff format check
-        run: ruff format --check pkg drivers client test conformance examples
+        run: ruff format --check pkg drivers client test conformance examples integrations/hosthook integrations/adk integrations/claude integrations/projection_eval scripts/write_claude_local_config.py
 
       - name: Mypy
         run: mypy
+
+      - name: Mypy host hook
+        run: mypy integrations/hosthook integrations/adk integrations/claude integrations/projection_eval scripts/write_claude_local_config.py
 
       - name: Cross language hash goldens (Python)
         run: pytest test/unit/test_hash_vectors.py test/unit/test_node_identity.py -q

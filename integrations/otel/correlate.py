@@ -1,16 +1,43 @@
 """Attach sealed TrajIR facts onto an existing OTel span.
 
-This is **correlation / export only**. It must run *after* an in-process
-seal (see integrations/langgraph/sidecar.py). A collector that sees
-``execute_tool`` after the span ends cannot seal before the world change.
+This is correlation and export only. It runs after an in-process seal
+(see integrations/langgraph/sidecar.py). A collector that sees
+execute_tool after the span ends cannot seal before the world change.
 That path is a logger, not Chain-of-Evidence. Do not use this module as a
 substitute for TrajIRToolGuard.
 """
 
 from __future__ import annotations
 
+import contextvars
 import os
 from typing import Any
+
+_SPAN: contextvars.ContextVar[Any] = contextvars.ContextVar("trajir_otel_span", default=None)
+
+
+def push_span(span: Any) -> contextvars.Token:
+    """Tests and hosts can pin the span that should receive the next label."""
+    return _SPAN.set(span)
+
+
+def reset_span(token: contextvars.Token) -> None:
+    _SPAN.reset(token)
+
+
+def current_span() -> Any:
+    """Return the pinned span, or the active OpenTelemetry span when installed."""
+    pinned = _SPAN.get()
+    if pinned is not None:
+        return pinned
+    try:
+        from opentelemetry import trace  # type: ignore[import-not-found]
+    except ImportError:
+        return None
+    try:
+        return trace.get_current_span()
+    except Exception:
+        return None
 
 
 def correlate_enabled() -> bool:
@@ -60,5 +87,36 @@ def attach_seal_attributes(
         attrs["trajir.tool_name"] = tool_name
     if idempotency_key:
         attrs["trajir.idempotency_key"] = idempotency_key
-    for k, v in attrs.items():
-        setter(k, v)
+    for key, value in attrs.items():
+        setter(key, value)
+
+
+def label_after_seal(
+    span: Any,
+    *,
+    decision_node_id: str,
+    trajectory_id: str,
+    tenant_id: str,
+    step_n: int,
+    content_hash: str = "",
+    effect_class: str = "",
+    tool_name: str = "",
+    idempotency_key: str = "",
+) -> None:
+    """Label ``span`` only when an in-process seal already produced a decision id.
+
+    An empty decision id means the seal has not happened. Nothing is copied.
+    """
+    if not decision_node_id:
+        return
+    attach_seal_attributes(
+        span,
+        trajectory_id=trajectory_id,
+        tenant_id=tenant_id,
+        step_n=step_n,
+        node_id=decision_node_id,
+        content_hash=content_hash,
+        effect_class=effect_class,
+        tool_name=tool_name,
+        idempotency_key=idempotency_key,
+    )

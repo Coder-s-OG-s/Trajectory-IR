@@ -28,6 +28,7 @@ from trajectory_ir.console_emit import from_env, note_package
 from trajectory_ir.effects import EffectClass, assert_open_world_effect, classify_tool
 from trajectory_ir.package import export_tir
 from trajectory_ir.runtime.log import NodeLog
+from trajectory_ir.runtime.nodes import payload_hash
 from trajectory_ir.runtime.tool import Tool
 
 
@@ -183,6 +184,35 @@ class TrajIRToolGuard:
         self._sealed = True
         self._step_committed = False
 
+    def _label_after_seal(self, tool_name: str, effect: EffectClass) -> None:
+        """Copy OTel labels only after this step has a DECISION node."""
+        from integrations.otel.correlate import correlate_enabled, current_span, label_after_seal
+
+        if not correlate_enabled():
+            return
+        node_id = ""
+        content_hash = ""
+        log = NodeLog(self._db_path)
+        try:
+            rows = log.list_nodes(self.trajectory_id, tenant_id=self.tenant_id)
+        finally:
+            log.close()
+        for row in rows:
+            if row.get("step_n") == self.step_n and row.get("kind") == "DECISION":
+                payload = row.get("payload") if isinstance(row.get("payload"), dict) else {}
+                node_id = str(row.get("id") or "")
+                content_hash = payload_hash(payload) if payload else ""
+        label_after_seal(
+            current_span(),
+            decision_node_id=node_id,
+            trajectory_id=self.trajectory_id,
+            tenant_id=self.tenant_id,
+            step_n=self.step_n,
+            content_hash=content_hash,
+            effect_class=effect.value,
+            tool_name=tool_name,
+        )
+
     def run_sealed(
         self,
         name: str,
@@ -210,6 +240,7 @@ class TrajIRToolGuard:
                 raise RuntimeError("TrajIRToolGuard is closed")
             self._seal_plan(calls)
             effect = self._effect_for(name)
+            self._label_after_seal(name, effect)
             assert_open_world_effect(
                 name,
                 effect,

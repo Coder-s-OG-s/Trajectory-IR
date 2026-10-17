@@ -272,3 +272,32 @@ def test_resume_starts_after_the_last_logged_step(tmp_path: Path) -> None:
     decisions, tools = _steps(tmp_path, "ut-resume")
     assert decisions == [1, 2]
     assert tools == [1, 2]
+
+
+def test_otel_label_is_copied_only_after_the_seal(tmp_path: Path, monkeypatch) -> None:
+    from integrations.otel.correlate import push_span, reset_span
+
+    class Span:
+        def __init__(self) -> None:
+            self.attrs: dict[str, object] = {}
+
+        def set_attribute(self, key: str, value: object) -> None:
+            self.attrs[key] = value
+
+    monkeypatch.setenv("TRAJIR_OTEL_CORRELATE", "1")
+    span = Span()
+    token = push_span(span)
+    try:
+        with TrajIRToolGuard(
+            tenant_id="demo",
+            trajectory_id="ut-otel",
+            work_dir=tmp_path,
+            effect_hints={"echo": EffectClass.PURE},
+        ) as guard:
+            guard.run_sealed("echo", {"msg": "x"}, lambda msg: msg)
+            guard.finish()
+    finally:
+        reset_span(token)
+    assert span.attrs["trajir.trajectory_id"] == "ut-otel"
+    assert span.attrs["trajir.node_id"]
+    assert span.attrs["trajir.control"] == "in_process_wrap"
