@@ -4,6 +4,7 @@ from typing import Any
 from trajectory_ir.effects import assert_open_world_effect, requires_block_and_gate
 from trajectory_ir.resume.gate import make_gated_tool_call, make_plain_tool_call
 from trajectory_ir.resume.world import check_world, decision_payload, sealed_world_snapshot
+from trajectory_ir.runtime.nodes import UnsafeInteger, UnsafePlan, reject_unsafe_integers
 from trajectory_ir.runtime.sandbox import RunMode, assert_tool_allowed_in_mode, normalize_run_mode
 
 
@@ -110,6 +111,22 @@ def _tool_calls_from_plan(plan: dict) -> list[tuple[str, dict]]:
     return calls
 
 
+def _storable_model_call(model_call):
+    def call(context):
+        plan = model_call(context)
+        if not isinstance(plan, dict):
+            raise ValueError(f"resume: plan: want object, got {type(plan).__name__}")
+        try:
+            reject_unsafe_integers(decision_payload(plan))
+        except UnsafeInteger as exc:
+            raise UnsafePlan(str(exc)) from None
+        return plan
+
+    call.__name__ = getattr(model_call, "__name__", "model_call")
+    call.__qualname__ = getattr(model_call, "__qualname__", call.__name__)
+    return call
+
+
 def make_run_step(
     node_log,
     tenant_id,
@@ -162,7 +179,7 @@ def make_run_step(
         # durable_infer here, a crash after this line but before the DECISION
         # is sealed would cause the backend to re-invoke model_call on resume even
         # though its output would be discarded once replay reaches DECISION.
-        infer = durable_infer(model_call)
+        infer = durable_infer(_storable_model_call(model_call))
         plan = _require_plan_object(infer(context))
 
         # append() is idempotent by content, so this doubles as the "seal":

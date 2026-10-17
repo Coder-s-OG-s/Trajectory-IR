@@ -37,6 +37,20 @@ class NodeValidationError(ValueError):
     """Raised when node fields violate IR identity or payload rules."""
 
 
+class UnsafeInteger(Exception):
+    """An int outside the RFC 8785 range. The value was not stored as a number."""
+
+    def __init__(self, message: str):
+        super().__init__(message)
+
+    def __reduce__(self):
+        return (self.__class__, (str(self),))
+
+
+class UnsafePlan(UnsafeInteger):
+    """A model plan cannot be sealed, so the durable memo must not keep it."""
+
+
 def validate_id_component(name: str, value: str) -> str:
     """Validate a node_id preimage string field (tenant, trajectory, kind, or payload hash)."""
     if not isinstance(value, str) or not value:
@@ -60,6 +74,16 @@ def payload_hash(payload: dict) -> str:
         raise RuntimeError("rfc8785 is required for payload hashing but is not installed")
     canon = rfc8785.dumps(payload)
     return hashlib.sha256(canon).hexdigest()
+
+
+def reject_unsafe_integers(payload: dict) -> None:
+    """Raise UnsafeInteger when payload has an int outside the RFC 8785 range."""
+    try:
+        payload_hash(payload)
+    except Exception as exc:
+        if rfc8785 is not None and isinstance(exc, rfc8785.IntegerDomainError):
+            raise UnsafeInteger(str(exc)) from None
+        raise
 
 
 def node_id(
