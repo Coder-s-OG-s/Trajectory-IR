@@ -100,3 +100,25 @@ func TestSummarizeMissingCharLensNullAvoided(t *testing.T) {
 		t.Fatalf("expected null token estimates, got %+v", sum)
 	}
 }
+
+func TestProviderUsageKeepsLatestEventNotASum(t *testing.T) {
+	t.Parallel()
+	ts := time.Date(2026, 9, 22, 15, 0, 0, 0, time.UTC).Format(time.RFC3339)
+	events := []Event{
+		{
+			SchemaVersion: SchemaVersion, ID: "1", TS: ts, Kind: KindNodeAppended, Source: "go",
+			TrajectoryID: "t1", Payload: json.RawMessage(`{"prompt_tokens":10,"completion_tokens":4,"model":"demo-model"}`),
+		},
+		{
+			SchemaVersion: SchemaVersion, ID: "2", TS: ts, Kind: KindNodeAppended, Source: "go",
+			TrajectoryID: "t1", Payload: json.RawMessage(`{"prompt_tokens":3,"completion_tokens":1,"model":"demo-model"}`),
+		},
+	}
+	sum := Summarize("t1", events)
+	if sum.PromptTokens == nil || *sum.PromptTokens != 3 {
+		t.Fatalf("prompt=%v", sum.PromptTokens)
+	}
+	if sum.CompletionTokens == nil || *sum.CompletionTokens != 1 {
+		t.Fatalf("completion=%v", sum.CompletionTokens)
+	}
+}

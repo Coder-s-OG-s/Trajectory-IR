@@ -16,6 +16,7 @@ from trajectory_ir.resume.gate import make_gated_tool_call, make_plain_tool_call
 from trajectory_ir.resume.world import WorldDrift, decision_payload
 from trajectory_ir.resume.world import check_world as _check_world
 from trajectory_ir.runtime.log import NodeLog
+from trajectory_ir.runtime.nodes import payload_hash
 from trajectory_ir.runtime.sandbox import RunMode, assert_tool_allowed_in_mode, normalize_run_mode
 from trajectory_ir.runtime.tool import Tool
 
@@ -229,10 +230,47 @@ def exec_tool(trajectory: Trajectory, step_n: int, call: dict, tool: Tool, seq: 
             )
             result = fn(**call["args"])
     except Exception:
-        _emit_tool_nodes(trajectory, step_n, seq)
+        _emit_tool_console(trajectory, step_n, seq, tool)
         raise
-    _emit_tool_nodes(trajectory, step_n, seq)
+    _emit_tool_console(trajectory, step_n, seq, tool)
     return ToolResult(step_n=step_n, result=result)
+
+
+def _emit_tool_console(trajectory: Trajectory, step_n: int, seq: int, tool: Tool) -> None:
+    """Emit node.appended for TOOL_CALL / outcome rows after exec_tool."""
+    if trajectory.console_sink is None:
+        return
+    try:
+        rows = trajectory._log.list_nodes(trajectory.trajectory_id, tenant_id=trajectory.tenant_id)
+    except Exception:
+        return
+    effect = getattr(tool.effect_class, "value", None) or str(tool.effect_class)
+    for row in rows:
+        if row.get("step_n") != step_n:
+            continue
+        if row.get("seq") not in (seq, seq + 1):
+            continue
+        payload = row.get("payload")
+        body: dict[str, Any] = payload if isinstance(payload, dict) else {}
+        try:
+            phash = payload_hash(body)
+        except Exception:
+            phash = ""
+        node = SimpleNamespace(
+            id=row["id"],
+            kind=row["kind"],
+            seq=row["seq"],
+            step_n=row["step_n"],
+            payload=body,
+            phash=phash,
+        )
+        note_node(
+            trajectory.console_sink,
+            trajectory_id=trajectory.trajectory_id,
+            tenant_id=trajectory.tenant_id,
+            node=node,
+            effect_class=effect if row["kind"] == "TOOL_CALL" else None,
+        )
 
 
 def commit_step(trajectory: Trajectory, step_n: int, seq: int) -> None:
@@ -295,35 +333,6 @@ def _emit_projection(trajectory: Trajectory, step_n: int) -> None:
         )
     except Exception:
         return
-
-
-def _emit_tool_nodes(trajectory: Trajectory, step_n: int, seq: int) -> None:
-    if trajectory.console_sink is None:
-        return
-    try:
-        rows = trajectory._log.list_nodes(trajectory.trajectory_id, tenant_id=trajectory.tenant_id)
-    except Exception:
-        return
-    for row in rows:
-        if row.get("kind") not in ("TOOL_CALL", "TOOL_RESULT"):
-            continue
-        if row.get("seq") not in (seq, seq + 1):
-            continue
-        if row.get("step_n") not in (step_n, None) and row.get("step_n") != step_n:
-            continue
-        node = SimpleNamespace(
-            id=row.get("id"),
-            kind=row.get("kind"),
-            seq=row.get("seq"),
-            phash="",
-            step_n=row.get("step_n"),
-        )
-        note_node(
-            trajectory.console_sink,
-            trajectory_id=trajectory.trajectory_id,
-            tenant_id=trajectory.tenant_id,
-            node=node,
-        )
 
 
 def resume(

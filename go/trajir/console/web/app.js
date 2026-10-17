@@ -14,6 +14,8 @@
     inflight: false,
     about: null,
     aboutOpen: false,
+    pageSize: 10,
+    page: {},
   };
 
   const KIND_LABELS = {
@@ -168,6 +170,10 @@
     return KIND_LABELS[kind] || kind || "Event";
   }
 
+  function kindCode(kind) {
+    return esc(kind || "").replaceAll(".", ".<wbr>");
+  }
+
   function dotClass(kind, payload) {
     if (kind === "seal.verified" && payload && payload.ok === false) return "bad";
     if (kind === "seal.created" || kind === "seal.verified") return "ok";
@@ -196,6 +202,101 @@
     return (state.runs || []).filter((r) => !q || String(r.trajectory_id).toLowerCase().includes(q));
   }
 
+  function pageSizeNow() {
+    return state.pageSize === 20 ? 20 : 10;
+  }
+
+  function takePage(key, items) {
+    const list = items || [];
+    const total = list.length;
+    const size = pageSizeNow();
+    const pages = total > 0 ? ((total + size - 1) / size) | 0 : 1;
+    let page = Number(state.page[key]);
+    if (!Number.isFinite(page) || page < 1) page = 1;
+    if (page > pages) page = pages;
+    state.page[key] = page;
+    const start = (page - 1) * size;
+    return { rows: list.slice(start, start + size), total, page, pages, size, start };
+  }
+
+  function pagerHTML(key, total) {
+    if (!(total > 10)) return "";
+    const size = pageSizeNow();
+    const pages = ((total + size - 1) / size) | 0;
+    let page = Number(state.page[key]);
+    if (!Number.isFinite(page) || page < 1) page = 1;
+    if (page > pages) page = pages;
+    const from = (page - 1) * size + 1;
+    const to = page * size > total ? total : page * size;
+    const prevOff = page <= 1 ? " disabled" : "";
+    const nextOff = page >= pages ? " disabled" : "";
+    const on10 = size === 10 ? ' aria-pressed="true"' : "";
+    const on20 = size === 20 ? ' aria-pressed="true"' : "";
+    return `<nav class="pager" data-pager="${esc(key)}" aria-label="Pages">
+      <button type="button" class="btn" data-page="prev"${prevOff}>Previous</button>
+      <span class="pager-status">Page ${page} of ${pages}</span>
+      <button type="button" class="btn" data-page="next"${nextOff}>Next</button>
+      <span class="pager-size">Per page</span>
+      <button type="button" class="btn" data-size="10"${on10}>10</button>
+      <button type="button" class="btn" data-size="20"${on20}>20</button>
+      <span class="pager-count">${from} to ${to} of ${total}</span>
+    </nav>`;
+  }
+
+  function resetPages(keys) {
+    keys.forEach((key) => {
+      state.page[key] = 1;
+    });
+  }
+
+  function refreshAfterPager(key, sizeChanged) {
+    if (sizeChanged || key === "sidebar" || String(key).indexOf("home-") === 0) {
+      renderRunList();
+    }
+    if (sizeChanged) {
+      if (!state.id) renderHome();
+      else {
+        renderOverview();
+        renderSeals();
+        renderTransfers();
+        renderEconomy();
+      }
+      return;
+    }
+    if (key === "home-runs" || key === "home-share" || key === "home-tokens") {
+      if (!state.id) renderHome();
+      return;
+    }
+    if (key === "overview") renderOverview();
+    else if (key === "seals") renderSeals();
+    else if (key === "transfers-packs" || key === "transfers-rows") renderTransfers();
+    else if (key === "economy-steps" || key === "economy-largest") renderEconomy();
+  }
+
+  function bindPager(root) {
+    if (!root) return;
+    root.querySelectorAll("nav.pager").forEach((nav) => {
+      const key = nav.getAttribute("data-pager") || "";
+      nav.querySelectorAll("[data-page]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          if (btn.disabled) return;
+          const cur = Number(state.page[key]) || 1;
+          state.page[key] = btn.getAttribute("data-page") === "next" ? cur + 1 : cur - 1;
+          refreshAfterPager(key, false);
+        });
+      });
+      nav.querySelectorAll("[data-size]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const next = btn.getAttribute("data-size") === "20" ? 20 : 10;
+          if (state.pageSize === next) return;
+          state.pageSize = next;
+          state.page = {};
+          refreshAfterPager(key, true);
+        });
+      });
+    });
+  }
+
   function renderSavings() {
     const el = $("savings-total");
     if (!el) return;
@@ -208,9 +309,10 @@
   function renderRunList() {
     const list = $("traj-list");
     const runs = visibleRuns();
+    const view = takePage("sidebar", runs);
     list.innerHTML = "";
     $("traj-empty").classList.toggle("hidden", (state.runs || []).length > 0);
-    runs.forEach((run) => {
+    view.rows.forEach((run) => {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "traj-item";
@@ -221,6 +323,13 @@
       btn.addEventListener("click", () => selectTrajectory(run.trajectory_id));
       list.appendChild(btn);
     });
+    const pager = pagerHTML("sidebar", runs.length);
+    if (pager) {
+      const holder = document.createElement("div");
+      holder.innerHTML = pager;
+      if (holder.firstElementChild) list.appendChild(holder.firstElementChild);
+      bindPager(list);
+    }
   }
 
   function savedOf(run) {
@@ -228,9 +337,175 @@
     return n === null || n === undefined ? null : Number(n);
   }
 
+  function fmtText(s) {
+    if (s === null || s === undefined || s === "") return "none";
+    return String(s);
+  }
+
+  function formatUsd(n) {
+    return Number(n).toFixed(6);
+  }
+
+  const reservedPriceKeys = new Set(["__proto__", "constructor", "prototype"]);
+
+  function priceKeyAllowed(model) {
+    return !reservedPriceKeys.has(String(model || "").trim());
+  }
+
+  function loadPrices() {
+    const all = Object.create(null);
+    try {
+      const raw = localStorage.getItem("trajir_console_prices");
+      if (!raw) return all;
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return all;
+      Object.keys(parsed).forEach((key) => {
+        if (!priceKeyAllowed(key)) return;
+        const entry = parsed[key];
+        if (!entry || typeof entry !== "object" || Array.isArray(entry)) return;
+        all[key] = entry;
+      });
+    } catch (_) {
+      return Object.create(null);
+    }
+    return all;
+  }
+
+  function priceComplete(price) {
+    if (!price || typeof price !== "object") return false;
+    const model = String(price.model || "").trim();
+    if (!model || model.length > 200 || !priceKeyAllowed(model)) return false;
+    const input = Number(price.input_usd_per_million);
+    const output = Number(price.output_usd_per_million);
+    if (!Number.isFinite(input) || !Number.isFinite(output) || input < 0 || output < 0) return false;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(price.priced_on || ""))) return false;
+    const source = String(price.source || "").trim();
+    if (!source || source.length > 300) return false;
+    return true;
+  }
+
+  function listIllustration(run, prices) {
+    if (!run) return null;
+    const model = String(run.model || "").trim();
+    if (!model || run.prompt_tokens === null || run.prompt_tokens === undefined) return null;
+    if (run.completion_tokens === null || run.completion_tokens === undefined) return null;
+    const price = prices[model];
+    if (!priceComplete(price) || String(price.model || "").trim() !== model) return null;
+    const prompt = Number(run.prompt_tokens);
+    const completion = Number(run.completion_tokens);
+    if (!Number.isFinite(prompt) || !Number.isFinite(completion) || prompt < 0 || completion < 0) return null;
+    const input = (prompt / 1000000) * Number(price.input_usd_per_million);
+    const output = (completion / 1000000) * Number(price.output_usd_per_million);
+    if (!Number.isFinite(input) || !Number.isFinite(output)) return null;
+    return { input: input, output: output };
+  }
+
+  function listPriceLabel(model, prices) {
+    const key = String(model || "").trim();
+    if (!key) return "none";
+    const price = prices[key];
+    if (!priceComplete(price)) return "none";
+    return `in ${price.input_usd_per_million} USD per million, out ${price.output_usd_per_million} USD per million, dated ${price.priced_on}, source ${price.source}`;
+  }
+
+  function illustrationText(run, prices) {
+    const pic = listIllustration(run, prices);
+    if (!pic) return "none";
+    return `in ${formatUsd(pic.input)} USD, out ${formatUsd(pic.output)} USD`;
+  }
+
+  function illustrationHTML(run, prices) {
+    const pic = listIllustration(run, prices);
+    if (!pic) return "none";
+    return `<div>in ${esc(formatUsd(pic.input))} USD</div><div>out ${esc(formatUsd(pic.output))} USD</div>`;
+  }
+
+  function renderPriceList() {
+    const el = $("price-saved");
+    if (!el) return;
+    const prices = loadPrices();
+    const rows = Object.keys(prices)
+      .filter((key) => priceComplete(prices[key]) && String(prices[key].model || "").trim() === key)
+      .sort();
+    el.innerHTML = rows.length
+      ? rows
+          .map((key) => {
+            const price = prices[key];
+            return `<div class="price-row">
+              <span><strong>${esc(key)}</strong> ${esc(listPriceLabel(key, prices))}</span>
+              <button type="button" class="btn ghost" data-forget-price="${esc(key)}">Remove</button>
+            </div>`;
+          })
+          .join("")
+      : `<p class="muted tiny">No list price on this browser yet.</p>`;
+    el.querySelectorAll("[data-forget-price]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const all = loadPrices();
+        delete all[btn.getAttribute("data-forget-price")];
+        try {
+          localStorage.setItem("trajir_console_prices", JSON.stringify(all));
+        } catch (_) {
+          showBanner("This browser blocked local storage. The price was not removed.", true);
+          return;
+        }
+        renderPriceList();
+        if (!state.id) renderHome();
+      });
+    });
+  }
+
+  function shown(v) {
+    const s = v === null || v === undefined ? "" : String(v).trim();
+    return s ? s : "none";
+  }
+
+  function tokenFact(label, valueHTML) {
+    return `<div class="token-fact"><div class="label">${esc(label)}</div><div class="value">${valueHTML}</div></div>`;
+  }
+
+  function tokenCheckHTML(runs, page) {
+    const prices = loadPrices();
+    const shownRuns = page && page.rows ? page.rows : runs;
+    const cards = shownRuns.length
+      ? shownRuns
+          .map((run) => {
+            const facts = [
+              tokenFact("Latest trim (est.)", esc(fmt(run.latest_tokens_avoided_estimated))),
+              tokenFact("Lifetime sum (est.)", esc(fmt(savedOf(run)))),
+              tokenFact("Times trimmed", esc(fmt(run.projection_hits))),
+              tokenFact("Raw chars", esc(fmt(run.raw_char_len))),
+              tokenFact("Projected chars", esc(fmt(run.projected_char_len))),
+              tokenFact("Latest provider input", esc(fmt(run.prompt_tokens))),
+              tokenFact("Latest provider output", esc(fmt(run.completion_tokens))),
+              tokenFact("Model", esc(fmtText(run.model))),
+              tokenFact("List price used", esc(listPriceLabel(run.model, prices))),
+              tokenFact("List-price illustration", illustrationHTML(run, prices)),
+            ].join("");
+            return `<article class="token-run">
+              <h4><button type="button" class="share-name" data-id="${esc(run.trajectory_id)}">${esc(run.trajectory_id)}</button></h4>
+              <div class="token-facts">${facts}</div>
+            </article>`;
+          })
+          .join("")
+      : `<p class="muted">No runs match that search.</p>`;
+    return `<section class="token-check" id="token-check">
+      <h3>Token check</h3>
+      <p class="muted tiny">Every fact sits on the run card. none means that field was not sent. A zero is a real zero. The sidebar total adds Lifetime sum (est.) across runs.</p>
+      <div class="token-runs">${cards}</div>
+      ${pagerHTML("home-tokens", runs.length)}
+      <p class="muted tiny">Formula: ceil of characters divided by 4, on the server. Not a provider invoice. The list-price illustration is separate. It is input and output, and it is not folded into the estimate.</p>
+      <div class="read-guide">
+        <div><h3>Latest trim</h3><p>The newest projection only. Re-trimming the same step does not change this cell.</p></div>
+        <div><h3>Lifetime sum</h3><p>Every projection on that run, added. The home total uses this column.</p></div>
+        <div><h3>Character counts</h3><p>Raw chars and projected chars from the newest projection. Check them against the estimates.</p></div>
+        <div><h3>Provider counts</h3><p>Latest provider input and output are the last event that sent those counts. Earlier steps are not added. A nested usage object is not read. none means the field was never sent.</p></div>
+      </div>
+    </section>`;
+  }
+
   function hexTone(saved, maxSaved, failed) {
     if (failed) return "bad";
-    if (saved === null || saved === undefined) return "l1";
+    if (saved === null || saved === undefined || !Number.isFinite(saved)) return "unknown";
     if (!maxSaved) return "l2";
     const t = saved / maxSaved;
     if (t >= 0.8) return "l5";
@@ -281,6 +556,9 @@
     const savings = state.savings || {};
     const about = state.about || {};
     const runs = visibleRuns();
+    const runPage = takePage("home-runs", runs);
+    const sharePage = takePage("home-share", runs);
+    const tokenPage = takePage("home-tokens", runs);
     const all = state.runs || [];
     const failed = all.reduce((n, r) => n + (r.seal_verified_fail || 0), 0);
     const files = all.reduce((n, r) => n + (r.exports_ok || 0) + (r.imports_ok || 0), 0);
@@ -290,7 +568,16 @@
     const board = hexRows(runs, maxSaved);
     const newest = runs[0] && runs[0].last_ts ? fmtTime(runs[0].last_ts) : "none";
     const sparkRuns = runs.slice().sort((a, b) => String(a.last_ts || "").localeCompare(String(b.last_ts || "")));
-    const sparkVals = sparkRuns.map((r) => savedOf(r) || 0);
+    const sparkVals = [];
+    let sparkSkipped = 0;
+    sparkRuns.forEach((r) => {
+      const n = savedOf(r);
+      if (n === null) {
+        sparkSkipped += 1;
+        return;
+      }
+      sparkVals.push(n);
+    });
     const spark = sparkPoints(sparkVals);
     const shareTotal = savedNums.reduce((n, x) => n + x, 0);
     const health = about.health || "none";
@@ -324,7 +611,8 @@
                       return `<span class="hex empty" title="empty"></span>`;
                     }
                     const id = cell.run.trajectory_id;
-                    return `<button type="button" class="hex ${cell.tone}" data-id="${esc(id)}" data-saved="${esc(fmt(savedOf(cell.run)))}" data-events="${esc(fmt(cell.run.event_count))}" data-failed="${esc(fmt(cell.run.seal_verified_fail))}" aria-label="${esc(id)}"></button>`;
+                    const savedLabel = savedOf(cell.run) === null ? "no trim yet" : `saved ${fmt(savedOf(cell.run))} (est.)`;
+                    return `<button type="button" class="hex ${cell.tone}" data-id="${esc(id)}" data-saved="${esc(savedLabel)}" data-events="${esc(fmt(cell.run.event_count))}" data-failed="${esc(fmt(cell.run.seal_verified_fail))}" aria-label="${esc(id)}"></button>`;
                   })
                   .join("")}</div>`
               )
@@ -338,6 +626,8 @@
             <span>More saved (est.)</span>
             <span class="hex bad"></span>
             <span>Failed lock</span>
+            <span class="hex unknown"></span>
+            <span>No trim yet</span>
             <span class="hex empty"></span>
             <span>Empty</span>
           </div>
@@ -357,7 +647,7 @@
                 </tr>
               </thead>
               <tbody>
-                ${runs
+                ${runPage.rows
                   .map((run) => {
                     const fail = run.seal_verified_fail || 0;
                     const moved = (run.exports_ok || 0) + (run.imports_ok || 0);
@@ -372,7 +662,8 @@
                   })
                   .join("")}
               </tbody>
-            </table>`
+            </table>
+            ${pagerHTML("home-runs", runs.length)}`
                 : `<p class="muted">No runs match that search.</p>`
             }
           </div>
@@ -384,7 +675,7 @@
             <div class="side-hero ${savings.tokens_avoided_estimated != null ? "ok" : ""}">${esc(fmt(savings.tokens_avoided_estimated))}</div>
             ${
               spark.pts
-                ? `<svg class="spark" viewBox="0 0 ${spark.w} ${spark.h}" aria-hidden="true"><polyline fill="none" stroke="currentColor" stroke-width="2.4" points="${spark.pts}"></polyline></svg>`
+                ? `<svg class="spark" viewBox="0 0 ${spark.w} ${spark.h}" aria-hidden="true"><polyline fill="none" stroke="currentColor" stroke-width="2.4" points="${spark.pts}"></polyline></svg>${sparkSkipped ? `<p class="muted tiny">${esc(sparkSkipped === 1 ? "1 run with no trim is left off this line." : String(sparkSkipped) + " runs with no trim are left off this line.")}</p>` : ""}`
                 : `<p class="muted tiny">No projection events yet.</p>`
             }
           </section>
@@ -403,7 +694,7 @@
             <p class="muted tiny">Each bar is one run. No forecast. No parade.</p>
             ${
               runs.length
-                ? runs
+                ? sharePage.rows
                     .map((run) => {
                       const n = savedOf(run);
                       const pct = n === null || !shareTotal ? 0 : barPct(n, shareTotal);
@@ -413,17 +704,19 @@
                         <span class="tiny">${esc(fmt(n))}</span>
                       </div>`;
                     })
-                    .join("")
+                    .join("") + pagerHTML("home-share", runs.length)
                 : `<p class="muted tiny">No runs yet.</p>`
             }
           </section>
         </aside>
       </div>
+      ${tokenCheckHTML(runs, tokenPage)}
       <div class="help">
         <div><h3>What happened</h3><p>The story of one run, newest first, in plain words.</p></div>
         <div><h3>Locked decisions</h3><p>Seals freeze a plan before tools that change the world.</p></div>
         <div><h3>Files</h3><p>.tir packages stored on this PC. Open the folder. No MinIO.</p></div>
-        <div><h3>Tokens</h3><p>How much context we trimmed. Guess from text size, not a bill.</p></div>
+        <div><h3>Tokens</h3><p>Latest trim is one projection. Lifetime sum adds every trim. Guess from text size, not a bill.</p></div>
+        <div><h3>Token check</h3><p>Character counts, provider counts, and a list-price illustration stay in separate columns.</p></div>
         <div><h3>License</h3><p>Apache License 2.0. No product key. No expiry.</p></div>
       </div>`;
     bindHome();
@@ -440,7 +733,7 @@
         if (!tip) return;
         tip.classList.remove("hidden");
         tip.innerHTML = `<div class="name">${esc(btn.getAttribute("data-id"))}</div>
-          <div>saved ${esc(btn.getAttribute("data-saved"))} (est.)</div>
+          <div>${esc(btn.getAttribute("data-saved"))}</div>
           <div>${esc(btn.getAttribute("data-events"))} events, locks failed ${esc(btn.getAttribute("data-failed"))}</div>`;
       });
       btn.addEventListener("mouseleave", () => {
@@ -448,6 +741,8 @@
       });
     });
     bindJumps(home);
+    bindPager(home);
+    renderPriceList();
   }
 
   function showHome() {
@@ -458,6 +753,8 @@
     $("detail-sub").textContent = "Pick a run to see locks, files, and tokens saved.";
     $("back-home").classList.add("hidden");
     $("home").classList.remove("hidden");
+    const priceCard = $("price-card");
+    if (priceCard) priceCard.classList.remove("hidden");
     $("panels").classList.add("hidden");
     document.querySelectorAll(".traj-item").forEach((el) => el.removeAttribute("aria-current"));
     renderHome();
@@ -491,6 +788,7 @@
     const economy = s.economy || {};
     const savings = state.savings || {};
     const ev = filteredEvents().slice().reverse();
+    const evPage = takePage("overview", ev);
     $("panel-overview").innerHTML = `
       <div class="stats">
         ${kpi("Tokens saved (est.)", economy.lifetime_tokens_avoided_estimated, economy.lifetime_tokens_avoided_estimated != null ? "ok" : "", "economy")}
@@ -506,8 +804,7 @@
       <ol class="timeline">
         ${
           ev.length
-            ? ev
-                .slice(0, 40)
+            ? evPage.rows
                 .map((e) => {
                   const cls = dotClass(e.kind, e.payload);
                   return `<li>
@@ -522,14 +819,17 @@
                 .join("")
             : `<li><span class="dot"></span><div class="muted">No events in this time range.</div></li>`
         }
-      </ol>`;
+      </ol>
+      ${pagerHTML("overview", ev.length)}`;
     bindJumps($("panel-overview"));
+    bindPager($("panel-overview"));
   }
 
   function renderSeals() {
     const seals = filteredEvents().filter(
       (e) => e.kind === "seal.created" || e.kind === "seal.verified"
     );
+    const sealPage = takePage("seals", seals);
     const s = state.summary || {};
     $("panel-seals").innerHTML = `
       <p class="lede muted">A lock freezes the plan. It does not freeze the outside world.</p>
@@ -541,7 +841,7 @@
       <ol class="timeline">
         ${
           seals.length
-            ? seals
+            ? sealPage.rows
                 .map((e) => {
                   const p = e.payload || {};
                   const cls = e.kind === "seal.verified" && p.ok === false ? "bad" : "ok";
@@ -563,7 +863,9 @@
                 .join("")
             : `<li><span class="dot"></span><div class="muted">No lock events in this time range.</div></li>`
         }
-      </ol>`;
+      </ol>
+      ${pagerHTML("seals", seals.length)}`;
+    bindPager($("panel-seals"));
   }
 
   function renderTransfers() {
@@ -572,6 +874,8 @@
     const handoffs = Array.isArray(view.handoffs) ? view.handoffs : [];
     const rows = handoffs.filter((h) => inRange(h.export_ts || h.import_ts));
     const packs = state.packages || [];
+    const packPage = takePage("transfers-packs", packs);
+    const rowPage = takePage("transfers-rows", rows);
     $("panel-transfers").innerHTML = `
       <p class="lede muted">Packages live under TRAJIR_CONSOLE_DATA/packages/. Host temp paths are not the console store.</p>
       <div class="stats">
@@ -582,7 +886,7 @@
       </div>
       ${
         packs.length
-          ? packs
+          ? packPage.rows
               .map(
                 (p) => `<div class="file-card">
                   <div>
@@ -595,7 +899,7 @@
                   </div>
                 </div>`
               )
-              .join("")
+              .join("") + pagerHTML("transfers-packs", packs.length)
           : `<p class="muted">No local .tir copy yet. Export with a file sink, or run the demo script.</p>`
       }
       <table>
@@ -606,7 +910,7 @@
           </tr>
         </thead>
         <tbody>
-          ${rows
+          ${rowPage.rows
             .map((h) => {
               const status = h.status || "";
               const cls = status === "failed" ? "bad" : status === "connected" ? "ok" : "";
@@ -622,19 +926,20 @@
               const statusWord =
                 status === "connected" ? "linked" : status === "failed" ? "failed" : status === "export_only" ? "sent only" : status === "import_only" ? "received only" : status;
               return `<tr>
-                <td class="${cls}">${esc(statusWord)}</td>
-                <td>${esc(h.mode || "")} ${label}</td>
-                <td><code>${esc(path)}</code></td>
+                <td class="${cls}">${esc(shown(statusWord))}</td>
+                <td>${esc(shown(h.mode))} ${label}</td>
+                <td><code>${esc(shown(path))}</code></td>
                 <td>${esc(fmt(h.bytes))}</td>
                 <td>${esc(fmt(h.member_count))}</td>
                 <td>${esc(fmt(h.node_count))}</td>
-                <td class="${bad}">${esc(verifyText)}</td>
-                <td>${esc(who)}</td>
+                <td class="${bad}">${esc(shown(verifyText))}</td>
+                <td>${esc(shown(who))}</td>
               </tr>`;
             })
             .join("") || `<tr><td colspan="8" class="muted">No transfer handoffs in range.</td></tr>`}
         </tbody>
-      </table>`;
+      </table>
+      ${pagerHTML("transfers-rows", rows.length)}`;
     $("panel-transfers").querySelectorAll("[data-dl]").forEach((btn) => {
       btn.addEventListener("click", () => downloadPackage(btn.getAttribute("data-dl")));
     });
@@ -646,6 +951,7 @@
         })
       );
     });
+    bindPager($("panel-transfers"));
   }
 
   function economyCSV(steps) {
@@ -661,6 +967,11 @@
       "dropped",
       "thought_collapses",
       "secret_field_hits",
+      "raw_char_len",
+      "projected_char_len",
+      "prompt_tokens",
+      "completion_tokens",
+      "model",
     ];
     const lines = [header.join(",")];
     (steps || []).forEach((row) => {
@@ -676,6 +987,11 @@
         row.dropped,
         row.thought_collapses,
         row.secret_field_hits,
+        row.raw_char_len,
+        row.projected_char_len,
+        row.prompt_tokens,
+        row.completion_tokens,
+        row.model,
       ].map((v) => {
         if (v === null || v === undefined) return "";
         const s = String(v);
@@ -695,11 +1011,100 @@
     URL.revokeObjectURL(a.href);
   }
 
+  function boolLabel(v) {
+    if (v === true) return "ok";
+    if (v === false) return "fail";
+    return "none";
+  }
+
+  function boolClass(v) {
+    if (v === true) return "ok";
+    if (v === false) return "bad";
+    return "";
+  }
+
+  function renderEvidence() {
+    const s = state.summary || {};
+    const ev = s.evidence || {};
+    const tools = Array.isArray(ev.tool_calls) ? ev.tool_calls.filter((row) => inRange(row.ts || "")) : [];
+    const gaps = Array.isArray(ev.seal_before_execute_gaps) ? ev.seal_before_execute_gaps : [];
+    const findings = Array.isArray(ev.audit_findings) ? ev.audit_findings : [];
+    const openWorld = Array.isArray(ev.open_world_tools) ? ev.open_world_tools : [];
+    const empty =
+      !ev.seal_count &&
+      tools.length === 0 &&
+      (ev.audit_ok === undefined || ev.audit_ok === null)
+        ? "No evidence events yet. Seal a step, run tools, then trajir verify."
+        : "";
+    $("panel-evidence").innerHTML = `
+      <div class="stats">
+        ${stat("Seals", ev.seal_count)}
+        ${stat("Seal-before-execute", boolLabel(ev.seal_before_execute_ok), boolClass(ev.seal_before_execute_ok))}
+        ${stat("Gaps", gaps.length, gaps.length ? "bad" : "")}
+        ${stat("trajir verify", boolLabel(ev.audit_ok), boolClass(ev.audit_ok))}
+        ${stat("Open-world tools", openWorld.length || "none", openWorld.length ? "bad" : "")}
+      </div>
+      <p class="muted">TURNING_POINT evidence: console Chain-of-Evidence requires a DECISION before every TOOL_CALL (stricter than <code>trajir verify</code>, which exempts some pure/read-only tools). Also shows open-world flags, hashed idempotency keys, and offline audit results.</p>
+      ${ev.last_audit_path ? `<p class="muted">Last audit: <code>${esc(ev.last_audit_path)}</code>${ev.last_audit_ts ? " @ " + esc(ev.last_audit_ts) : ""}</p>` : ""}
+      ${
+        findings.length
+          ? `<h3>Audit findings</h3><ul class="findings">${findings
+              .map((f) => `<li><code>${esc(f)}</code></li>`)
+              .join("")}</ul>`
+          : ""
+      }
+      ${
+        openWorld.length
+          ? `<p class="muted">Open-world: ${openWorld.map((n) => `<code>${esc(n)}</code>`).join(", ")}</p>`
+          : ""
+      }
+      ${
+        gaps.length
+          ? `<h3>Seal-before-execute gaps</h3>
+             <table>
+               <thead><tr><th>Step</th><th>Seq</th><th>Tool</th></tr></thead>
+               <tbody>${gaps
+                 .map(
+                   (g) =>
+                     `<tr class="bad"><td>${esc(fmt(g.step_n))}</td><td>${esc(fmt(g.seq))}</td><td><code>${esc(g.tool_name || "")}</code></td></tr>`
+                 )
+                 .join("")}</tbody>
+             </table>`
+          : ""
+      }
+      ${
+        empty
+          ? `<p class="empty-economy" role="status">${esc(empty)}</p>`
+          : `<h3>Tool calls</h3>
+             <table>
+               <thead><tr><th>Time</th><th>Step</th><th>Seq</th><th>Tool</th><th>Effect</th><th>Idempotency</th><th>Open-world</th></tr></thead>
+               <tbody>${
+                 tools
+                   .map((row) => {
+                     const ow = row.open_world === true;
+                     return `<tr>
+                       <td>${esc(row.ts || "")}</td>
+                       <td>${esc(fmt(row.step_n))}</td>
+                       <td>${esc(fmt(row.seq))}</td>
+                       <td><code>${esc(row.tool_name || "")}</code></td>
+                       <td>${esc(row.effect_class || "none")}</td>
+                       <td><code>${esc(row.idempotency_key || "none")}</code></td>
+                       <td class="${ow ? "bad" : ""}">${ow ? "yes" : "no"}</td>
+                     </tr>`;
+                   })
+                   .join("") || `<tr><td colspan="7" class="muted">No TOOL_CALL observations in range.</td></tr>`
+               }</tbody>
+             </table>`
+      }`;
+  }
+
   function renderEconomy() {
     const s = state.summary || {};
     const economy = s.economy || {};
     const steps = (economy.steps || []).filter((row) => inRange(row.ts));
     const largest = (economy.largest || []).filter((row) => inRange(row.ts));
+    const stepPage = takePage("economy-steps", steps);
+    const bigPage = takePage("economy-largest", largest);
     const noProjection = !economy.projection_hits;
     const empty = steps.length === 0
       ? (noProjection ? "No projection events yet." : "No economy events in range.")
@@ -712,8 +1117,17 @@
     const raw = economy.raw_estimated_tokens;
     const proj = economy.projected_estimated_tokens;
     const whole = raw || 0;
+    const repeatNote = economy.projection_hits > 1
+      ? `Trimmed ${fmt(economy.projection_hits)} times. Saved so far adds every trim. Saved last time is only the newest trim.`
+      : "";
+    const charNote = `Latest raw characters ${fmt(economy.raw_char_len)}. Latest projected characters ${fmt(economy.projected_char_len)}. The estimates above are the server figures for those counts.`;
+    const prices = loadPrices();
+    const providerNote = `Latest provider input ${fmt(economy.prompt_tokens)}. Latest provider output ${fmt(economy.completion_tokens)}. These are the last event that sent the count, not a sum of steps. Model ${fmtText(economy.model)}. A nested usage object is not read. List-price illustration uses those latest counts only: ${illustrationText(economy, prices)}. It is not the character estimate. Edit the list price on All runs. It stays in this browser.`;
     $("panel-economy").innerHTML = `
       <p class="lede muted">We count how much context we dropped before calling the model. estimated_tokens uses ceil of chars divided by 4 on the server. This is not a provider invoice.</p>
+      <p class="muted">${esc(charNote)}</p>
+      <p class="muted">${esc(providerNote)}</p>
+      ${repeatNote ? `<p class="muted">${esc(repeatNote)}</p>` : ""}
       <div class="stats">
         ${stat("Before trim", economy.raw_estimated_tokens)}
         ${stat("After trim", economy.projected_estimated_tokens)}
@@ -748,9 +1162,10 @@
       ${
         empty
           ? `<p class="empty-economy" role="status">${esc(empty)}</p>`
-          : `<table>
-              <thead><tr><th>Time</th><th>What</th><th>Step</th><th>Before</th><th>After</th><th>Saved</th><th>Dropped</th><th>Hidden</th></tr></thead>
-              <tbody>${steps
+          : `<div class="token-scroll token-fit"><table class="token-table">
+              <colgroup><col style="width:13%"><col style="width:18%"><col style="width:7%"><col style="width:8%"><col style="width:8%"><col style="width:8%"><col style="width:10%"><col style="width:12%"><col style="width:8%"><col style="width:8%"></colgroup>
+              <thead><tr><th>Time</th><th>What</th><th>Step</th><th>Before</th><th>After</th><th>Saved</th><th>Raw chars</th><th>Projected chars</th><th>Dropped</th><th>Hidden</th></tr></thead>
+              <tbody>${stepPage.rows
                 .map((row) => {
                   const redaction =
                     row.kind === "redaction.applied"
@@ -758,34 +1173,45 @@
                       : "none";
                   return `<tr>
                     <td>${esc(fmtTime(row.ts))}</td>
-                    <td>${esc(kindLabel(row.kind))} <code>${esc(row.kind)}</code></td>
+                    <td>${esc(kindLabel(row.kind))} <code>${kindCode(row.kind)}</code></td>
                     <td>${esc(fmt(row.step_n))}</td>
                     <td>${esc(fmt(row.raw_estimated_tokens))}</td>
                     <td>${esc(fmt(row.projected_estimated_tokens))}</td>
                     <td>${esc(fmt(row.tokens_avoided_estimated))}</td>
+                    <td>${esc(fmt(row.raw_char_len))}</td>
+                    <td>${esc(fmt(row.projected_char_len))}</td>
                     <td>${esc(fmt(row.dropped))}</td>
                     <td>${esc(redaction)}</td>
                   </tr>`;
                 })
                 .join("")}</tbody>
-            </table>
+            </table></div>
+            ${pagerHTML("economy-steps", steps.length)}
             <h3>Largest context payloads</h3>
-            <table>
-              <thead><tr><th>Time</th><th>Step</th><th>Raw estimate</th><th>Size units</th><th>Dropped</th></tr></thead>
+            <div class="token-scroll token-fit"><table class="token-table">
+              <thead><tr><th>Time</th><th>Step</th><th>Raw estimate</th><th>Raw chars</th><th>Size units</th><th>Dropped</th></tr></thead>
               <tbody>${
-                largest
+                bigPage.rows
                   .map(
                     (row) => `<tr>
                       <td>${esc(fmtTime(row.ts))}</td>
                       <td>${esc(fmt(row.step_n))}</td>
                       <td>${esc(fmt(row.raw_estimated_tokens))}</td>
+                      <td>${esc(fmt(row.raw_char_len))}</td>
                       <td>${esc(fmt(row.size_units))}</td>
                       <td>${esc(fmt(row.dropped))}</td>
                     </tr>`
                   )
-                  .join("") || `<tr><td colspan="5" class="muted">No projection rows in range.</td></tr>`
+                  .join("") || `<tr><td colspan="6" class="muted">No projection rows in range.</td></tr>`
               }</tbody>
-            </table>`
+            </table></div>
+            ${pagerHTML("economy-largest", largest.length)}
+            <div class="read-guide">
+              <div><h3>Before trim</h3><p>Server estimate of the raw character count on the newest projection.</p></div>
+              <div><h3>After trim</h3><p>Server estimate of the projected character count on that same event.</p></div>
+              <div><h3>Saved last time</h3><p>Newest projection only. This is not the sidebar total.</p></div>
+              <div><h3>Saved so far</h3><p>Sum of every projection on this run. Trimming again counts again.</p></div>
+            </div>`
       }`;
     const id = state.id || "trajectory";
     const jsonBtn = $("economy-json");
@@ -800,6 +1226,7 @@
         downloadText(`${id}-economy.csv`, economyCSV(economy.steps), "text/csv");
       });
     }
+    bindPager($("panel-economy"));
   }
 
   function showAbout(on) {
@@ -858,6 +1285,7 @@
     renderHome();
     renderOverview();
     renderSeals();
+    renderEvidence();
     renderTransfers();
     renderEconomy();
   }
@@ -868,7 +1296,7 @@
       const on = btn.dataset.tab === name;
       btn.setAttribute("aria-selected", on ? "true" : "false");
     });
-    ["overview", "seals", "transfers", "economy"].forEach((n) => {
+    ["overview", "seals", "evidence", "transfers", "economy"].forEach((n) => {
       $("panel-" + n).classList.toggle("hidden", n !== name);
     });
   }
@@ -947,7 +1375,7 @@
       state.events = [];
       state.summary = null;
       state.packages = [];
-      ["overview", "seals", "transfers", "economy"].forEach((n) => {
+      ["overview", "seals", "evidence", "transfers", "economy"].forEach((n) => {
         $("panel-" + n).innerHTML = `<p class="empty-seals" role="status">Could not load this trajectory.</p>`;
       });
       showBanner(String(err.message || err), true);
@@ -955,6 +1383,9 @@
   }
 
   async function selectTrajectory(id) {
+    if (state.id !== id) {
+      resetPages(["overview", "seals", "transfers-packs", "transfers-rows", "economy-steps", "economy-largest"]);
+    }
     state.id = id;
     setQueryId(id);
     $("crumb").textContent = "Run";
@@ -962,6 +1393,8 @@
     $("detail-sub").innerHTML = `Open again later with <code>?id=${esc(id)}</code>`;
     $("back-home").classList.remove("hidden");
     $("home").classList.add("hidden");
+    const priceCard = $("price-card");
+    if (priceCard) priceCard.classList.add("hidden");
     $("panels").classList.remove("hidden");
     document.querySelectorAll(".traj-item").forEach((el) => {
       el.setAttribute("aria-current", el.dataset.id === id ? "true" : "false");
@@ -1003,6 +1436,39 @@
       showBanner("Opened " + ((data && data.path) || "local path"));
     } catch (err) {
       showBanner(String(err.message || err), true);
+    }
+  }
+
+  async function runLangGraphDemo() {
+    const btn = $("run-langgraph-demo");
+    showBanner("Running LangGraph demo into this console...");
+    if (btn) btn.disabled = true;
+    try {
+      const res = await fetch("/v1/local/run-langgraph-demo", {
+        method: "POST",
+        headers: { ...headers(), "Content-Type": "application/json" },
+        body: "{}",
+      });
+      const text = await res.text();
+      let data = null;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch (_) {
+        data = { error: text };
+      }
+      if (!res.ok) {
+        const detail = (data && (data.error || data.output)) || res.statusText;
+        throw new Error(detail);
+      }
+      showBanner("LangGraph demo OK - open run langgraph-demo");
+      await loadList();
+      if (data && data.trajectory_id) {
+        selectTrajectory(data.trajectory_id);
+      }
+    } catch (err) {
+      showBanner(String(err.message || err), true);
+    } finally {
+      if (btn) btn.disabled = false;
     }
   }
 
@@ -1055,6 +1521,7 @@
     setInterval(tickLive, LIVE_MS);
     $("token").addEventListener("change", saveToken);
     $("refresh").addEventListener("click", loadList);
+    $("run-langgraph-demo").addEventListener("click", () => runLangGraphDemo());
     $("open-folder").addEventListener("click", () => postLocal("/v1/local/reveal", { root: true }));
     $("open-shell").addEventListener("click", () => postLocal("/v1/local/open-shell", { root: true }));
     $("open-about").addEventListener("click", () => showAbout(true));
@@ -1065,15 +1532,49 @@
     document.addEventListener("keydown", (ev) => {
       if (ev.key === "Escape" && state.aboutOpen) showAbout(false);
     });
-    $("from").addEventListener("change", () => state.id && renderPanels());
-    $("to").addEventListener("change", () => state.id && renderPanels());
+    const onRange = () => {
+      resetPages(["overview", "seals", "transfers-packs", "transfers-rows", "economy-steps", "economy-largest"]);
+      if (state.id) renderPanels();
+    };
+    $("from").addEventListener("change", onRange);
+    $("to").addEventListener("change", onRange);
     $("back-home").addEventListener("click", showHome);
     $("savings").addEventListener("click", showHome);
     $("run-search").addEventListener("input", () => {
       state.query = $("run-search").value || "";
+      resetPages(["sidebar", "home-runs", "home-share", "home-tokens"]);
       renderRunList();
       if (!state.id) renderHome();
     });
+    const priceForm = $("price-form");
+    if (priceForm) {
+      priceForm.addEventListener("submit", (ev) => {
+        ev.preventDefault();
+        const entry = {
+          model: priceForm.model.value.trim(),
+          input_usd_per_million: priceForm.input_usd.value.trim(),
+          output_usd_per_million: priceForm.output_usd.value.trim(),
+          priced_on: priceForm.priced_on.value.trim(),
+          source: priceForm.source.value.trim(),
+        };
+        if (!priceComplete(entry)) {
+          showBanner("Price needs a model, both USD rates, a date, and a source. Nothing was saved.", true);
+          return;
+        }
+        const all = loadPrices();
+        all[entry.model] = entry;
+        try {
+          localStorage.setItem("trajir_console_prices", JSON.stringify(all));
+        } catch (_) {
+          showBanner("This browser blocked local storage. The price was not saved.", true);
+          return;
+        }
+        priceForm.reset();
+        showBanner("List price saved in this browser only.", false);
+        renderPriceList();
+        if (!state.id) renderHome();
+      });
+    }
     document.querySelectorAll('[role="tab"]').forEach((btn) => {
       btn.addEventListener("click", () => selectTab(btn.dataset.tab));
     });

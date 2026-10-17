@@ -1,7 +1,9 @@
 package console
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -11,6 +13,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 )
 
 // startLocal launches a local process and does not wait. Tests replace it.
@@ -164,6 +167,117 @@ func (s *Server) handleOpenShell(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "opened", "path": path})
+}
+
+// handleRunLangGraphDemo runs the evidence-worktree demo_stub into this console.
+// Loopback-only. Fixed script path. No user-supplied command.
+func (s *Server) handleRunLangGraphDemo(w http.ResponseWriter, r *http.Request) {
+	if !s.authorize(w, r) {
+		return
+	}
+	if !s.requireLoopback(w, r) {
+		return
+	}
+	if r.Method != http.MethodPost {
+		writeErr(w, http.StatusMethodNotAllowed, "POST required")
+		return
+	}
+	root, err := resolveEvidenceRoot(s.Store.Root())
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	demo := filepath.Join(root, "integrations", "langgraph", "demo_stub.py")
+	if _, err := os.Stat(demo); err != nil {
+		writeErr(w, http.StatusBadRequest, "langgraph demo_stub.py not found under "+root+"; set TRAJIR_EVIDENCE_ROOT")
+		return
+	}
+	py := resolvePython(root)
+	host := r.Host
+	if host == "" {
+		host = "127.0.0.1:8787"
+	}
+	consoleURL := "http://" + host
+	ctx, cancel := context.WithTimeout(r.Context(), s.demoTimeout())
+	defer cancel()
+	cmd := exec.CommandContext(ctx, py, demo) // #nosec G204 -- fixed demo path, not request input
+	cmd.Dir = root
+	sep := string(os.PathListSeparator)
+	cmd.Env = append(os.Environ(),
+		"TRAJIR_CONSOLE_SINK=http",
+		"TRAJIR_CONSOLE_URL="+consoleURL,
+		"PYTHONPATH="+root+sep+filepath.Join(root, "pkg"),
+	)
+	if s.Token != "" {
+		cmd.Env = append(cmd.Env, envAuthToken+"="+s.Token)
+	}
+	out, err := cmd.CombinedOutput()
+	trimmed := strings.TrimSpace(string(out))
+	if len(trimmed) > 4000 {
+		trimmed = trimmed[len(trimmed)-4000:]
+	}
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"status":        "failed",
+			"trajectory_id": "langgraph-demo",
+			"error":         err.Error(),
+			"output":        trimmed,
+			"evidence_root": root,
+		})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status":        "ok",
+		"trajectory_id": "langgraph-demo",
+		"output":        trimmed,
+		"evidence_root": root,
+	})
+}
+
+func (s *Server) demoTimeout() time.Duration {
+	if s != nil && s.DemoTimeout > 0 {
+		return s.DemoTimeout
+	}
+	return 60 * time.Second
+}
+
+func resolveEvidenceRoot(consoleDataRoot string) (string, error) {
+	if v := strings.TrimSpace(os.Getenv("TRAJIR_EVIDENCE_ROOT")); v != "" {
+		if !isDir(v) {
+			return "", fmt.Errorf("TRAJIR_EVIDENCE_ROOT is not a directory: %s", v)
+		}
+		return filepath.Clean(v), nil
+	}
+	// A normal checkout keeps .console-data inside the repo that has the demo.
+	checkout := filepath.Dir(consoleDataRoot)
+	if demoScriptExists(checkout) {
+		return checkout, nil
+	}
+	return "", fmt.Errorf("set TRAJIR_EVIDENCE_ROOT to the checkout that contains integrations/langgraph/demo_stub.py")
+}
+
+func demoScriptExists(root string) bool {
+	info, err := os.Stat(filepath.Join(root, "integrations", "langgraph", "demo_stub.py"))
+	return err == nil && !info.IsDir()
+}
+
+func resolvePython(evidenceRoot string) string {
+	if v := strings.TrimSpace(os.Getenv("TRAJIR_PYTHON")); v != "" {
+		return v
+	}
+	candidates := []string{
+		filepath.Join(evidenceRoot, ".venv", "Scripts", "python.exe"),
+		filepath.Join(evidenceRoot, ".venv", "bin", "python"),
+	}
+	for _, c := range candidates {
+		if st, err := os.Stat(c); err == nil && !st.IsDir() {
+			return c
+		}
+	}
+	if p, err := exec.LookPath("python"); err == nil {
+		return p
+	}
+	return "python"
 }
 
 func isDir(path string) bool {

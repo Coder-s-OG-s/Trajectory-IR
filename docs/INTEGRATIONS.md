@@ -1,4 +1,31 @@
-# Integrations: MCP (primary)
+# Integrations
+
+Trajectory IR connects to hosts two ways:
+
+1. **Evidence sidecar** — in-process wrap of `execute_tool` (LangGraph reference)
+   so a `DECISION` is sealed **before** the world changes, then `trajir verify`
+   on the `.tir` pack. Canonical guide: [EVIDENCE_SIDECAR.md](EVIDENCE_SIDECAR.md).
+2. **MCP server** — stdio tools for status / export / import / signature verify
+   (below). Host plugins live in a separate repo later; they do not reimplement
+   IR semantics.
+
+---
+
+## Evidence sidecar (TURNING_POINT)
+
+| Piece | Path |
+|-------|------|
+| Wrap | [`integrations/langgraph`](../integrations/langgraph/) (`TrajIRToolGuard`) |
+| Verify CLI | `go build -o trajir.exe ./cmd/trajir` → `trajir verify pack.tir` |
+| Console | `trajir-console` on **127.0.0.1:8787** only; Evidence tab |
+| OTel | [`integrations/otel`](../integrations/otel/) — **correlate after seal**, not CoE alone |
+| Install | `scripts/install_evidence_sidecar.ps1` |
+
+Do not claim Chain-of-Evidence from a post-hoc OTLP collector.
+
+---
+
+## MCP (primary host protocol)
 
 Trajectory IR exposes agent hosts through a **Model Context Protocol (MCP)**
 server. Host-specific plugins (Claude Code, Cursor configs) live in a **separate

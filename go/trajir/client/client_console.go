@@ -3,6 +3,7 @@ package client
 import (
 	"encoding/json"
 
+	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/effects"
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/emit"
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/nodes"
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/projector"
@@ -45,6 +46,19 @@ func (t *Trajectory) emitNodeRow(row map[string]any) {
 	}
 	if step, ok := asInt(row["step_n"]); ok {
 		payload["step_n"] = step
+	}
+	if kind, _ := row["kind"].(string); kind == "TOOL_CALL" {
+		if body, ok := row["payload"].(map[string]any); ok {
+			if tool, ok := body["tool"].(string); ok && tool != "" {
+				payload["tool"] = tool
+			}
+			if key, ok := body["idempotency_key"].(string); ok && key != "" {
+				payload["idempotency_key"] = key
+			}
+			if eff, ok := body["effect_class"].(string); ok && eff != "" {
+				payload["effect_class"] = eff
+			}
+		}
 	}
 	emit.SafeEmit(t.sink, emit.Event{
 		Kind:         emit.KindNodeAppended,
@@ -116,7 +130,7 @@ func (t *Trajectory) emitProjection(stepN int) {
 	})
 }
 
-func (t *Trajectory) emitToolNodes(stepN, seq int) {
+func (t *Trajectory) emitToolNodes(stepN, seq int, effect effects.EffectClass) {
 	if t == nil || t.sink == nil || t.log == nil {
 		return
 	}
@@ -135,6 +149,23 @@ func (t *Trajectory) emitToolNodes(stepN, seq int) {
 		}
 		if step, ok := asInt(row["step_n"]); ok && step != stepN {
 			continue
+		}
+		if kind == "TOOL_CALL" && effect != "" {
+			// Effect class is host knowledge. Copy the payload so the log row stays unchanged.
+			body, _ := row["payload"].(map[string]any)
+			copied := map[string]any{}
+			for k, v := range body {
+				copied[k] = v
+			}
+			if _, exists := copied["effect_class"]; !exists {
+				copied["effect_class"] = string(effect)
+			}
+			next := make(map[string]any, len(row))
+			for k, v := range row {
+				next[k] = v
+			}
+			next["payload"] = copied
+			row = next
 		}
 		t.emitNodeRow(row)
 	}

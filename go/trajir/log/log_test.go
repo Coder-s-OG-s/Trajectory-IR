@@ -1,11 +1,14 @@
 package nodelog_test
 
 import (
+	"database/sql"
 	"errors"
 	"path/filepath"
 	"testing"
 
 	nodelog "github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/log"
+
+	_ "modernc.org/sqlite"
 )
 
 func openTemp(t *testing.T) *nodelog.NodeLog {
@@ -225,6 +228,43 @@ func TestAppendSlotConflictDifferentPayload(t *testing.T) {
 	}
 }
 
+func TestAppendErrorsWhenSlotOwnerMissing(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nodes.sqlite")
+	nl, err := nodelog.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = nl.Close() })
+
+	step := 1
+	n, err := nl.Append("THOUGHT", &step, map[string]any{"text": "hi"}, "traj", "tenant", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	side, err := sql.Open("sqlite", path+"?_busy_timeout=5000")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = side.Close() })
+	if _, err := side.Exec(`UPDATE nodes SET step_n = 99 WHERE id = ?`, n.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = nl.Append("THOUGHT", &step, map[string]any{"text": "hi"}, "traj", "tenant", 0)
+	if !errors.Is(err, nodelog.ErrNotStored) {
+		t.Fatalf("err=%v want ErrNotStored", err)
+	}
+
+	var atStep int
+	if err := side.QueryRow(`SELECT COUNT(*) FROM nodes WHERE IFNULL(step_n, -1) = 1`).Scan(&atStep); err != nil {
+		t.Fatal(err)
+	}
+	if atStep != 0 {
+		t.Fatalf("step 1 rows=%d", atStep)
+	}
+}
+
 func TestAppendSlotConflictPreservesOriginal(t *testing.T) {
 	nl := openTemp(t)
 	step := 1
@@ -337,5 +377,3 @@ func TestHasRejectsEmptyTenant(t *testing.T) {
 		t.Fatal("expected error on empty tenantID")
 	}
 }
-
-

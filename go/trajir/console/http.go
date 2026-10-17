@@ -21,6 +21,8 @@ type Server struct {
 	Store *Store
 	Token string // empty disables auth (local demos only)
 	Mux   *http.ServeMux
+	// DemoTimeout bounds the LangGraph demo subprocess. Zero uses 60s.
+	DemoTimeout time.Duration
 }
 
 // NewServer builds routes. Token defaults from TRAJIR_CONSOLE_TOKEN.
@@ -40,6 +42,7 @@ func NewServer(store *Store, token string) *Server {
 	s.Mux.HandleFunc("GET /v1/trajectories/{id}/packages/{name}", s.handleGetPackage)
 	s.Mux.HandleFunc("POST /v1/local/reveal", s.handleReveal)
 	s.Mux.HandleFunc("POST /v1/local/open-shell", s.handleOpenShell)
+	s.Mux.HandleFunc("POST /v1/local/run-langgraph-demo", s.handleRunLangGraphDemo)
 	s.Mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok\n"))

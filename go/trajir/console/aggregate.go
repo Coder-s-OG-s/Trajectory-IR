@@ -12,9 +12,9 @@ type Summary struct {
 	NodeCount    int    `json:"node_count"`
 	LastTS       string `json:"last_ts,omitempty"`
 
-	SealCreatedCount  int `json:"seal_created_count"`
-	SealVerifiedOK    int `json:"seal_verified_ok"`
-	SealVerifiedFail  int `json:"seal_verified_fail"`
+	SealCreatedCount int `json:"seal_created_count"`
+	SealVerifiedOK   int `json:"seal_verified_ok"`
+	SealVerifiedFail int `json:"seal_verified_fail"`
 
 	ProjectionSizeUnits int  `json:"projection_size_units,omitempty"`
 	ProjectionBudget    int  `json:"projection_budget,omitempty"`
@@ -25,19 +25,33 @@ type Summary struct {
 	ProjectedEstimatedTokens *int `json:"projected_estimated_tokens"`
 	TokensAvoidedEstimated   *int `json:"tokens_avoided_estimated"`
 
+	// Latest projection character counts. Null when the last context.projected
+	// omitted the key. These are not token estimates.
+	RawCharLen       *int `json:"raw_char_len"`
+	ProjectedCharLen *int `json:"projected_char_len"`
+
+	// Latest provider usage from flat payload keys. These are the last event
+	// that sent each key, not a sum of steps. A later event that omits a key
+	// does not clear it. A nested usage object is not read. Do not price the
+	// character estimate from these fields.
+	PromptTokens     *int   `json:"prompt_tokens"`
+	CompletionTokens *int   `json:"completion_tokens"`
+	Model            string `json:"model,omitempty"`
+
 	RedactionCollapses int `json:"redaction_collapses"`
 
-	ExportsOK          int    `json:"exports_ok"`
-	ImportsOK          int    `json:"imports_ok"`
-	LastPackageMode    string `json:"last_package_mode,omitempty"`
-	LastPackageBytes   int64  `json:"last_package_bytes,omitempty"`
-	LastPackageMembers int    `json:"last_package_members,omitempty"`
-	LastPackageNodes   int    `json:"last_package_nodes,omitempty"`
-	LastPackageRedacted *bool `json:"last_package_redacted,omitempty"`
-	TransferVerifyOK   *bool  `json:"transfer_verify_ok,omitempty"`
+	ExportsOK           int    `json:"exports_ok"`
+	ImportsOK           int    `json:"imports_ok"`
+	LastPackageMode     string `json:"last_package_mode,omitempty"`
+	LastPackageBytes    int64  `json:"last_package_bytes,omitempty"`
+	LastPackageMembers  int    `json:"last_package_members,omitempty"`
+	LastPackageNodes    int    `json:"last_package_nodes,omitempty"`
+	LastPackageRedacted *bool  `json:"last_package_redacted,omitempty"`
+	TransferVerifyOK    *bool  `json:"transfer_verify_ok,omitempty"`
 
 	Economy   EconomyView   `json:"economy"`
 	Transfers TransfersView `json:"transfers"`
+	Evidence  EvidenceView  `json:"evidence"`
 }
 
 // Summarize builds aggregates from an ordered event list.
@@ -55,6 +69,8 @@ func Summarize(trajectoryID string, events []Event) Summary {
 				s.LastTS = e.TS
 			}
 		}
+
+		applyProviderUsage(&s, e.Payload)
 
 		switch e.Kind {
 		case KindNodeAppended:
@@ -92,6 +108,7 @@ func Summarize(trajectoryID string, events []Event) Summary {
 	}
 	s.Economy = deriveEconomy(events, s)
 	s.Transfers = deriveTransfers(events, s)
+	s.Evidence = deriveEvidence(events)
 	return s
 }
 
@@ -110,14 +127,18 @@ func applyProjection(s *Summary, raw json.RawMessage) {
 	if hasRaw {
 		t := EstimatedTokens(rawLen)
 		s.RawEstimatedTokens = &t
+		s.RawCharLen = copyInt(&rawLen)
 	} else {
 		s.RawEstimatedTokens = nil
+		s.RawCharLen = nil
 	}
 	if hasProj {
 		t := EstimatedTokens(projLen)
 		s.ProjectedEstimatedTokens = &t
+		s.ProjectedCharLen = copyInt(&projLen)
 	} else {
 		s.ProjectedEstimatedTokens = nil
+		s.ProjectedCharLen = nil
 	}
 	if hasRaw && hasProj {
 		avoided := EstimatedTokens(rawLen) - EstimatedTokens(projLen)
@@ -127,6 +148,21 @@ func applyProjection(s *Summary, raw json.RawMessage) {
 		s.TokensAvoidedEstimated = &avoided
 	} else {
 		s.TokensAvoidedEstimated = nil
+	}
+}
+
+// applyProviderUsage keeps the latest flat prompt_tokens, completion_tokens,
+// or model key. It does not add steps together. Missing keys on a later
+// event are left alone. A nested usage object is not read.
+func applyProviderUsage(s *Summary, raw json.RawMessage) {
+	if n, ok := payloadIntOK(raw, "prompt_tokens"); ok {
+		s.PromptTokens = copyInt(&n)
+	}
+	if n, ok := payloadIntOK(raw, "completion_tokens"); ok {
+		s.CompletionTokens = copyInt(&n)
+	}
+	if model, ok := payloadString(raw, "model"); ok && model != "" {
+		s.Model = model
 	}
 }
 
