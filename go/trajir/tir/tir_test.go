@@ -3,19 +3,144 @@ package tir_test
 import (
 	"archive/zip"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/cas"
 	nodelog "github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/log"
+	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/nodes"
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/tir"
 )
+
+func TestLoadIntegerAboveSafeRange(t *testing.T) {
+	step := 1
+	const safeHash = "e1da48c6a6089f06ecb4e0a2259e658e3786b2420f52baccdf929ec6460d7b41"
+	safeID, err := nodes.NodeID("demo", "t1", &step, 1, "TOOL_RESULT", safeHash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	okPath := writeNodePackage(t, safeID, safeHash, "9007199254740991")
+	if _, err := tir.Load(okPath); err != nil {
+		t.Fatal(err)
+	}
+
+	badPath := writeNodePackage(t, "abc", safeHash, "9007199254740993")
+	_, err = tir.Load(badPath)
+	if err == nil || !strings.Contains(err.Error(), "safe integer") {
+		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestLoadKeepsSeqAboveSafeRange(t *testing.T) {
+	step := 1
+	ph, err := nodes.PayloadHash(map[string]any{"n": int64(1)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	seq := int((1 << 53) + 1)
+	id, err := nodes.NodeID("demo", "t1", &step, seq, "TOOL_RESULT", ph)
+	if err != nil {
+		t.Fatal(err)
+	}
+	line := fmt.Sprintf(
+		`{"id":%q,"trajectory_id":"t1","tenant_id":"demo","step_n":1,"seq":%d,"kind":"TOOL_RESULT","payload":{"n":1},"ts":1.0,"payload_hash":%q}`+"\n",
+		id, seq, ph,
+	)
+	path := writePackage(t, map[string]string{
+		"manifest.json":           "{\"mode\":\"thin\",\"tenant_id\":\"demo\"}\n",
+		"nodes.ndjson":            line,
+		"seals.json":              "[]\n",
+		"artifacts-manifest.json": "[]\n",
+		"COMPAT.json":             "{}\n",
+	})
+	if _, err := tir.Load(path); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestExportRejectsStoredIntegerAboveSafeRange(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "nodes.sqlite")
+	nl, err := nodelog.Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = nl.Close() })
+
+	step := 1
+	id, err := nodes.NodeID("demo", "t1", &step, 2, "TOOL_RESULT", "66c87d9cb3014e05a11baa97df62282d89d425f22ee15816577c84534e2ef1bb")
+	if err != nil {
+		t.Fatal(err)
+	}
+	side, err := sql.Open("sqlite", dbPath+"?_busy_timeout=5000")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = side.Close() })
+	_, err = side.Exec(
+		`INSERT INTO nodes (id, trajectory_id, tenant_id, step_n, seq, kind, payload_json, ts)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		id, "t1", "demo", 1, 2, "TOOL_RESULT", `{"n":9007199254740993}`, 1.0,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = tir.Export(nl, "t1", filepath.Join(dir, "out.tir"), tir.ExportOptions{Mode: tir.ModeThin})
+	if err == nil || !strings.Contains(err.Error(), "safe integer") {
+		t.Fatalf("err=%v", err)
+	}
+}
+
+func writeNodePackage(t *testing.T, id, phash, num string) string {
+	t.Helper()
+	line := fmt.Sprintf(
+		`{"id":%q,"trajectory_id":"t1","tenant_id":"demo","step_n":1,"seq":1,"kind":"TOOL_RESULT","payload":{"n":%s},"ts":1.0,"payload_hash":%q}`+"\n",
+		id, num, phash,
+	)
+	return writePackage(t, map[string]string{
+		"manifest.json":           "{\"mode\":\"thin\",\"tenant_id\":\"demo\"}\n",
+		"nodes.ndjson":            line,
+		"seals.json":              "[]\n",
+		"artifacts-manifest.json": "[]\n",
+		"COMPAT.json":             "{}\n",
+	})
+}
+
+func writePackage(t *testing.T, files map[string]string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "pkg.tir")
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := zip.NewWriter(f)
+	for name, body := range files {
+		fw, err := w.Create(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := io.WriteString(fw, body); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
 
 func openLog(t *testing.T, name string) *nodelog.NodeLog {
 	t.Helper()
