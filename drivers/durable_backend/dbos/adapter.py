@@ -1,7 +1,12 @@
 import os
 import sqlite3
 
-from dbos import DBOS, DBOSConfig
+try:
+    from dbos import DBOS, DBOSConfig
+except ImportError as e:
+    raise ImportError(
+        "The DBOS durable backend needs the dbos extra: pip install 'trajectory-ir[dbos]'"
+    ) from e
 
 
 def _sqlite_file(url: str) -> str | None:

@@ -4,7 +4,6 @@ from dataclasses import dataclass, field
 from types import SimpleNamespace
 from typing import Any
 
-from drivers.durable_backend.dbos.adapter import init_backend
 from trajectory_ir.console_emit import (
     OBSERVATION_BUDGET,
     note_node,
@@ -95,6 +94,10 @@ def open_trajectory(
     ``mode="sandbox"`` rejects NON_IDEMPOTENT_WRITE, AGENT_SPAWN,
     and SENSITIVE tools (R06).
     """
+    # Imported here so `import client.python.trajectory_client` (and `project`)
+    # works without the dbos extra installed.
+    from drivers.durable_backend.dbos.adapter import init_backend
+
     init_backend(db_path=db_path)
     return Trajectory(
         trajectory_id=trajectory_id,
@@ -357,6 +360,8 @@ def resume(
     caller bug (wrong db_path or trajectory_id), and should fail loudly
     rather than silently behave like ``open_trajectory``.
     """
+    from drivers.durable_backend.dbos.adapter import init_backend
+
     init_backend(db_path=db_path)
     traj = Trajectory(
         trajectory_id=trajectory_id,
