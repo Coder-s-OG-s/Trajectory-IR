@@ -15,6 +15,7 @@ from trajectory_ir.package import (
     export_tir,
     import_tir,
     load_tir,
+    load_tir_unverified,
 )
 from trajectory_ir.runtime.log import NodeLog
 from trajectory_ir.runtime.nodes import payload_hash
@@ -136,6 +137,30 @@ def test_import_detects_tampered_node(sample_log: NodeLog, tmp_path: Path) -> No
 
     with pytest.raises(TirVerificationError):
         load_tir(bad)
+
+
+@pytest.mark.parametrize("dup", ["nodes.ndjson", "manifest.json"])
+def test_unsigned_load_rejects_duplicate_member(
+    sample_log: NodeLog, tmp_path: Path, dup: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    out = tmp_path / "good.tir"
+    export_tir(sample_log, "t-export", out, mode="thin")
+
+    bad = tmp_path / "dup.tir"
+    with zipfile.ZipFile(out, "r") as zin, zipfile.ZipFile(bad, "w") as zout:
+        for item in zin.infolist():
+            zout.writestr(item, zin.read(item.filename))
+        with pytest.warns(UserWarning, match="Duplicate name"):
+            zout.writestr(dup, zin.read(dup))
+
+    with pytest.raises(TirError, match="duplicate zip member"):
+        load_tir(bad)
+    monkeypatch.setenv("TRAJIR_ALLOW_UNVERIFIED", "1")
+    with (
+        pytest.warns(UserWarning, match="skips integrity"),
+        pytest.raises(TirError, match="duplicate zip member"),
+    ):
+        load_tir_unverified(bad)
 
 
 def test_idempotent_reimport(sample_log: NodeLog, tmp_path: Path) -> None:

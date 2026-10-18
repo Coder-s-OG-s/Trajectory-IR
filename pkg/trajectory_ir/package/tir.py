@@ -520,8 +520,18 @@ def _load_tir_impl(
         if missing:
             raise TirError(f"package missing files: {sorted(missing)}")
 
+        # Reject duplicate member names up front (CWE-436). zipfile reads the
+        # last copy while other tools may show the first, so what gets reviewed
+        # would not be what gets imported. The signed path checks this in
+        # _collect_zip_members, but unsigned loads never reach it.
+        seen: set[str] = set()
         for name in names:
             _safe_zip_name(name)
+            if name.endswith("/"):
+                continue
+            if name in seen:
+                raise TirError(f"duplicate zip member {name!r}")
+            seen.add(name)
 
         budget = [MAX_TOTAL_UNCOMPRESSED_BYTES]
         manifest = json.loads(_read_zip_member(zf, "manifest.json", budget=budget))
