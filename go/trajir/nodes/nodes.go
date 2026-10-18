@@ -51,7 +51,7 @@ func ValidateIDComponent(name, value string) error {
 	if strings.ContainsAny(value, "|\n\r\x00") {
 		return fmt.Errorf("%s must not contain '|' or control characters (identity delimiter safety)", name)
 	}
-	if len(value) > 512 {
+	if utf8.RuneCountInString(value) > 512 {
 		return fmt.Errorf("%s exceeds maximum length 512", name)
 	}
 	return nil
