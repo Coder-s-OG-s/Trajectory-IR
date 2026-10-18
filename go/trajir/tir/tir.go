@@ -374,6 +374,20 @@ func ensureArtifactsInCAS(store cas.Store, artifacts []ArtifactRef) error {
 		if err != nil {
 			return fmt.Errorf("%w: artifact content_hash invalid: %v", ErrTir, err)
 		}
+		// Stores that can report a lookup error (S3) must not turn an
+		// outage into "missing".
+		if ex, ok := store.(interface {
+			Exists(string) (bool, error)
+		}); ok {
+			found, err := ex.Exists(h)
+			if err != nil {
+				return fmt.Errorf("%w: CAS lookup for %s: %w", ErrTir, h, err)
+			}
+			if !found {
+				missing = append(missing, h)
+			}
+			continue
+		}
 		if !store.Has(h) {
 			missing = append(missing, h)
 		}

@@ -1,6 +1,7 @@
 package cas
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -99,38 +100,32 @@ func (s *S3Store) Get(contentHash string) ([]byte, error) {
 	return data, nil
 }
 
-// Has reports whether the object exists. Auth and transport errors propagate.
+// Has reports whether the object exists. It returns false on any error;
+// use Exists when an auth or transport failure must not look like missing.
 func (s *S3Store) Has(contentHash string) bool {
+	ok, _ := s.Exists(contentHash)
+	return ok
+}
+
+// Exists reports whether the object exists. Only ErrNotFound from the
+// client means missing; any other error is returned (matches Python has).
+func (s *S3Store) Exists(contentHash string) (bool, error) {
 	h, err := NormalizeHash(contentHash)
 	if err != nil {
-		return false
+		return false, err
 	}
 	key, err := s.ObjectKey(h)
 	if err != nil {
-		return false
+		return false, err
 	}
 	err = s.Client.HeadObject(s.Bucket, key)
 	if err == nil {
-		return true
+		return true, nil
 	}
-	if errorsIsNotFound(err) {
-		return false
+	if errors.Is(err, ErrNotFound) {
+		return false, nil
 	}
-	// Match Python: unexpected errors must not look like missing.
-	// Callers that need the error should use Get.
-	return false
-}
-
-func errorsIsNotFound(err error) bool {
-	if err == nil {
-		return false
-	}
-	if err == ErrNotFound {
-		return true
-	}
-	// Also accept wrapped not found.
-	return strings.Contains(strings.ToLower(err.Error()), "not found") ||
-		strings.Contains(err.Error(), "NoSuchKey")
+	return false, err
 }
 
 // MemoryObjectAPI is an in process S3 fake for unit tests.

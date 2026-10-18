@@ -1018,6 +1018,32 @@ func TestExportThinRejectsMissingCASArtifact(t *testing.T) {
 	}
 }
 
+var errCASOutage = errors.New("endpoint not found: dns resolution failed")
+
+type failingHeadAPI struct{ *cas.MemoryObjectAPI }
+
+func (failingHeadAPI) HeadObject(bucket, key string) error { return errCASOutage }
+
+func TestExportThinSurfacesCASLookupError(t *testing.T) {
+	src := openLog(t, "src.sqlite")
+	seedSample(t, src)
+
+	store, err := cas.NewS3Store(failingHeadAPI{cas.NewMemoryObjectAPI()}, "b", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	h := "aa" + "00000000000000000000000000000000000000000000000000000000000000"[:62]
+	_, err = tir.Export(src, "t-export", filepath.Join(t.TempDir(), "x.tir"), tir.ExportOptions{
+		Mode:      tir.ModeThin,
+		CAS:       store,
+		Artifacts: []tir.ArtifactRef{{LogicalPath: "a.bin", ContentHash: h}},
+	})
+	if !errors.Is(err, errCASOutage) || errors.Is(err, cas.ErrNotFound) {
+		t.Fatalf("err=%v", err)
+	}
+}
+
 func TestExportThinSucceedsWithCASArtifactPresent(t *testing.T) {
 	src := openLog(t, "src.sqlite")
 	seedSample(t, src)

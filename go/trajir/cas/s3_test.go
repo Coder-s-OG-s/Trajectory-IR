@@ -2,6 +2,7 @@ package cas
 
 import (
 	"bytes"
+	"errors"
 	"testing"
 )
 
@@ -107,5 +108,36 @@ func TestS3IntegrityOnGet(t *testing.T) {
 	_, err = store.Get(h)
 	if err == nil {
 		t.Fatal("expected integrity error")
+	}
+}
+
+type headErrAPI struct {
+	*MemoryObjectAPI
+	err error
+}
+
+func (a headErrAPI) HeadObject(bucket, key string) error { return a.err }
+
+func TestS3ExistsOnlyTreatsErrNotFoundAsMissing(t *testing.T) {
+	h := ContentHash([]byte("x"))
+
+	outage := errors.New("endpoint not found: dns resolution failed")
+	store, err := NewS3Store(headErrAPI{NewMemoryObjectAPI(), outage}, "b", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := store.Exists(h); ok || !errors.Is(err, outage) {
+		t.Fatalf("ok=%v err=%v", ok, err)
+	}
+	if store.Has(h) {
+		t.Fatal("Has=true on error")
+	}
+
+	store, err = NewS3Store(NewMemoryObjectAPI(), "b", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := store.Exists(h); ok || err != nil {
+		t.Fatalf("missing: ok=%v err=%v", ok, err)
 	}
 }
