@@ -234,7 +234,7 @@ func (l *NodeLog) Append(
 		}
 		owner, oerr := slotOwner(tx, tenantID, trajectoryID, stepN, seq, kind)
 		if oerr != nil {
-			return nil, err
+			return nil, oerr
 		}
 		if owner == n.ID {
 			return n, nil

@@ -313,3 +313,33 @@ func TestMockAppendInsertErrorKeepsTheDriverError(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestMockAppendSlotLookupErrorIsReturned(t *testing.T) {
+	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherRegexp))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	expectDDL(mock)
+
+	nl, err := OpenDB(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	step := 1
+	mock.ExpectBegin()
+	mock.ExpectExec("SAVEPOINT insert_node").WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec("INSERT INTO nodes").WillReturnError(errors.New("insert failed"))
+	mock.ExpectExec("ROLLBACK TO SAVEPOINT insert_node").WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectQuery("SELECT id FROM nodes").WillReturnError(errors.New("connection reset"))
+	mock.ExpectRollback()
+
+	_, err = nl.Append("DECISION", &step, map[string]any{"plan": "x"}, "t1", "demo", 1)
+	if err == nil || !strings.Contains(err.Error(), "connection reset") {
+		t.Fatalf("err=%v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
