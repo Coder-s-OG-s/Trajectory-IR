@@ -38,7 +38,7 @@ class NodeValidationError(ValueError):
 
 
 def validate_id_component(name: str, value: str) -> str:
-    """Validate a node_id preimage field (tenant, trajectory, or kind)."""
+    """Validate a node_id preimage string field (tenant, trajectory, kind, or payload hash)."""
     if not isinstance(value, str) or not value:
         raise NodeValidationError(f"{name} must be a non-empty string")
     if any(ch in value for ch in _FORBIDDEN_ID_CHARS):
@@ -73,6 +73,13 @@ def node_id(
     validate_id_component("tenant_id", tenant_id)
     validate_id_component("trajectory_id", trajectory_id)
     validate_id_component("kind", kind)
+    validate_id_component("payload_hash", phash)
+    # step_n and seq are formatted straight into the preimage. A string such
+    # as "3|1" would shift the delimiter split, so only real ints get through.
+    if step_n is not None and (isinstance(step_n, bool) or not isinstance(step_n, int)):
+        raise NodeValidationError("step_n must be an integer or None")
+    if isinstance(seq, bool) or not isinstance(seq, int):
+        raise NodeValidationError("seq must be an integer")
     raw = f"{tenant_id}|{trajectory_id}|{step_n}|{seq}|{kind}|{phash}".encode()
     return hashlib.sha256(raw).hexdigest()
 

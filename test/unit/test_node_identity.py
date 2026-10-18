@@ -97,3 +97,25 @@ def test_pipe_in_trajectory_id_rejected():
 def test_pipe_in_kind_rejected_by_node_id():
     with pytest.raises(NodeValidationError, match="delimiter"):
         node_id("demo", "t1", 1, 0, "TOOL|CALL", "ab" * 32)
+
+
+@pytest.mark.parametrize("step_n", ["3|1", "3", 3.0, True])
+def test_non_int_step_n_rejected_by_node_id(step_n):
+    with pytest.raises(NodeValidationError, match="step_n"):
+        node_id("acme", "demo", step_n, 0, "DECISION", "a" * 64)
+
+
+@pytest.mark.parametrize("seq", ["0|X", "0", 0.0, False])
+def test_non_int_seq_rejected_by_node_id(seq):
+    with pytest.raises(NodeValidationError, match="seq"):
+        node_id("acme", "demo", 3, seq, "DECISION", "a" * 64)
+
+
+def test_pipe_in_payload_hash_rejected_by_node_id():
+    with pytest.raises(NodeValidationError, match="delimiter"):
+        node_id("acme", "demo", 3, 0, "DECISION", "a|b")
+
+
+def test_int_and_none_step_n_still_accepted():
+    node_id("acme", "demo", 3, 0, "DECISION", "a" * 64)
+    node_id("acme", "demo", None, 0, "DECISION", "a" * 64)

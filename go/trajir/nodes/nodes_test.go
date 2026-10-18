@@ -156,6 +156,12 @@ func TestNodeIDRejectsInvalidComponents(t *testing.T) {
 	if _, err := nodes.NodeID("demo", "t1", nil, 0, "TOOL|CALL", "h"); err == nil {
 		t.Fatal("expected error for pipe in kind")
 	}
+	if _, err := nodes.NodeID("demo", "t1", nil, 0, "INPUT", "a|b"); err == nil {
+		t.Fatal("expected error for pipe in payload_hash")
+	}
+	if _, err := nodes.NodeID("demo", "t1", nil, 0, "INPUT", ""); err == nil {
+		t.Fatal("expected error for empty payload_hash")
+	}
 }
 
 func TestNewNodeRejectsInvalidComponents(t *testing.T) {
