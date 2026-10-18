@@ -517,3 +517,50 @@ func TestRunStepAllowsOpenWorldWithOverride(t *testing.T) {
 		t.Fatalf("results=%#v", results)
 	}
 }
+
+func TestRunStepMemoIsTenantScoped(t *testing.T) {
+	ctx := context.Background()
+	nl, backend := testEnv(t)
+
+	echo := map[string]resume.Tool{
+		"echo": {
+			Name:   "echo",
+			Effect: effects.PURE,
+			Fn: func(args map[string]any) (any, error) {
+				return args["msg"], nil
+			},
+		},
+	}
+	run := func(tenant string) ([]any, int32) {
+		var calls int32
+		model := func(context.Context, map[string]any) (map[string]any, error) {
+			atomic.AddInt32(&calls, 1)
+			return map[string]any{
+				"tool_calls": []any{
+					map[string]any{"name": "echo", "args": map[string]any{"msg": tenant}},
+				},
+			}, nil
+		}
+		// Same backend, trajectory id and workflow id; only the tenant differs.
+		cfg := resume.RunStepConfig{
+			Log:          nl,
+			Backend:      backend,
+			TenantID:     tenant,
+			TrajectoryID: "demo",
+			WorkflowID:   "demo",
+			Tools:        echo,
+		}
+		results, err := resume.RunStep(ctx, cfg, 1, model, nil)
+		if err != nil {
+			t.Fatalf("%s: %v", tenant, err)
+		}
+		return results, calls
+	}
+
+	if res, calls := run("acme"); calls != 1 || res[0] != "acme" {
+		t.Fatalf("acme: calls=%d res=%#v", calls, res)
+	}
+	if res, calls := run("beta"); calls != 1 || res[0] != "beta" {
+		t.Fatalf("beta got a memo from another tenant: calls=%d res=%#v", calls, res)
+	}
+}

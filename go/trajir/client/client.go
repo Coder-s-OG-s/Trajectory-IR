@@ -32,7 +32,7 @@ type Options struct {
 	NodesPath string
 	// MemoPath is the LocalSQLite durable memo path. Default: WorkDir/memo.sqlite or memo.sqlite.
 	MemoPath string
-	// WorkflowID scopes durable memo keys. Default: TrajectoryID.
+	// WorkflowID scopes durable memo keys, together with the tenant. Default: TrajectoryID.
 	WorkflowID string
 	// Backend overrides LocalSQLite when non nil. Caller owns Close unless Open created it.
 	Backend durable.Backend

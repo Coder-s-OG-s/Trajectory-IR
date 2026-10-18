@@ -53,7 +53,7 @@ type RunStepConfig struct {
 	Backend          durable.Backend
 	TenantID         string
 	TrajectoryID     string
-	WorkflowID       string // durable memo scope; often same as TrajectoryID
+	WorkflowID       string // durable memo scope, combined with TenantID; default TrajectoryID
 	Tools            map[string]Tool
 	OnDecisionSealed func() // optional test hook after DECISION is appended
 	// Mode is live (default) or sandbox (R06: reject NON_IDEMPOTENT_WRITE, AGENT_SPAWN, SENSITIVE).
@@ -90,6 +90,11 @@ func RunStep(
 	if cfg.WorkflowID == "" {
 		cfg.WorkflowID = cfg.TrajectoryID
 	}
+	// Memo keys are tenant scoped like NodeLog, so two tenants that share a
+	// backend and a workflow id never read each other's results. The
+	// PROJECT_CONTEXT append below validates tenant_id (no '|') before any
+	// memo is read, so tenant|workflow cannot collide.
+	memoScope := cfg.TenantID + "|" + cfg.WorkflowID
 	if cfg.Mode == "" {
 		cfg.Mode = sandbox.ModeLive
 	}
@@ -109,7 +114,7 @@ func RunStep(
 		return nil, err
 	}
 
-	planAny, err := durable.Infer(ctx, cfg.Backend, cfg.WorkflowID, fmt.Sprintf("step%d", stepN), func(context.Context) (any, error) {
+	planAny, err := durable.Infer(ctx, cfg.Backend, memoScope, fmt.Sprintf("step%d", stepN), func(context.Context) (any, error) {
 		return model(ctx, stepContext)
 	})
 	if err != nil {
@@ -195,7 +200,7 @@ func RunStep(
 				call.Name,
 				fn,
 			)
-			result, err = durable.Tool(ctx, cfg.Backend, cfg.WorkflowID, stepKey, func(context.Context) (any, error) {
+			result, err = durable.Tool(ctx, cfg.Backend, memoScope, stepKey, func(context.Context) (any, error) {
 				return gated(args)
 			})
 			if err != nil {
@@ -211,7 +216,7 @@ func RunStep(
 				call.Name,
 				fn,
 			)
-			result, err = durable.Tool(ctx, cfg.Backend, cfg.WorkflowID, stepKey, func(context.Context) (any, error) {
+			result, err = durable.Tool(ctx, cfg.Backend, memoScope, stepKey, func(context.Context) (any, error) {
 				return plain(args)
 			})
 			if err != nil {

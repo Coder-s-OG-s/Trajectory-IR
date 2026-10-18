@@ -44,6 +44,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `SANDBOX_FORBIDDEN` (#347). Callers matching the old substring should update.
 - Sandbox mode rejects `AGENT_SPAWN` and `SENSITIVE` effects in addition to
   `NON_IDEMPOTENT_WRITE` (#347).
+- Go `RunStep` durable memo keys now include the tenant (`tenant|workflow`),
+  so two tenants sharing a backend and a trajectory or workflow id no longer
+  read each other's memoized model and tool results (#317). Memos written
+  before this change are not found: a step that was in flight during the
+  upgrade calls the model again. Gated `NON_IDEMPOTENT_WRITE` tools still
+  block on the existing `TOOL_CALL` claim and do not re-run.
 
 ### Fixed
 
