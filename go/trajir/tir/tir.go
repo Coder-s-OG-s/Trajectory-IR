@@ -384,6 +384,10 @@ func ensureArtifactsInCAS(store cas.Store, artifacts []ArtifactRef) error {
 	return nil
 }
 
+var signExport = Sign
+
+var beforeExportReplace func() error
+
 // Export writes a .tir zip for trajectoryID from nodeLog.
 func Export(nodeLog *nodelog.NodeLog, trajectoryID, dest string, opts ExportOptions) (string, error) {
 	if nodeLog == nil {
@@ -514,14 +518,16 @@ func Export(nodeLog *nodelog.NodeLog, trajectoryID, dest string, opts ExportOpti
 		destPath = destPath + ".tir"
 	}
 
-	f, err := os.Create(destPath)
+	f, err := os.CreateTemp(filepath.Dir(destPath), ".tir-export-*.tmp")
 	if err != nil {
 		return "", err
 	}
-	fileClosed := false
+	tmpName := f.Name()
+	published := false
 	defer func() {
-		if !fileClosed {
-			_ = f.Close()
+		_ = f.Close()
+		if !published {
+			_ = os.Remove(tmpName)
 		}
 	}()
 
@@ -603,12 +609,17 @@ func Export(nodeLog *nodelog.NodeLog, trajectoryID, dest string, opts ExportOpti
 	if err := zw.Close(); err != nil {
 		return "", err
 	}
-	if err := f.Close(); err != nil {
-		fileClosed = true
+	if err := f.Sync(); err != nil {
 		return "", err
 	}
-	fileClosed = true
-
+	if err := f.Close(); err != nil {
+		return "", err
+	}
+	// os.CreateTemp creates the file 0600; restore the 0644 mode that
+	// os.Create used to give exported packages (see rewriteZipWithSignature).
+	if err := os.Chmod(tmpName, 0o644); err != nil {
+		return "", err
+	}
 	memberCount := 5
 	if mode == ModeFat {
 		memberCount += len(artifactBytes)
@@ -620,17 +631,36 @@ func Export(nodeLog *nodelog.NodeLog, trajectoryID, dest string, opts ExportOpti
 		MemberCount: memberCount,
 		NodeCount:   len(nodeList),
 	}
+	// Sign the temp before it is installed so a failed sign never touches
+	// destPath: an existing package stays in place and no unsigned zip is
+	// ever published.
 	if len(opts.SignKey) != 0 {
-		if err := Sign(destPath, opts.SignKey, opts.SignerMeta); err != nil {
+		if err := signExport(tmpName, opts.SignKey, opts.SignerMeta); err != nil {
 			notice.OK = false
 			notice.Error = err.Error()
-			if st, statErr := os.Stat(destPath); statErr == nil {
+			if st, statErr := os.Stat(tmpName); statErr == nil {
 				notice.Bytes = st.Size()
 			}
 			notifyExport(opts.OnExported, notice)
 			return "", err
 		}
 	}
+	if beforeExportReplace != nil {
+		if err := beforeExportReplace(); err != nil {
+			return "", err
+		}
+	}
+	if err := installFile(tmpName, destPath); err != nil {
+		notice.OK = false
+		notice.Error = err.Error()
+		if st, statErr := os.Stat(tmpName); statErr == nil {
+			notice.Bytes = st.Size()
+		}
+		notifyExport(opts.OnExported, notice)
+		return "", err
+	}
+	published = true
+
 	if st, err := os.Stat(destPath); err == nil {
 		notice.Bytes = st.Size()
 	}
