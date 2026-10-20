@@ -149,10 +149,120 @@ func TestValidateIDComponentCountsCharactersNotBytes(t *testing.T) {
 	}
 }
 
+func ptrInt64(n int64) *int64 {
+	return &n
+}
+
+type hiddenBigInt struct {
+	N      int64 `json:"n"`
+	Hidden int64 `json:"-"`
+}
+
+func safeWithHiddenBigInt() hiddenBigInt {
+	return hiddenBigInt{N: 1, Hidden: 1 << 60}
+}
+
 func TestPayloadHashRejectsUnmarshalableValue(t *testing.T) {
 	_, err := nodes.PayloadHash(map[string]any{"bad": math.NaN()})
 	if err == nil {
 		t.Fatal("expected json marshal error for NaN")
+	}
+}
+
+func TestDecodeObjectPreservesIntegerLiteral(t *testing.T) {
+	obj, err := nodes.DecodeObject([]byte(`{"n":9007199254740993}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	num, ok := obj["n"].(json.Number)
+	if !ok || num != "9007199254740993" {
+		t.Fatalf("n=%#v", obj["n"])
+	}
+	if _, err := nodes.DecodeObject([]byte(`{"n":1}{"x":2}`)); err == nil {
+		t.Fatal("expected trailing value error")
+	}
+	if _, err := nodes.DecodeObject([]byte(`{`)); err == nil {
+		t.Fatal("expected syntax error")
+	}
+}
+
+func TestPayloadHashSafeIntegerMatchesPython(t *testing.T) {
+	hi, err := nodes.PayloadHash(map[string]any{"n": int64(1<<53 - 1)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hi != "e1da48c6a6089f06ecb4e0a2259e658e3786b2420f52baccdf929ec6460d7b41" {
+		t.Fatalf("2^53-1 hash %s", hi)
+	}
+	lo, err := nodes.PayloadHash(map[string]any{"n": int64(-(1<<53 - 1))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lo != "d49d713821fc149f81ef6ca8054beeba696f5da052f0ab3e2d773808c5a9d625" {
+		t.Fatalf("-(2^53-1) hash %s", lo)
+	}
+	if _, err := nodes.PayloadHash(map[string]any{"n": uint64(1)}); err != nil {
+		t.Fatal(err)
+	}
+	asNumber, err := nodes.PayloadHash(map[string]any{"n": json.Number("9007199254740991")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if asNumber != hi {
+		t.Fatalf("json.Number hash %s want %s", asNumber, hi)
+	}
+}
+
+func TestPayloadHashLargeFloatFollowsJCS(t *testing.T) {
+	dotted, err := nodes.PayloadHash(map[string]any{"n": json.Number("9007199254740992.0")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dotted != "66c87d9cb3014e05a11baa97df62282d89d425f22ee15816577c84534e2ef1bb" {
+		t.Fatalf("float literal hash %s", dotted)
+	}
+	if _, err := nodes.PayloadHash(map[string]any{"n": 1.5}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestPayloadHashRejectsIntegersOutsideSafeRange(t *testing.T) {
+	cases := []struct {
+		name string
+		n    any
+	}{
+		{"int64 at 2^53", int64(1 << 53)},
+		{"int64 just above", int64((1 << 53) + 1)},
+		{"int64 at 2^60", int64(1 << 60)},
+		{"int64 just below negative bound", int64(-(1 << 53))},
+		{"uint64", uint64(1 << 53)},
+		{"json number", json.Number("9007199254740993")},
+		{"wide json number", json.Number("1152921504606846977")},
+		{"nested", map[string]any{"k": []any{int64((1 << 53) + 1)}}},
+		{"int64 slice", []int64{1 << 53}},
+		{"pointer", ptrInt64(1 << 53)},
+		{"raw message", json.RawMessage(`{"n":9007199254740993}`)},
+		{"float64 at 2^53", float64(int64(1 << 53))},
+		{"float64 1e18", float64(1e18)},
+	}
+	for _, c := range cases {
+		c := c
+		t.Run(c.name, func(t *testing.T) {
+			_, err := nodes.PayloadHash(map[string]any{"n": c.n})
+			if err == nil || !strings.Contains(err.Error(), "safe integer") {
+				t.Fatalf("err=%v", err)
+			}
+		})
+	}
+
+	_, errHi := nodes.PayloadHash(map[string]any{"n": int64(1 << 53)})
+	_, errLo := nodes.PayloadHash(map[string]any{"n": int64((1 << 53) + 1)})
+	if errHi == nil || errLo == nil {
+		t.Fatal("distinct integers above 2^53-1 hashed")
+	}
+
+	if _, err := nodes.PayloadHash(map[string]any{"row": safeWithHiddenBigInt()}); err != nil {
+		t.Fatal(err)
 	}
 }
 

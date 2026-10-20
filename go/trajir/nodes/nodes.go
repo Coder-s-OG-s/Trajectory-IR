@@ -7,6 +7,7 @@
 package nodes
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -88,12 +89,117 @@ func PayloadHash(payload map[string]any) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("json marshal: %w", err)
 	}
+	decoded, err := decodeJSON(raw)
+	if err != nil {
+		return "", err
+	}
+	if err := rejectUnsafeJSON(decoded); err != nil {
+		return "", err
+	}
 	canon, err := jcs.Transform(raw)
 	if err != nil {
 		return "", fmt.Errorf("jcs: %w", err)
 	}
 	sum := sha256.Sum256(canon)
 	return hex.EncodeToString(sum[:]), nil
+}
+
+const maxSafeInteger int64 = 1<<53 - 1
+
+// DecodeObject parses one JSON object and preserves number literals.
+func DecodeObject(raw []byte) (map[string]any, error) {
+	v, err := decodeJSON(raw)
+	if err != nil {
+		return nil, err
+	}
+	obj, ok := v.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("want JSON object, got %T", v)
+	}
+	return obj, nil
+}
+
+func decodeJSON(raw []byte) (any, error) {
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.UseNumber()
+	var v any
+	if err := dec.Decode(&v); err != nil {
+		return nil, err
+	}
+	var extra json.RawMessage
+	if err := dec.Decode(&extra); err != io.EOF {
+		if err == nil {
+			return nil, fmt.Errorf("invalid character after top-level value")
+		}
+		return nil, err
+	}
+	return v, nil
+}
+
+func rejectUnsafeJSON(v any) error {
+	switch n := v.(type) {
+	case nil:
+		return nil
+	case json.Number:
+		return checkJSONNumber(n)
+	case map[string]any:
+		for _, child := range n {
+			if err := rejectUnsafeJSON(child); err != nil {
+				return err
+			}
+		}
+		return nil
+	case []any:
+		for _, child := range n {
+			if err := rejectUnsafeJSON(child); err != nil {
+				return err
+			}
+		}
+		return nil
+	default:
+		return nil
+	}
+}
+
+func checkJSONNumber(n json.Number) error {
+	s := string(n)
+	if jsonIntegerLiteral(s) && jsonIntegerOutOfRange(s) {
+		return fmt.Errorf("%s exceeds safe integer domain for JSON floats", s)
+	}
+	return nil
+}
+
+func jsonIntegerLiteral(s string) bool {
+	if s == "" {
+		return false
+	}
+	i := 0
+	if s[0] == '-' {
+		if len(s) == 1 {
+			return false
+		}
+		i = 1
+	}
+	if s[i] == '0' {
+		return len(s) == i+1
+	}
+	for ; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func jsonIntegerOutOfRange(s string) bool {
+	if s[0] == '-' {
+		s = s[1:]
+	}
+	const maxDigits = "9007199254740991"
+	if len(s) != len(maxDigits) {
+		return len(s) > len(maxDigits)
+	}
+	return s > maxDigits
 }
 
 // NodeID builds the content-addressed id string used by the Python reference.

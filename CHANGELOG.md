@@ -53,7 +53,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Postgres open paths bound ping and schema setup (default 10s, DSN
+- Go `PayloadHash` refuses JSON integer literals outside `-(2^53-1) .. 2^53-1`
+  after `json.Marshal`, matching Python rfc8785. SQLite, Postgres, and `.tir`
+  load keep number text with `UseNumber`, so a stored integer above that
+  range cannot hash as a rounded float (#461).
+- Postgres open paths bound ping and schema setup (default 10s, DSN)
   `connect_timeout`, or `TRAJIR_PG_CONNECT_TIMEOUT`). S3 clients set an
   explicit 10s connect timeout and 60s read deadline (#406).
 - Go: `ClaimToolCall` (SQLite and Postgres) now returns real insert errors instead of

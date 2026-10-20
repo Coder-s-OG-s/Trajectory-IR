@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	nodelog "github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/log"
+	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/nodes"
 
 	_ "modernc.org/sqlite"
 )
@@ -284,6 +285,78 @@ func TestPipeInTenantRejected(t *testing.T) {
 	_, err := nl.Append("DECISION", &step, map[string]any{"plan": "x"}, "t1", "a|b", 1)
 	if err == nil {
 		t.Fatal("expected delimiter rejection")
+	}
+}
+
+func TestAppendRejectsIntegerAboveSafeRange(t *testing.T) {
+	nl := openTemp(t)
+	step := 1
+	_, err := nl.Append("TOOL_RESULT", &step, map[string]any{"n": int64(1 << 53)}, "t1", "demo", 2)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	_, err = nl.Append("TOOL_RESULT", &step, map[string]any{"n": int64((1 << 53) + 1)}, "t1", "demo", 2)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	rows, err := nl.ListNodes("t1", "demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 0 {
+		t.Fatalf("rows=%d", len(rows))
+	}
+
+	n, err := nl.Append("TOOL_RESULT", &step, map[string]any{"n": int64(1<<53 - 1)}, "t1", "demo", 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n.PHash != "e1da48c6a6089f06ecb4e0a2259e658e3786b2420f52baccdf929ec6460d7b41" {
+		t.Fatalf("phash=%s", n.PHash)
+	}
+}
+
+func TestListNodesKeepsIntegerLiteral(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nodes.sqlite")
+	nl, err := nodelog.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = nl.Close() })
+
+	step := 1
+	id, err := nodes.NodeID("demo", "t1", &step, 2, "TOOL_RESULT", "66c87d9cb3014e05a11baa97df62282d89d425f22ee15816577c84534e2ef1bb")
+	if err != nil {
+		t.Fatal(err)
+	}
+	side, err := sql.Open("sqlite", path+"?_busy_timeout=5000")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = side.Close() })
+	_, err = side.Exec(
+		`INSERT INTO nodes (id, trajectory_id, tenant_id, step_n, seq, kind, payload_json, ts)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		id, "t1", "demo", 1, 2, "TOOL_RESULT", `{"n":9007199254740993}`, 1.0,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows, err := nl.ListNodes("t1", "demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("rows=%d", len(rows))
+	}
+	payload, _ := rows[0]["payload"].(map[string]any)
+	num, ok := payload["n"].(json.Number)
+	if !ok || num != "9007199254740993" {
+		t.Fatalf("n=%#v", payload["n"])
+	}
+	if _, err := nodes.PayloadHash(payload); err == nil {
+		t.Fatal("hashed a rounded integer")
 	}
 }
 
