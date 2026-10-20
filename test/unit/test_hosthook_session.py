@@ -6,13 +6,16 @@ import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
+import pytest
 from integrations.hosthook.session import (
     record_tool_failure,
     record_tool_result,
     seal_before_tool,
 )
+from integrations.otel.correlate import push_span, reset_span
 
 from trajectory_ir.runtime.log import NodeLog
 
@@ -197,3 +200,86 @@ print(json.dumps({
     assert loaded["dbos"] is False
     assert loaded["client"] is False
     assert loaded["elapsed"] < 1.0
+
+
+def test_held_stale_lock_times_out_instead_of_spinning(tmp_path: Path, monkeypatch) -> None:
+    """A lock another process still holds must sleep and time out.
+
+    On Windows, unlinking a lock that is still open raises PermissionError.
+    Continuing straight back into the acquire loop never reaches the deadline.
+    """
+    lock = tmp_path / "hook.lock"
+    lock.write_text("held", encoding="utf-8")
+    os.utime(lock, (0, 0))
+
+    spins = {"slept": True}
+    real_unlink = Path.unlink
+
+    def unlink_held(self: Path, *args: object, **kwargs: object) -> None:
+        if self.name != "hook.lock":
+            return real_unlink(self, *args, **kwargs)
+        if not spins["slept"]:
+            raise AssertionError("lock retry did not sleep")
+        spins["slept"] = False
+        raise PermissionError("sharing violation")
+
+    clock = {"t": 1_000.0}
+    monkeypatch.setattr(Path, "unlink", unlink_held)
+    monkeypatch.setattr(time, "time", lambda: clock["t"])
+
+    def sleep(seconds: float) -> None:
+        spins["slept"] = True
+        clock["t"] += seconds
+
+    monkeypatch.setattr(time, "sleep", sleep)
+
+    with pytest.raises(TimeoutError, match="hook lock"):
+        seal_before_tool(tmp_path, "demo", "hook-lock", "echo", {"msg": "a"}, "use-lock")
+    assert not (tmp_path / "nodes.sqlite").exists()
+
+
+def test_removable_stale_lock_is_replaced(tmp_path: Path) -> None:
+    lock = tmp_path / "hook.lock"
+    lock.write_text("stale", encoding="utf-8")
+    stale = time.time() - 60
+    os.utime(lock, (stale, stale))
+    sealed = seal_before_tool(tmp_path, "demo", "hook-steal", "echo", {"msg": "a"}, "use-steal")
+    assert sealed["sealed"] is True
+    assert (tmp_path / "nodes.sqlite").is_file()
+
+
+class _Span:
+    def __init__(self) -> None:
+        self.attrs: dict[str, object] = {}
+
+    def set_attribute(self, key: str, value: object) -> None:
+        self.attrs[key] = value
+
+
+def test_seal_labels_the_decision_it_just_wrote(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("TRAJIR_OTEL_CORRELATE", "1")
+    calls = {"n": 0}
+    real_list = NodeLog.list_nodes
+
+    def counting(self: NodeLog, *args: object, **kwargs: object) -> list[dict]:
+        calls["n"] += 1
+        return real_list(self, *args, **kwargs)
+
+    monkeypatch.setattr(NodeLog, "list_nodes", counting)
+    span = _Span()
+    token = push_span(span)
+    try:
+        seal_before_tool(tmp_path, "demo", "hook-otel", "echo", {"msg": "hi"}, "use-otel")
+    finally:
+        reset_span(token)
+
+    assert calls["n"] == 0
+    log = NodeLog(str(tmp_path / "nodes.sqlite"))
+    try:
+        rows = real_list(log, "hook-otel", tenant_id="demo")
+    finally:
+        log.close()
+    decision = next(row for row in rows if row["kind"] == "DECISION")
+    assert span.attrs["trajir.node_id"] == decision["id"]
+    assert span.attrs["trajir.content_hash"]
+    assert span.attrs["trajir.step_n"] == 1

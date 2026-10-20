@@ -8,6 +8,9 @@ cd "$ROOT"
 echo "== One-step Claude attach =="
 echo "  root: $ROOT"
 
+# go/trajir is the package directory. The binary is go/trajir.exe so the
+# build does not write go/trajir/trajir and then treat the directory as OK.
+# trajir-mcp.exe uses the same suffix on every OS.
 ( cd "$ROOT/go" && go build -o trajir.exe ./cmd/trajir && go build -o trajir-mcp.exe ./cmd/trajir-mcp )
 test -f "$ROOT/go/trajir.exe"
 test -x "$ROOT/go/trajir.exe" || chmod +x "$ROOT/go/trajir.exe"

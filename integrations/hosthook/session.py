@@ -34,7 +34,6 @@ from trajectory_ir.resume.gate import make_gated_tool_call, make_plain_tool_call
 from trajectory_ir.resume.idempotency import CallMeta
 from trajectory_ir.resume.world import decision_payload
 from trajectory_ir.runtime.log import NodeLog
-from trajectory_ir.runtime.nodes import payload_hash
 
 _TOOL_SEQ = 2
 _COMMIT_SEQ = 4
@@ -94,9 +93,15 @@ class _Lock:
                 except OSError:
                     age = 0
                 if age > 15:
-                    with contextlib.suppress(OSError):
+                    try:
                         lock_path.unlink()
-                    continue
+                    except OSError:
+                        # Windows refuses to delete a lock another process
+                        # still has open. Sleep and honor the deadline.
+                        # Continuing here spins at 100% and never times out.
+                        pass
+                    else:
+                        continue
                 if time.time() > deadline:
                     raise TimeoutError(f"trajir hook lock held: {lock_path}") from None
                 time.sleep(0.05)
@@ -109,44 +114,26 @@ class _Lock:
             (self.work_dir / "hook.lock").unlink()
 
 
-def _decision_facts(
-    work_dir: Path, tenant_id: str, trajectory_id: str, step_n: int
-) -> dict[str, str]:
-    log = NodeLog(str(work_dir / "nodes.sqlite"))
-    try:
-        rows = log.list_nodes(trajectory_id, tenant_id=tenant_id)
-    finally:
-        log.close()
-    for row in rows:
-        if row.get("step_n") == step_n and row.get("kind") == "DECISION":
-            payload = row.get("payload") if isinstance(row.get("payload"), dict) else {}
-            return {
-                "decision_node_id": str(row.get("id") or ""),
-                "content_hash": payload_hash(payload) if payload else "",
-            }
-    return {"decision_node_id": "", "content_hash": ""}
-
-
 def _label(
-    work_dir: Path,
     tenant_id: str,
     trajectory_id: str,
     step_n: int,
     tool_name: str,
     effect: str,
+    decision_node_id: str,
+    content_hash: str,
 ) -> None:
     from integrations.otel.correlate import correlate_enabled, current_span, label_after_seal
 
     if not correlate_enabled():
         return
-    facts = _decision_facts(work_dir, tenant_id, trajectory_id, step_n)
     label_after_seal(
         current_span(),
-        decision_node_id=facts["decision_node_id"],
+        decision_node_id=decision_node_id,
         trajectory_id=trajectory_id,
         tenant_id=tenant_id,
         step_n=step_n,
-        content_hash=facts["content_hash"],
+        content_hash=content_hash,
         effect_class=effect,
         tool_name=tool_name,
     )
@@ -218,6 +205,8 @@ def seal_before_tool(
         if existing:
             return dict(existing)
         step_n = int(state["next_step"])
+        decision_id = ""
+        content_hash = ""
         log = NodeLog(str(root / "nodes.sqlite"))
         try:
             plan = {"tool_calls": [{"name": tool_name, "args": safe_args}]}
@@ -229,7 +218,7 @@ def seal_before_tool(
                 tenant_id,
                 seq=0,
             )
-            log.append(
+            decision = log.append(
                 "DECISION",
                 step_n,
                 decision_payload(plan),
@@ -237,6 +226,8 @@ def seal_before_tool(
                 tenant_id,
                 seq=1,
             )
+            decision_id = decision.id
+            content_hash = decision.phash
         finally:
             log.close()
         record = {
@@ -250,7 +241,15 @@ def seal_before_tool(
         state["pending"][tool_use_id] = record
         state["next_step"] = step_n + 1
         _save_state(root, state)
-    _label(root, tenant_id, trajectory_id, step_n, tool_name, effect.value)
+    _label(
+        tenant_id,
+        trajectory_id,
+        step_n,
+        tool_name,
+        effect.value,
+        decision_id,
+        content_hash,
+    )
     return record
 
 

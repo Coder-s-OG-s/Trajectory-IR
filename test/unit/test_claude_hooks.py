@@ -80,3 +80,21 @@ def test_failure_hook_records_abort_and_ignores_bad_json(monkeypatch, tmp_path: 
     assert abort["payload"]["error"] == "exit 1"
     state = json.loads((tmp_path / "hook_state.json").read_text(encoding="utf-8"))
     assert "fail-1" not in state["pending"]
+
+
+def test_post_tool_record_failure_still_exits_zero(monkeypatch, tmp_path: Path) -> None:
+    """The tool already ran. A diary write failure must not ask the host to run it again."""
+    monkeypatch.setenv("TRAJIR_WORK_DIR", str(tmp_path))
+    monkeypatch.setenv("TRAJIR_TENANT_ID", "demo")
+    monkeypatch.setenv("TRAJIR_TRAJECTORY_ID", "stdin-record-fail")
+    seal = {"tool_name": "echo", "tool_use_id": "rec-1", "tool_input": {"msg": "hi"}}
+    monkeypatch.setattr("sys.stdin", StringIO(json.dumps(seal)))
+    assert pre_main() == 0
+
+    def boom(*_args: object, **_kwargs: object) -> dict:
+        raise RuntimeError("sqlite locked")
+
+    monkeypatch.setattr("integrations.claude.post_tool_use.record_tool_result", boom)
+    done = {"tool_use_id": "rec-1", "tool_response": "hi"}
+    monkeypatch.setattr("sys.stdin", StringIO(json.dumps(done)))
+    assert post_main() == 0
