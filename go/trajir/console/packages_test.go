@@ -2,6 +2,7 @@ package console
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -110,6 +111,7 @@ func TestHTTPPackagesAndLoopback(t *testing.T) {
 	req5.RemoteAddr = "127.0.0.1:9"
 	req5.Host = "127.0.0.1:8787"
 	req5.Header.Set("Origin", "http://127.0.0.1:8787")
+	req5.Header.Set("Content-Type", "application/json")
 	rr5 := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rr5, req5)
 	if rr5.Code != http.StatusOK {
@@ -123,21 +125,44 @@ func TestHTTPPackagesAndLoopback(t *testing.T) {
 	req6.RemoteAddr = "127.0.0.1:9"
 	req6.Host = "127.0.0.1:8787"
 	req6.Header.Set("Origin", "http://127.0.0.1:8787")
+	req6.Header.Set("Content-Type", "application/json; charset=utf-8")
 	rr6 := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rr6, req6)
 	if rr6.Code != http.StatusOK {
 		t.Fatalf("shell status=%d body=%s", rr6.Code, rr6.Body.String())
 	}
 
-	// Untyped body without application/json (e.g. CSRF via untyped Blob) is rejected.
-	reqUntyped := httptest.NewRequest(http.MethodPost, "/v1/local/reveal", strings.NewReader(`{"root":true}`))
-	reqUntyped.RemoteAddr = "127.0.0.1:9"
-	reqUntyped.Host = "127.0.0.1:8787"
-	reqUntyped.Header.Set("Origin", "http://127.0.0.1:8787")
-	rrUntyped := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(rrUntyped, reqUntyped)
-	if rrUntyped.Code != http.StatusBadRequest {
-		t.Fatalf("expected status 400 for missing content-type with body, got: %d", rrUntyped.Code)
+	// Anything but application/json (an untyped Blob, a bodyless fetch, a form
+	// post, a lookalike type) is rejected before a process can start.
+	started = nil
+	for name, tc := range map[string]struct{ body, ct string }{
+		"untyped body":   {`{"root":true}`, ""},
+		"empty untyped":  {"", ""},
+		"form":           {"root=true", "application/x-www-form-urlencoded"},
+		"text/plain":     {`{"root":true}`, "text/plain"},
+		"lookalike type": {`{"root":true}`, "application/jsonp"},
+	} {
+		for _, path := range []string{"/v1/local/reveal", "/v1/local/open-shell"} {
+			var body io.Reader
+			if tc.body != "" {
+				body = strings.NewReader(tc.body)
+			}
+			req := httptest.NewRequest(http.MethodPost, path, body)
+			req.RemoteAddr = "127.0.0.1:9"
+			req.Host = "127.0.0.1:8787"
+			req.Header.Set("Origin", "http://127.0.0.1:8787")
+			if tc.ct != "" {
+				req.Header.Set("Content-Type", tc.ct)
+			}
+			rr := httptest.NewRecorder()
+			srv.Handler().ServeHTTP(rr, req)
+			if rr.Code != http.StatusUnsupportedMediaType {
+				t.Fatalf("%s %s: expected 415, got %d body=%s", name, path, rr.Code, rr.Body.String())
+			}
+		}
+	}
+	if len(started) != 0 {
+		t.Fatalf("rejected local actions started a process: %v", started)
 	}
 
 	// A page on another site can reach 127.0.0.1 too. It must not start a process.

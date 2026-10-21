@@ -49,7 +49,8 @@ go run ./cmd/trajir-console -addr 127.0.0.1:8787
 When `TRAJIR_CONSOLE_TOKEN` is set, send `Authorization: Bearer <token>` on
 all `/v1/*` routes. The UI has a token field (sessionStorage) for local demos.
 `POST /v1/local/reveal` and `POST /v1/local/open-shell` also require a loopback
-client. They never take a shell command from the browser.
+client, a same-origin request and `Content-Type: application/json` (even with an
+empty body; anything else gets 415). They never take a shell command from the browser.
 
 Open `http://127.0.0.1:8787/` for the home dashboard, or
 `http://127.0.0.1:8787/?id=<trajectory_id>` for a deep link.

@@ -3,6 +3,7 @@ package client_test
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -517,15 +518,89 @@ func TestExecToolFnWithMetaSeesHashedKey(t *testing.T) {
 	}
 }
 
-func TestOpenTrajectoryExternalPathEscapesWorkDir(t *testing.T) {
+// NodesPath and MemoPath override WorkDir, so they may live outside it.
+func TestOpenTrajectoryExplicitPathsMayLiveOutsideWorkDir(t *testing.T) {
 	workDir := t.TempDir()
 	otherDir := t.TempDir()
-	extPath := filepath.Join(otherDir, "nodes.sqlite")
-	_, err := client.OpenTrajectory("demo", "escape-1", client.Options{
+	tr, err := client.OpenTrajectory("demo", "outside-1", client.Options{
 		WorkDir:   workDir,
-		NodesPath: extPath,
+		NodesPath: filepath.Join(otherDir, "nodes.sqlite"),
+		MemoPath:  filepath.Join(otherDir, "memo.sqlite"),
 	})
-	if err == nil || !strings.Contains(err.Error(), "escapes workdir") {
-		t.Fatalf("expected escapes workdir error, got: %v", err)
+	if err != nil {
+		t.Fatalf("explicit paths outside WorkDir must be accepted: %v", err)
+	}
+	_ = tr.Close()
+	if _, err := os.Stat(filepath.Join(otherDir, "nodes.sqlite")); err != nil {
+		t.Fatalf("nodes db not created at the explicit path: %v", err)
+	}
+}
+
+func symlinkOrSkip(t *testing.T, target, link string) {
+	t.Helper()
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+}
+
+func TestOpenTrajectoryRejectsSymlinkedSQLiteFiles(t *testing.T) {
+	outside := filepath.Join(t.TempDir(), "victim")
+	if err := os.WriteFile(outside, []byte("keep"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		name string
+		link func(dir string) string // returns the path to hand to Options, "" for the default
+		opts func(dir, linked string) client.Options
+		want string
+	}{
+		{
+			name: "default nodes db in WorkDir",
+			link: func(dir string) string { return filepath.Join(dir, "nodes.sqlite") },
+			opts: func(dir, _ string) client.Options { return client.Options{WorkDir: dir} },
+			want: "nodes path",
+		},
+		{
+			name: "default memo db in WorkDir",
+			link: func(dir string) string { return filepath.Join(dir, "memo.sqlite") },
+			opts: func(dir, _ string) client.Options { return client.Options{WorkDir: dir} },
+			want: "memo path",
+		},
+		{
+			name: "explicit nodes path outside WorkDir",
+			link: func(dir string) string { return filepath.Join(dir, "elsewhere.sqlite") },
+			opts: func(dir, linked string) client.Options {
+				return client.Options{WorkDir: t.TempDir(), NodesPath: linked}
+			},
+			want: "nodes path",
+		},
+		{
+			name: "wal sidecar",
+			link: func(dir string) string { return filepath.Join(dir, "nodes.sqlite-wal") },
+			opts: func(dir, _ string) client.Options { return client.Options{WorkDir: dir} },
+			want: "nodes path",
+		},
+		{
+			name: "shm sidecar of explicit path",
+			link: func(dir string) string { return filepath.Join(dir, "x.sqlite-shm") },
+			opts: func(dir, _ string) client.Options {
+				return client.Options{NodesPath: filepath.Join(dir, "x.sqlite")}
+			},
+			want: "nodes path",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			linked := tc.link(dir)
+			symlinkOrSkip(t, outside, linked)
+			_, err := client.OpenTrajectory("demo", "link-1", tc.opts(dir, linked))
+			if err == nil || !strings.Contains(err.Error(), tc.want) || !strings.Contains(err.Error(), "symlink") {
+				t.Fatalf("expected a %q symlink error, got: %v", tc.want, err)
+			}
+			if b, _ := os.ReadFile(outside); string(b) != "keep" {
+				t.Fatalf("symlink target was written through: %q", b)
+			}
+		})
 	}
 }

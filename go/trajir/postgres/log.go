@@ -39,24 +39,70 @@ type NodeLog struct {
 }
 
 var (
-	reURLPassword = regexp.MustCompile(`://([^:]+):([^@]+)@`)
-	reKVPassword  = regexp.MustCompile(`(?i)(password=)\S+`)
+	reURLPassword = regexp.MustCompile(`(://[^:/@\s]+):[^@\s]+@`)
+	// Keyword/value DSNs allow a single-quoted value with spaces and \' escapes.
+	reKVPassword = regexp.MustCompile(`(?i)(\bpassword\s*=\s*)('(?:[^'\\]|\\.)*'|\S+)`)
 )
+
+// minLiteralRedactLen is the shortest password replaced wherever it appears in
+// an error message. Shorter ones are replaced only as a whole token, since a
+// password like "a" or "5" would otherwise mangle hosts, ports and prose.
+const minLiteralRedactLen = 8
+
+// redactedError carries the scrubbed message but still unwraps to the original
+// error, so errors.Is and errors.As (context.DeadlineExceeded, net errors) keep
+// working for callers of OpenDSN.
+type redactedError struct {
+	msg string
+	err error
+}
+
+func (e *redactedError) Error() string { return e.msg }
+func (e *redactedError) Unwrap() error { return e.err }
+
+func isTokenChar(b byte) bool {
+	return b == '_' || b >= '0' && b <= '9' || b >= 'a' && b <= 'z' || b >= 'A' && b <= 'Z'
+}
+
+func redactLiteral(msg, secret string) string {
+	if secret == "" {
+		return msg
+	}
+	if len(secret) >= minLiteralRedactLen {
+		return strings.ReplaceAll(msg, secret, "[REDACTED]")
+	}
+	var b strings.Builder
+	for {
+		i := strings.Index(msg, secret)
+		if i < 0 {
+			b.WriteString(msg)
+			return b.String()
+		}
+		end := i + len(secret)
+		if (i == 0 || !isTokenChar(msg[i-1])) && (end == len(msg) || !isTokenChar(msg[end])) {
+			b.WriteString(msg[:i])
+			b.WriteString("[REDACTED]")
+		} else {
+			b.WriteString(msg[:end])
+		}
+		msg = msg[end:]
+	}
+}
 
 func sanitizePGErr(err error, rawDSN string) error {
 	if err == nil {
 		return nil
 	}
 	msg := err.Error()
-	if cfg, parseErr := pgconn.ParseConfig(rawDSN); parseErr == nil && cfg.Password != "" {
-		msg = strings.ReplaceAll(msg, cfg.Password, "[REDACTED]")
+	if cfg, parseErr := pgconn.ParseConfig(rawDSN); parseErr == nil {
+		msg = redactLiteral(msg, cfg.Password)
 	}
-	msg = reURLPassword.ReplaceAllString(msg, "://$1:[REDACTED]@")
+	msg = reURLPassword.ReplaceAllString(msg, "$1:[REDACTED]@")
 	msg = reKVPassword.ReplaceAllString(msg, "$1[REDACTED]")
-	if msg != err.Error() {
-		return errors.New(msg)
+	if msg == err.Error() {
+		return err
 	}
-	return err
+	return &redactedError{msg: msg, err: err}
 }
 
 // OpenDSN opens a Postgres NodeLog from a connection string.
@@ -68,11 +114,11 @@ func OpenDSN(dsn string) (*NodeLog, error) {
 	}
 	timeout, err := resolvePGConnectTimeout(dsn)
 	if err != nil {
-		return nil, err
+		return nil, sanitizePGErr(err, dsn)
 	}
 	effective, err := dsnWithConnectTimeout(dsn, timeout)
 	if err != nil {
-		return nil, err
+		return nil, sanitizePGErr(err, dsn)
 	}
 	db, err := sql.Open("pgx", effective)
 	if err != nil {
@@ -383,14 +429,8 @@ func isUniqueViolation(err error) bool {
 // When seq is non nil, the match is limited to that sequence slot.
 // tenantID must be non-empty; use HasAllTenants for cross-tenant administrative checks.
 func (l *NodeLog) Has(trajectoryID, tenantID string, stepN int, kind string, seq *int) (bool, error) {
-	if err := nodes.ValidateIDComponent("tenant_id", tenantID); err != nil {
-		return false, err
-	}
-	if err := nodes.ValidateIDComponent("trajectory_id", trajectoryID); err != nil {
-		return false, err
-	}
-	if err := nodes.ValidateIDComponent("kind", kind); err != nil {
-		return false, err
+	if tenantID == "" {
+		return false, fmt.Errorf("tenantID must be a non-empty string")
 	}
 	return l.has(trajectoryID, &tenantID, stepN, kind, seq)
 }
@@ -398,12 +438,6 @@ func (l *NodeLog) Has(trajectoryID, tenantID string, stepN int, kind string, seq
 // HasAllTenants reports whether a node of kind exists for trajectory and step across any tenant.
 // This bypasses tenant isolation and is intended for administrative or diagnostic tools only.
 func (l *NodeLog) HasAllTenants(trajectoryID string, stepN int, kind string, seq *int) (bool, error) {
-	if err := nodes.ValidateIDComponent("trajectory_id", trajectoryID); err != nil {
-		return false, err
-	}
-	if err := nodes.ValidateIDComponent("kind", kind); err != nil {
-		return false, err
-	}
 	return l.has(trajectoryID, nil, stepN, kind, seq)
 }
 
@@ -432,20 +466,11 @@ func (l *NodeLog) has(trajectoryID string, tenantID *string, stepN int, kind str
 
 // ListNodes returns nodes for a trajectory scoped to tenantID.
 func (l *NodeLog) ListNodes(trajectoryID, tenantID string) ([]map[string]any, error) {
-	if err := nodes.ValidateIDComponent("tenant_id", tenantID); err != nil {
-		return nil, err
-	}
-	if err := nodes.ValidateIDComponent("trajectory_id", trajectoryID); err != nil {
-		return nil, err
-	}
 	return l.listNodes(trajectoryID, &tenantID)
 }
 
 // ListNodesAllTenants returns nodes for a trajectory across all tenants.
 func (l *NodeLog) ListNodesAllTenants(trajectoryID string) ([]map[string]any, error) {
-	if err := nodes.ValidateIDComponent("trajectory_id", trajectoryID); err != nil {
-		return nil, err
-	}
 	return l.listNodes(trajectoryID, nil)
 }
 
@@ -479,10 +504,8 @@ func (l *NodeLog) listNodes(trajectoryID string, tenantID *string) ([]map[string
 		if err := rows.Scan(&id, &traj, &tenant, &stepN, &seq, &kind, &payloadJSON, &ts); err != nil {
 			return nil, err
 		}
-		var payload map[string]any
-		dec := json.NewDecoder(strings.NewReader(payloadJSON))
-		dec.UseNumber()
-		if err := dec.Decode(&payload); err != nil {
+		payload, err := nodes.DecodePayloadJSON(payloadJSON)
+		if err != nil {
 			return nil, err
 		}
 		rec := map[string]any{

@@ -2,7 +2,9 @@ package nodelog_test
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -444,5 +446,84 @@ func TestHasRejectsEmptyTenant(t *testing.T) {
 	_, err := nl.Has("t1", "", 1, "DECISION", nil)
 	if err == nil {
 		t.Fatal("expected error on empty tenantID")
+	}
+}
+
+// Rows written by an older version or another writer may hold ids the write
+// path would now refuse. Reading must still work.
+func TestReadPathsStillServeRowsWithLegacyIDs(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nodes.sqlite")
+	nl, err := nodelog.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = nl.Close() })
+
+	side, err := sql.Open("sqlite", path+"?_busy_timeout=5000")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = side.Close() })
+
+	longID := strings.Repeat("t", 600)
+	for i, tc := range []struct{ traj, tenant string }{{"legacy|traj", "legacy|tenant"}, {longID, "demo"}} {
+		if _, err := side.Exec(
+			`INSERT INTO nodes (id, trajectory_id, tenant_id, step_n, seq, kind, payload_json, ts) VALUES (?, ?, ?, 1, ?, 'THOUGHT', '{"n":1}', 1.0)`,
+			fmt.Sprintf("legacy-%d", i), tc.traj, tc.tenant, i,
+		); err != nil {
+			t.Fatal(err)
+		}
+		got, err := nl.ListNodes(tc.traj, tc.tenant)
+		if err != nil || len(got) != 1 {
+			t.Fatalf("ListNodes(%q,%q): rows=%d err=%v", tc.traj, tc.tenant, len(got), err)
+		}
+		if all, err := nl.ListNodesAllTenants(tc.traj); err != nil || len(all) != 1 {
+			t.Fatalf("ListNodesAllTenants(%q): rows=%d err=%v", tc.traj, len(all), err)
+		}
+		ok, err := nl.Has(tc.traj, tc.tenant, 1, "THOUGHT", nil)
+		if err != nil || !ok {
+			t.Fatalf("Has(%q,%q) = %v, %v", tc.traj, tc.tenant, ok, err)
+		}
+		if ok, err := nl.HasAllTenants(tc.traj, 1, "THOUGHT", nil); err != nil || !ok {
+			t.Fatalf("HasAllTenants(%q) = %v, %v", tc.traj, ok, err)
+		}
+	}
+}
+
+func TestListNodesKeepsLargeIntegersAndRejectsCorruptPayload(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nodes.sqlite")
+	nl, err := nodelog.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = nl.Close() })
+	side, err := sql.Open("sqlite", path+"?_busy_timeout=5000")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = side.Close() })
+
+	insert := func(id string, seq int, payload string) {
+		t.Helper()
+		if _, err := side.Exec(
+			`INSERT INTO nodes (id, trajectory_id, tenant_id, step_n, seq, kind, payload_json, ts) VALUES (?, 't1', 'demo', 1, ?, 'THOUGHT', ?, 1.0)`,
+			id, seq, payload,
+		); err != nil {
+			t.Fatal(err)
+		}
+	}
+	insert("a", 0, `{"big":9007199254740993}`)
+	rows, err := nl.ListNodes("t1", "demo")
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("rows=%d err=%v", len(rows), err)
+	}
+	payload := rows[0]["payload"].(map[string]any)
+	if n, ok := payload["big"].(json.Number); !ok || n.String() != "9007199254740993" {
+		t.Fatalf("big=%#v, want exact json.Number", payload["big"])
+	}
+
+	insert("b", 1, `{"x":1} trailing`)
+	if _, err := nl.ListNodes("t1", "demo"); err == nil {
+		t.Fatal("expected a payload_json with trailing data to be rejected")
 	}
 }

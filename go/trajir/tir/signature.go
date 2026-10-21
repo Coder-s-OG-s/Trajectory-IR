@@ -337,6 +337,40 @@ func readZipMembersAndSignature(path string) (members map[string][]byte, signatu
 
 // collectZipMembers reads all non-directory entries from an open archive.
 // Rejects duplicate member names, including duplicate SIGNATURE (CWE-436).
+// readZipMemberBounded reads one zip member, trusting neither its declared size
+// nor its local header. It reads at most min(*budget, MaxUncompressedEntryBytes)
+// bytes plus one, rejects a member over either limit, and subtracts what it read
+// from *budget (the total uncompressed bytes still allowed for the archive).
+func readZipMemberBounded(f *zip.File, budget *int) ([]byte, error) {
+	if f.UncompressedSize64 > MaxUncompressedEntryBytes {
+		return nil, fmt.Errorf(
+			"%w: zip member %q uncompressed size %d exceeds limit %d",
+			ErrLimit, f.Name, f.UncompressedSize64, MaxUncompressedEntryBytes,
+		)
+	}
+	readLimit := int64(*budget)
+	if int64(MaxUncompressedEntryBytes) < readLimit {
+		readLimit = int64(MaxUncompressedEntryBytes)
+	}
+	rc, err := f.Open()
+	if err != nil {
+		return nil, err
+	}
+	defer rc.Close()
+	data, err := io.ReadAll(io.LimitReader(rc, readLimit+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > MaxUncompressedEntryBytes {
+		return nil, fmt.Errorf("%w: zip member %q expanded beyond per-entry limit", ErrLimit, f.Name)
+	}
+	if len(data) > *budget {
+		return nil, fmt.Errorf("%w: zip total uncompressed size would exceed limit %d", ErrLimit, MaxTotalUncompressedBytes)
+	}
+	*budget -= len(data)
+	return data, nil
+}
+
 func collectZipMembers(files []*zip.File) (members map[string][]byte, signature []byte, err error) {
 	if len(files) > MaxZipEntries {
 		return nil, nil, fmt.Errorf("%w: too many zip entries: %d > %d", ErrLimit, len(files), MaxZipEntries)
@@ -351,33 +385,10 @@ func collectZipMembers(files []*zip.File) (members map[string][]byte, signature 
 		if err := safeZipName(name); err != nil {
 			return nil, nil, err
 		}
-		if f.UncompressedSize64 > MaxUncompressedEntryBytes {
-			return nil, nil, fmt.Errorf(
-				"%w: zip member %q uncompressed size %d exceeds limit %d",
-				ErrLimit, name, f.UncompressedSize64, MaxUncompressedEntryBytes,
-			)
-		}
-		readLimit := int64(budget)
-		if int64(MaxUncompressedEntryBytes) < readLimit {
-			readLimit = int64(MaxUncompressedEntryBytes)
-		}
-		rc, err := f.Open()
+		data, err := readZipMemberBounded(f, &budget)
 		if err != nil {
 			return nil, nil, err
 		}
-		limited := io.LimitReader(rc, readLimit+1)
-		data, err := io.ReadAll(limited)
-		_ = rc.Close()
-		if err != nil {
-			return nil, nil, err
-		}
-		if len(data) > MaxUncompressedEntryBytes {
-			return nil, nil, fmt.Errorf("%w: zip member %q expanded beyond per-entry limit", ErrLimit, name)
-		}
-		if len(data) > budget {
-			return nil, nil, fmt.Errorf("%w: zip total uncompressed size would exceed limit %d", ErrLimit, MaxTotalUncompressedBytes)
-		}
-		budget -= len(data)
 		if name == SignatureMemberName {
 			if signature != nil {
 				return nil, nil, fmt.Errorf("%w: duplicate zip member %q", ErrTir, name)

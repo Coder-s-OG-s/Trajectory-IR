@@ -249,14 +249,8 @@ func isUniqueConstraintError(err error) bool {
 // When seq is non nil, the match is limited to that sequence slot.
 // tenantID must be non-empty; use HasAllTenants for cross-tenant administrative checks.
 func (l *NodeLog) Has(trajectoryID, tenantID string, stepN int, kind string, seq *int) (bool, error) {
-	if err := nodes.ValidateIDComponent("tenant_id", tenantID); err != nil {
-		return false, err
-	}
-	if err := nodes.ValidateIDComponent("trajectory_id", trajectoryID); err != nil {
-		return false, err
-	}
-	if err := nodes.ValidateIDComponent("kind", kind); err != nil {
-		return false, err
+	if tenantID == "" {
+		return false, fmt.Errorf("tenantID must be a non-empty string")
 	}
 	return l.has(trajectoryID, &tenantID, stepN, kind, seq)
 }
@@ -264,12 +258,6 @@ func (l *NodeLog) Has(trajectoryID, tenantID string, stepN int, kind string, seq
 // HasAllTenants reports whether a node of kind exists for trajectory and step across any tenant.
 // This bypasses tenant isolation and is intended for administrative or diagnostic tools only.
 func (l *NodeLog) HasAllTenants(trajectoryID string, stepN int, kind string, seq *int) (bool, error) {
-	if err := nodes.ValidateIDComponent("trajectory_id", trajectoryID); err != nil {
-		return false, err
-	}
-	if err := nodes.ValidateIDComponent("kind", kind); err != nil {
-		return false, err
-	}
 	return l.has(trajectoryID, nil, stepN, kind, seq)
 }
 
@@ -315,12 +303,6 @@ func (l *NodeLog) Count(nodeID string) (int, error) {
 // Callers that genuinely need rows across tenants (e.g. tir.Export's own
 // mixed-tenant check) must use ListNodesAllTenants explicitly instead.
 func (l *NodeLog) ListNodes(trajectoryID, tenantID string) ([]map[string]any, error) {
-	if err := nodes.ValidateIDComponent("tenant_id", tenantID); err != nil {
-		return nil, err
-	}
-	if err := nodes.ValidateIDComponent("trajectory_id", trajectoryID); err != nil {
-		return nil, err
-	}
 	return l.listNodes(trajectoryID, &tenantID)
 }
 
@@ -329,9 +311,6 @@ func (l *NodeLog) ListNodes(trajectoryID, tenantID string) ([]map[string]any, er
 // performs its own tenant-scoping check on the result, such as tir.Export
 // detecting a trajectory with mixed tenant_id values.
 func (l *NodeLog) ListNodesAllTenants(trajectoryID string) ([]map[string]any, error) {
-	if err := nodes.ValidateIDComponent("trajectory_id", trajectoryID); err != nil {
-		return nil, err
-	}
 	return l.listNodes(trajectoryID, nil)
 }
 
@@ -365,10 +344,8 @@ func (l *NodeLog) listNodes(trajectoryID string, tenantID *string) ([]map[string
 		if err := rows.Scan(&id, &traj, &tenant, &stepN, &seq, &kind, &payloadJSON, &ts); err != nil {
 			return nil, err
 		}
-		var payload map[string]any
-		dec := json.NewDecoder(strings.NewReader(payloadJSON))
-		dec.UseNumber()
-		if err := dec.Decode(&payload); err != nil {
+		payload, err := nodes.DecodePayloadJSON(payloadJSON)
+		if err != nil {
 			return nil, err
 		}
 		rec := map[string]any{

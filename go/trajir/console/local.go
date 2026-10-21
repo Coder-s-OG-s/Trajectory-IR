@@ -3,9 +3,9 @@ package console
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net"
 	"net/http"
 	"net/url"
@@ -104,14 +104,23 @@ func (s *Server) resolveLocalPath(act localAction) (string, error) {
 	return s.Store.PackagePath(act.TrajectoryID, act.Name)
 }
 
+// requireJSON rejects any local action whose Content-Type is not exactly
+// application/json, including requests with no body. A cross-site page cannot
+// send that type without a CORS preflight, so a form post, an untyped Blob or a
+// bodyless fetch never reaches a handler that starts a process.
+func requireJSON(w http.ResponseWriter, r *http.Request) bool {
+	mt, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if err != nil || mt != "application/json" {
+		writeErr(w, http.StatusUnsupportedMediaType, "content-type must be application/json")
+		return false
+	}
+	return true
+}
+
 func parseLocalAction(r *http.Request) (localAction, error) {
 	var act localAction
-	if r.Body == nil || r.Body == http.NoBody || r.ContentLength == 0 {
+	if r.Body == nil || r.Body == http.NoBody {
 		return localAction{Root: true}, nil
-	}
-	ct := strings.ToLower(r.Header.Get("Content-Type"))
-	if !strings.HasPrefix(ct, "application/json") {
-		return act, errors.New("content-type must be application/json")
 	}
 	dec := json.NewDecoder(r.Body)
 	if err := dec.Decode(&act); err != nil {
@@ -127,7 +136,7 @@ func (s *Server) handleReveal(w http.ResponseWriter, r *http.Request) {
 	if !s.authorize(w, r) {
 		return
 	}
-	if !s.requireLoopback(w, r) {
+	if !s.requireLoopback(w, r) || !requireJSON(w, r) {
 		return
 	}
 	act, err := parseLocalAction(r)
@@ -152,7 +161,7 @@ func (s *Server) handleOpenShell(w http.ResponseWriter, r *http.Request) {
 	if !s.authorize(w, r) {
 		return
 	}
-	if !s.requireLoopback(w, r) {
+	if !s.requireLoopback(w, r) || !requireJSON(w, r) {
 		return
 	}
 	act, err := parseLocalAction(r)

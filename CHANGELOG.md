@@ -56,6 +56,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Postgres open paths bound ping and schema setup (default 10s, DSN
   `connect_timeout`, or `TRAJIR_PG_CONNECT_TIMEOUT`). S3 clients set an
   explicit 10s connect timeout and 60s read deadline (#406).
+- Go: `ClaimToolCall` (SQLite and Postgres) now returns real insert errors instead of
+  reporting "not claimed"; only a unique-slot conflict means another writer won.
+  Postgres connection errors from `OpenDSN` have the DSN password scrubbed while
+  still unwrapping to the cause. Payload numbers read back by `ListNodes` are
+  `json.Number`, so integers above 2^53 survive, and a `payload_json` with trailing
+  data is rejected. `OpenTrajectory` refuses a symlinked sqlite file or `-wal` /
+  `-shm` / `-journal` sidecar; an explicit `NodesPath` / `MemoPath` still overrides
+  `WorkDir` and may live outside it. The console's `/v1/local/reveal` and
+  `/v1/local/open-shell` require `Content-Type: application/json` on every request,
+  empty body included, and answer 415 otherwise.
 
 ## [0.2.2] - 2026-09-07
 
