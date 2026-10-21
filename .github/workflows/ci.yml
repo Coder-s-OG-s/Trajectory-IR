@@ -197,7 +197,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version: "1.26.9"
+          go-version: "1.26.10"
           cache-dependency-path: go/go.sum
 
       - name: go vet
@@ -291,7 +291,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version: "1.26.9"
+          go-version: "1.26.10"
           cache-dependency-path: go/go.sum
 
       - name: Evidence sidecar tests
@@ -339,7 +339,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version: "1.26.9"
+          go-version: "1.26.10"
           cache-dependency-path: go/go.sum
 
       - name: Live Postgres NodeLog tests (Go)
@@ -413,7 +413,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version: "1.26.9"
+          go-version: "1.26.10"
           cache-dependency-path: go/go.sum
 
       - name: Live MinIO S3 CAS tests (Go)
