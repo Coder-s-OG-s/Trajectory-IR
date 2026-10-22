@@ -8,13 +8,15 @@ package nodelog
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/nodes"
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/postgres"
 
-	_ "modernc.org/sqlite"
+	"modernc.org/sqlite"
 )
 
 var (
@@ -212,14 +214,35 @@ func (l *NodeLog) ClaimToolCall(
 		n.TS,
 	)
 	if err != nil {
-		// Unique slot conflict under race: treat as not claimed.
 		_ = tx.Rollback()
-		return false, nil
+		if isUniqueConstraintError(err) {
+			// Unique slot conflict under race: treat as not claimed.
+			return false, nil
+		}
+		return false, fmt.Errorf("sqlite: insert tool_call: %w", err)
 	}
 	if err = tx.Commit(); err != nil {
 		return false, err
 	}
 	return true, nil
+}
+
+func isUniqueConstraintError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var sqliteErr *sqlite.Error
+	if errors.As(err, &sqliteErr) {
+		// Extended result codes in SQLite:
+		// SQLITE_CONSTRAINT_UNIQUE is 2067 (19 | (8 << 8))
+		// SQLITE_CONSTRAINT_PRIMARYKEY is 1555 (19 | (6 << 8))
+		code := sqliteErr.Code()
+		if code == 2067 || code == 1555 {
+			return true
+		}
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "unique constraint failed") || strings.Contains(msg, "primary key constraint failed")
 }
 
 // Has reports whether a node of kind exists for trajectory and step scoped to tenantID.
@@ -321,8 +344,8 @@ func (l *NodeLog) listNodes(trajectoryID string, tenantID *string) ([]map[string
 		if err := rows.Scan(&id, &traj, &tenant, &stepN, &seq, &kind, &payloadJSON, &ts); err != nil {
 			return nil, err
 		}
-		var payload map[string]any
-		if err := json.Unmarshal([]byte(payloadJSON), &payload); err != nil {
+		payload, err := nodes.DecodePayloadJSON(payloadJSON)
+		if err != nil {
 			return nil, err
 		}
 		rec := map[string]any{

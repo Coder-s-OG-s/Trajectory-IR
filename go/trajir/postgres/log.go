@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -19,6 +20,7 @@ import (
 
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/nodes"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
@@ -36,6 +38,73 @@ type NodeLog struct {
 	mu sync.Mutex
 }
 
+var (
+	reURLPassword = regexp.MustCompile(`(://[^:/@\s]+):[^@\s]+@`)
+	// Keyword/value DSNs allow a single-quoted value with spaces and \' escapes.
+	reKVPassword = regexp.MustCompile(`(?i)(\bpassword\s*=\s*)('(?:[^'\\]|\\.)*'|\S+)`)
+)
+
+// minLiteralRedactLen is the shortest password replaced wherever it appears in
+// an error message. Shorter ones are replaced only as a whole token, since a
+// password like "a" or "5" would otherwise mangle hosts, ports and prose.
+const minLiteralRedactLen = 8
+
+// redactedError carries the scrubbed message but still unwraps to the original
+// error, so errors.Is and errors.As (context.DeadlineExceeded, net errors) keep
+// working for callers of OpenDSN.
+type redactedError struct {
+	msg string
+	err error
+}
+
+func (e *redactedError) Error() string { return e.msg }
+func (e *redactedError) Unwrap() error { return e.err }
+
+func isTokenChar(b byte) bool {
+	return b == '_' || b >= '0' && b <= '9' || b >= 'a' && b <= 'z' || b >= 'A' && b <= 'Z'
+}
+
+func redactLiteral(msg, secret string) string {
+	if secret == "" {
+		return msg
+	}
+	if len(secret) >= minLiteralRedactLen {
+		return strings.ReplaceAll(msg, secret, "[REDACTED]")
+	}
+	var b strings.Builder
+	for {
+		i := strings.Index(msg, secret)
+		if i < 0 {
+			b.WriteString(msg)
+			return b.String()
+		}
+		end := i + len(secret)
+		if (i == 0 || !isTokenChar(msg[i-1])) && (end == len(msg) || !isTokenChar(msg[end])) {
+			b.WriteString(msg[:i])
+			b.WriteString("[REDACTED]")
+		} else {
+			b.WriteString(msg[:end])
+		}
+		msg = msg[end:]
+	}
+}
+
+func sanitizePGErr(err error, rawDSN string) error {
+	if err == nil {
+		return nil
+	}
+	msg := err.Error()
+	if cfg, parseErr := pgconn.ParseConfig(rawDSN); parseErr == nil {
+		msg = redactLiteral(msg, cfg.Password)
+	}
+	msg = reURLPassword.ReplaceAllString(msg, "$1:[REDACTED]@")
+	msg = reKVPassword.ReplaceAllString(msg, "$1[REDACTED]")
+	if msg == err.Error() {
+		return err
+	}
+	return &redactedError{msg: msg, err: err}
+}
+
 // OpenDSN opens a Postgres NodeLog from a connection string.
 // Ping and schema setup use TRAJIR_PG_CONNECT_TIMEOUT (seconds), else the DSN
 // connect_timeout, else 10s.
@@ -45,15 +114,15 @@ func OpenDSN(dsn string) (*NodeLog, error) {
 	}
 	timeout, err := resolvePGConnectTimeout(dsn)
 	if err != nil {
-		return nil, err
+		return nil, sanitizePGErr(err, dsn)
 	}
 	effective, err := dsnWithConnectTimeout(dsn, timeout)
 	if err != nil {
-		return nil, err
+		return nil, sanitizePGErr(err, dsn)
 	}
 	db, err := sql.Open("pgx", effective)
 	if err != nil {
-		return nil, fmt.Errorf("postgres: open: %w", err)
+		return nil, fmt.Errorf("postgres: open: %w", sanitizePGErr(err, dsn))
 	}
 	db.SetMaxOpenConns(4)
 	pingCtx, pingCancel := context.WithTimeout(context.Background(), timeout)
@@ -61,7 +130,7 @@ func OpenDSN(dsn string) (*NodeLog, error) {
 	pingCancel()
 	if err != nil {
 		_ = db.Close()
-		return nil, fmt.Errorf("postgres: ping: %w", err)
+		return nil, fmt.Errorf("postgres: ping: %w", sanitizePGErr(err, dsn))
 	}
 	nl := &NodeLog{db: db}
 	schemaCtx, schemaCancel := context.WithTimeout(context.Background(), timeout)
@@ -69,7 +138,7 @@ func OpenDSN(dsn string) (*NodeLog, error) {
 	schemaCancel()
 	if err != nil {
 		_ = db.Close()
-		return nil, err
+		return nil, sanitizePGErr(err, dsn)
 	}
 	return nl, nil
 }
@@ -101,7 +170,7 @@ func dsnWithConnectTimeout(dsn string, timeout time.Duration) (string, error) {
 	if strings.Contains(dsn, "://") {
 		u, err := url.Parse(dsn)
 		if err != nil {
-			return "", fmt.Errorf("postgres: parse dsn: %w", err)
+			return "", errors.New("postgres: parse dsn: invalid connection URL")
 		}
 		q := u.Query()
 		if q.Get("connect_timeout") == want {
@@ -333,13 +402,27 @@ func (l *NodeLog) ClaimToolCall(
 		n.ID, n.TrajectoryID, n.TenantID, stepN, n.Seq, n.Kind, string(payloadJSON), n.TS,
 	)
 	if err != nil {
-		// Unique violation under race: not claimed.
-		return false, nil
+		if isUniqueViolation(err) {
+			// Another writer won the slot between our SELECT and INSERT.
+			return false, nil
+		}
+		return false, fmt.Errorf("postgres: insert tool_call: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
 		return false, err
 	}
 	return true, nil
+}
+
+func isUniqueViolation(err error) bool {
+	if err == nil {
+		return false
+	}
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return pgErr.Code == "23505"
+	}
+	return strings.Contains(strings.ToLower(err.Error()), "duplicate key")
 }
 
 // Has reports whether a node of kind exists for trajectory and step scoped to tenantID.
@@ -421,8 +504,8 @@ func (l *NodeLog) listNodes(trajectoryID string, tenantID *string) ([]map[string
 		if err := rows.Scan(&id, &traj, &tenant, &stepN, &seq, &kind, &payloadJSON, &ts); err != nil {
 			return nil, err
 		}
-		var payload map[string]any
-		if err := json.Unmarshal([]byte(payloadJSON), &payload); err != nil {
+		payload, err := nodes.DecodePayloadJSON(payloadJSON)
+		if err != nil {
 			return nil, err
 		}
 		rec := map[string]any{

@@ -1,14 +1,17 @@
 package postgres
 
 import (
+	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/nodes"
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 func TestResolvePGConnectTimeout(t *testing.T) {
@@ -229,6 +232,71 @@ func TestMockClaimToolCallWinAndLose(t *testing.T) {
 	}
 }
 
+func TestMockClaimToolCallInsertUniqueViolationReturnsFalse(t *testing.T) {
+	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherRegexp))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	expectDDL(mock)
+
+	nl, err := OpenDB(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT 1 FROM nodes").WillReturnError(sql.ErrNoRows)
+	mock.ExpectExec("INSERT INTO nodes").WillReturnError(&pgconn.PgError{Code: "23505", Message: "duplicate key value violates unique constraint \"idx_nodes_slot\""})
+	mock.ExpectRollback()
+
+	claimed, err := nl.ClaimToolCall(1, map[string]any{"tool": "x"}, "t1", "demo", 2)
+	if err != nil {
+		t.Fatalf("unexpected err on unique violation: %v", err)
+	}
+	if claimed {
+		t.Fatal("expected lose claim on unique violation")
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestMockClaimToolCallInsertNonConflictErrorPropagates(t *testing.T) {
+	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherRegexp))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	expectDDL(mock)
+
+	nl, err := OpenDB(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT 1 FROM nodes").WillReturnError(sql.ErrNoRows)
+	mock.ExpectExec("INSERT INTO nodes").WillReturnError(errors.New("connection reset by peer"))
+	mock.ExpectRollback()
+
+	claimed, err := nl.ClaimToolCall(1, map[string]any{"tool": "x"}, "t1", "demo", 2)
+	if err == nil {
+		t.Fatal("expected non-conflict error to be propagated, got nil")
+	}
+	if !strings.Contains(err.Error(), "connection reset by peer") {
+		t.Fatalf("expected error to mention 'connection reset by peer', got %v", err)
+	}
+	if claimed {
+		t.Fatal("expected claimed=false on error")
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestMockAppendSlotConflict(t *testing.T) {
 	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherRegexp))
 	if err != nil {
@@ -341,5 +409,92 @@ func TestMockAppendSlotLookupErrorIsReturned(t *testing.T) {
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestSanitizePGErrRedactsPassword(t *testing.T) {
+	rawDSN := "postgres://user:super_secret_password123@localhost:5432/trajir_db"
+	errWithSecret := errors.New("failed to connect to server: super_secret_password123 was rejected")
+	sanitized := sanitizePGErr(errWithSecret, rawDSN)
+	if strings.Contains(sanitized.Error(), "super_secret_password123") {
+		t.Fatalf("sanitized error leaked password: %v", sanitized)
+	}
+	if !strings.Contains(sanitized.Error(), "[REDACTED]") {
+		t.Fatalf("expected [REDACTED] in error, got: %v", sanitized)
+	}
+
+	rawKV := "host=localhost user=admin password=another_secret dbname=db"
+	errWithKV := errors.New("connection failed: password=another_secret invalid")
+	sanitizedKV := sanitizePGErr(errWithKV, rawKV)
+	if strings.Contains(sanitizedKV.Error(), "another_secret") {
+		t.Fatalf("sanitized KV leaked password: %v", sanitizedKV)
+	}
+}
+
+func TestSanitizePGErrQuotedAndURLPasswords(t *testing.T) {
+	cases := []struct {
+		name, dsn, msg string
+		leaks          []string
+	}{
+		{"quoted kv with space", "host=h user=u password='my secret' dbname=d", "bad dsn: password='my secret' rejected", []string{"my secret", "secret'"}},
+		{"quoted kv escaped quote", `host=h password='it\'s a pw' dbname=d`, `bad dsn: password='it\'s a pw' x`, []string{`it\'s`, "a pw"}},
+		{"spaces around equals", "host=h password = hunter22xx dbname=d", "bad: password = hunter22xx", []string{"hunter22xx"}},
+		{"url userinfo", "postgres://u:pa55w0rd-long@h/d", "dial postgres://u:pa55w0rd-long@h/d failed", []string{"pa55w0rd-long"}},
+		{"literal in message", "postgres://u:abcdefghij@h/d", "server said abcdefghij is wrong", []string{"abcdefghij"}},
+	}
+	for _, tc := range cases {
+		got := sanitizePGErr(errors.New(tc.msg), tc.dsn).Error()
+		for _, leak := range tc.leaks {
+			if strings.Contains(got, leak) {
+				t.Errorf("%s: leaked %q in %q", tc.name, leak, got)
+			}
+		}
+		if !strings.Contains(got, "[REDACTED]") {
+			t.Errorf("%s: expected [REDACTED] in %q", tc.name, got)
+		}
+	}
+}
+
+func TestSanitizePGErrShortPasswordDoesNotMangleMessage(t *testing.T) {
+	for _, pw := range []string{"a", "5", "ab"} {
+		dsn := "postgres://user:" + pw + "@db.example.com:5432/app"
+		msg := "dial tcp db.example.com:5432: connection refused"
+		if got := sanitizePGErr(errors.New(msg), dsn).Error(); got != msg {
+			t.Errorf("password %q mangled unrelated text: %q", pw, got)
+		}
+		// The password itself, as a whole token, is still scrubbed.
+		got := sanitizePGErr(errors.New("auth failed for "+pw+" now"), dsn).Error()
+		if strings.Contains(got, " "+pw+" ") {
+			t.Errorf("password %q not scrubbed as a token: %q", pw, got)
+		}
+	}
+}
+
+func TestSanitizePGErrKeepsErrorChain(t *testing.T) {
+	cause := fmt.Errorf("ping: %w", context.DeadlineExceeded)
+	err := sanitizePGErr(fmt.Errorf("failed: %w, password=topsecret1", cause), "host=h password=topsecret1")
+	if strings.Contains(err.Error(), "topsecret1") {
+		t.Fatalf("leaked password: %v", err)
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("errors.Is(DeadlineExceeded) = false for %v", err)
+	}
+	if sanitizePGErr(nil, "x") != nil {
+		t.Fatal("nil must stay nil")
+	}
+	plain := errors.New("nothing secret here")
+	if sanitizePGErr(plain, "host=h password=zzzzzzzzzz") != plain {
+		t.Fatal("an unchanged error must be returned as is")
+	}
+}
+
+func TestOpenDSNRedactsPasswordOnEarlyErrors(t *testing.T) {
+	t.Setenv("TRAJIR_PG_CONNECT_TIMEOUT", "")
+	_, err := OpenDSN("postgres://user:Sup3rS3cret@bad host/db?connect_timeout=oops")
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	if strings.Contains(err.Error(), "Sup3rS3cret") {
+		t.Fatalf("leaked password: %v", err)
 	}
 }

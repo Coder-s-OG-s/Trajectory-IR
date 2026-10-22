@@ -217,3 +217,36 @@ func TestWallClockTSDoesNotAffectID(t *testing.T) {
 		t.Fatalf("id changed with wall clock: %s vs %s", n1.ID, n2.ID)
 	}
 }
+
+func TestDecodePayloadJSONKeepsIntegersExact(t *testing.T) {
+	p, err := nodes.DecodePayloadJSON(`{"big":9007199254740993,"f":1.5,"nested":{"n":42}}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	big, ok := p["big"].(json.Number)
+	if !ok || big.String() != "9007199254740993" {
+		t.Fatalf("big=%#v, want json.Number 9007199254740993", p["big"])
+	}
+	if n, ok := p["nested"].(map[string]any)["n"].(json.Number); !ok || n.String() != "42" {
+		t.Fatalf("nested n=%#v", p["nested"])
+	}
+	// Re-encoding must not turn the integer into 9007199254740992 or 9.007e15.
+	out, err := json.Marshal(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(out), `"big":9007199254740993`) {
+		t.Fatalf("re-encoded payload lost precision: %s", out)
+	}
+}
+
+func TestDecodePayloadJSONRejectsMalformedAndTrailingData(t *testing.T) {
+	for _, raw := range []string{``, `{"a":1} garbage`, `{"a":1}{"b":2}`, `{"a":1} 2`, `[1]`, `{"a":`} {
+		if _, err := nodes.DecodePayloadJSON(raw); err == nil {
+			t.Errorf("DecodePayloadJSON(%q) = nil error, want rejection", raw)
+		}
+	}
+	if p, err := nodes.DecodePayloadJSON(" {\"a\":1}\n"); err != nil || len(p) != 1 {
+		t.Fatalf("surrounding whitespace must be accepted: p=%v err=%v", p, err)
+	}
+}

@@ -11,6 +11,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
 	"time"
@@ -55,6 +56,22 @@ func ValidateIDComponent(name, value string) error {
 		return fmt.Errorf("%s exceeds maximum length 512", name)
 	}
 	return nil
+}
+
+// DecodePayloadJSON parses a stored payload_json column. Numbers stay as
+// json.Number so integers above 2^53 survive a read and re-hash unchanged, and
+// anything after the first JSON value is rejected as corruption.
+func DecodePayloadJSON(raw string) (map[string]any, error) {
+	dec := json.NewDecoder(strings.NewReader(raw))
+	dec.UseNumber()
+	var payload map[string]any
+	if err := dec.Decode(&payload); err != nil {
+		return nil, err
+	}
+	if _, err := dec.Token(); err != io.EOF {
+		return nil, fmt.Errorf("payload_json has trailing data after the JSON value")
+	}
+	return payload, nil
 }
 
 // PayloadHash returns SHA-256 hex of the RFC 8785 canonical form of payload.
