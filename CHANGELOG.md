@@ -51,8 +51,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   upgrade calls the model again. Gated `NON_IDEMPOTENT_WRITE` tools still
   block on the existing `TOOL_CALL` claim and do not re-run.
 - `dbos` is no longer a core Python dependency. Install `trajectory-ir[dbos]`
-  for the DBOS backend (`open_trajectory`, `resume`, default `make_run_step`
-  hooks). The client module imports DBOS only when those are called (#451).
+  for the DBOS backend (default `make_run_step` hooks). The client no longer
+  imports DBOS at load time. `open_trajectory` / `resume` start DBOS only when
+  the extra is installed; `durable=True` requires it and `durable=False` skips
+  it (#451).
 
 ### Fixed
 

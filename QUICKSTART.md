@@ -78,7 +78,15 @@ print(result.result)  # hi
 commit_step(traj, step_n=1, seq=4)
 ```
 
+This flow only needs a base install. `open_trajectory` and `resume` also start
+DBOS when the `dbos` extra is installed (`.[dev]` includes it), for host code
+that uses DBOS steps. Pass `durable=True` to fail if `trajectory-ir[dbos]` is
+missing, or `durable=False` to skip DBOS.
+
 ### Durable step runner (DBOS)
+
+Needs the `dbos` extra (`pip install "trajectory-ir[dbos]"`, or `.[dev]` in
+this repo). `make_run_step` with injected hooks for another backend does not.
 
 For full seal/resume with DBOS steps, use `make_run_step` as in
 `examples/kill_mid_deploy/agent.py` (used by R01/R02 and e2e tests).

@@ -104,7 +104,7 @@ pip install -e ".[dev]"
 pytest conformance/ -q
 ```
 
-`.[dev]` includes DBOS. Outside the repo, `pip install "trajectory-ir[dbos]"` adds the DBOS backend that `open_trajectory`, `resume`, and the default `make_run_step` hooks use. A base install covers the node log, projection, and `.tir` export.
+`.[dev]` includes DBOS. Outside the repo, a base install covers the client, node log, projection, and `.tir` export. `pip install "trajectory-ir[dbos]"` adds the DBOS backend that the default `make_run_step` hooks use.
 
 More: **[QUICKSTART.md](QUICKSTART.md)** · kill-mid-deploy demo: [`examples/kill_mid_deploy/`](examples/kill_mid_deploy/)
 
