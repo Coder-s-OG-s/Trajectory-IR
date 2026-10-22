@@ -70,19 +70,25 @@ func TestLoadKeepsSeqAboveSafeRange(t *testing.T) {
 func TestExportFloat1e18RoundTrip(t *testing.T) {
 	src := openLog(t, "float18.sqlite")
 	step := 1
-	_, err := src.Append("TOOL_RESULT", &step, map[string]any{"n": float64(1e18)}, "t1", "demo", 2)
-	if err == nil || !strings.Contains(err.Error(), "safe integer") {
-		t.Fatalf("append err=%v", err)
-	}
-
-	if _, err := src.Append("TOOL_RESULT", &step, map[string]any{"n": 1e21}, "t1", "demo", 2); err != nil {
+	if _, err := src.Append("TOOL_RESULT", &step, map[string]any{"n": float64(1e18)}, "t1", "demo", 2); err != nil {
 		t.Fatal(err)
 	}
-	out := filepath.Join(t.TempDir(), "float21.tir")
+	out := filepath.Join(t.TempDir(), "float18.tir")
 	if _, err := tir.Export(src, "t1", out, tir.ExportOptions{Mode: tir.ModeThin}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := tir.Load(out); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := src.Append("TOOL_RESULT", &step, map[string]any{"n": 1e21}, "t1", "demo", 3); err != nil {
+		t.Fatal(err)
+	}
+	out21 := filepath.Join(t.TempDir(), "float21.tir")
+	if _, err := tir.Export(src, "t1", out21, tir.ExportOptions{Mode: tir.ModeThin}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tir.Load(out21); err != nil {
 		t.Fatal(err)
 	}
 }

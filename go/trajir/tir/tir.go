@@ -300,7 +300,7 @@ func redactNodeRecord(rec map[string]any) (map[string]any, error) {
 		return nil, err
 	}
 	var ts float64
-	if v, ok := rec["ts"].(float64); ok {
+	if v, ok := nodes.AsFloat64(rec["ts"]); ok {
 		ts = v
 	}
 	return map[string]any{

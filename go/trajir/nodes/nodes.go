@@ -13,6 +13,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -84,17 +86,13 @@ func PayloadHash(payload map[string]any) (string, error) {
 	if _, ok := payload["ts"]; ok {
 		return "", fmt.Errorf("wall-clock ts must never be hashed (spec 6.3)")
 	}
+	if err := rejectUnsafeValues(payload); err != nil {
+		return "", err
+	}
 	// encoding/json emits a legal JSON encoding; jcs.Transform applies RFC 8785.
 	raw, err := json.Marshal(payload)
 	if err != nil {
 		return "", fmt.Errorf("json marshal: %w", err)
-	}
-	decoded, err := decodeJSON(raw)
-	if err != nil {
-		return "", err
-	}
-	if err := rejectUnsafeJSON(decoded); err != nil {
-		return "", err
 	}
 	canon, err := jcs.Transform(raw)
 	if err != nil {
@@ -112,11 +110,42 @@ func DecodeObject(raw []byte) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
+	if v == nil {
+		return nil, nil
+	}
 	obj, ok := v.(map[string]any)
 	if !ok {
 		return nil, fmt.Errorf("want JSON object, got %T", v)
 	}
 	return obj, nil
+}
+
+// AsFloat64 reads a JSON number as float64 (float, int, or json.Number).
+func AsFloat64(v any) (float64, bool) {
+	switch n := v.(type) {
+	case float64:
+		return n, true
+	case float32:
+		return float64(n), true
+	case int:
+		return float64(n), true
+	case int64:
+		return float64(n), true
+	case json.Number:
+		f, err := n.Float64()
+		return f, err == nil
+	default:
+		return 0, false
+	}
+}
+
+// AsInt reads a JSON number as int.
+func AsInt(v any) (int, bool) {
+	f, ok := AsFloat64(v)
+	if !ok {
+		return 0, false
+	}
+	return int(f), true
 }
 
 func decodeJSON(raw []byte) (any, error) {
@@ -136,22 +165,63 @@ func decodeJSON(raw []byte) (any, error) {
 	return v, nil
 }
 
-func rejectUnsafeJSON(v any) error {
-	switch n := v.(type) {
-	case nil:
+func rejectUnsafeValues(v any) error {
+	if v == nil {
 		return nil
+	}
+	switch n := v.(type) {
 	case json.Number:
 		return checkJSONNumber(n)
+	case json.RawMessage:
+		decoded, err := decodeJSON(n)
+		if err != nil {
+			return err
+		}
+		return rejectUnsafeValues(decoded)
 	case map[string]any:
 		for _, child := range n {
-			if err := rejectUnsafeJSON(child); err != nil {
+			if err := rejectUnsafeValues(child); err != nil {
 				return err
 			}
 		}
 		return nil
 	case []any:
 		for _, child := range n {
-			if err := rejectUnsafeJSON(child); err != nil {
+			if err := rejectUnsafeValues(child); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	rv := reflect.ValueOf(v)
+	switch rv.Kind() {
+	case reflect.Ptr, reflect.Interface:
+		if rv.IsNil() {
+			return nil
+		}
+		return rejectUnsafeValues(rv.Elem().Interface())
+	case reflect.Float32, reflect.Float64:
+		return nil
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return checkInt64(rv.Int())
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		u := rv.Uint()
+		if u > uint64(maxSafeInteger) {
+			return fmt.Errorf("%d exceeds safe integer domain for JSON floats", u)
+		}
+		return nil
+	case reflect.Slice, reflect.Array:
+		for i := 0; i < rv.Len(); i++ {
+			if err := rejectUnsafeValues(rv.Index(i).Interface()); err != nil {
+				return err
+			}
+		}
+		return nil
+	case reflect.Map:
+		iter := rv.MapRange()
+		for iter.Next() {
+			if err := rejectUnsafeValues(iter.Value().Interface()); err != nil {
 				return err
 			}
 		}
@@ -161,12 +231,30 @@ func rejectUnsafeJSON(v any) error {
 	}
 }
 
-func checkJSONNumber(n json.Number) error {
-	s := string(n)
-	if jsonIntegerLiteral(s) && jsonIntegerOutOfRange(s) {
-		return fmt.Errorf("%s exceeds safe integer domain for JSON floats", s)
+func checkInt64(n int64) error {
+	if n > maxSafeInteger || n < -maxSafeInteger {
+		return fmt.Errorf("%d exceeds safe integer domain for JSON floats", n)
 	}
 	return nil
+}
+
+func checkJSONNumber(n json.Number) error {
+	s := string(n)
+	if !jsonIntegerLiteral(s) || !jsonIntegerOutOfRange(s) {
+		return nil
+	}
+	if jsonIntegerExactFloat64(s) {
+		return nil
+	}
+	return fmt.Errorf("%s exceeds safe integer domain for JSON floats", s)
+}
+
+func jsonIntegerExactFloat64(s string) bool {
+	f, err := strconv.ParseFloat(s, 64)
+	if err != nil || math.IsInf(f, 0) || math.IsNaN(f) {
+		return false
+	}
+	return strconv.FormatFloat(f, 'f', 0, 64) == s
 }
 
 func jsonIntegerLiteral(s string) bool {

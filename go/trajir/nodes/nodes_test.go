@@ -184,6 +184,13 @@ func TestDecodeObjectPreservesIntegerLiteral(t *testing.T) {
 	if _, err := nodes.DecodeObject([]byte(`{`)); err == nil {
 		t.Fatal("expected syntax error")
 	}
+	nullObj, err := nodes.DecodeObject([]byte("null"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if nullObj != nil {
+		t.Fatalf("null payload=%#v", nullObj)
+	}
 }
 
 func TestPayloadHashSafeIntegerMatchesPython(t *testing.T) {
@@ -224,6 +231,16 @@ func TestPayloadHashLargeFloatFollowsJCS(t *testing.T) {
 	if _, err := nodes.PayloadHash(map[string]any{"n": 1.5}); err != nil {
 		t.Fatal(err)
 	}
+	got, err := nodes.PayloadHash(map[string]any{"n": float64(1e18)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "d9fcf531f15705cb9f48516582481ee4c597252951ca1bd994986e731136b784" {
+		t.Fatalf("float64(1e18) hash %s", got)
+	}
+	if _, err := nodes.PayloadHash(map[string]any{"n": float64(int64(1 << 53))}); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestPayloadHashRejectsIntegersOutsideSafeRange(t *testing.T) {
@@ -242,8 +259,6 @@ func TestPayloadHashRejectsIntegersOutsideSafeRange(t *testing.T) {
 		{"int64 slice", []int64{1 << 53}},
 		{"pointer", ptrInt64(1 << 53)},
 		{"raw message", json.RawMessage(`{"n":9007199254740993}`)},
-		{"float64 at 2^53", float64(int64(1 << 53))},
-		{"float64 1e18", float64(1e18)},
 	}
 	for _, c := range cases {
 		c := c
