@@ -23,6 +23,7 @@ from trajectory_ir.effects import EffectClass
 from trajectory_ir.resume.gate import (
     BlockedNeedsGate,
     _result_digest,
+    _stored_integer_failure,
     make_gated_tool_call,
     make_plain_tool_call,
 )
@@ -223,6 +224,66 @@ def test_result_digest_survives_repr_errors():
     assert len(digest) == 64
 
 
+class _ScanLog:
+    def __init__(self, present: bool, rows: list):
+        self.present = present
+        self.rows = rows
+        self.scans = 0
+        self.seen = None
+
+    def has(self, trajectory_id, tenant_id, step_n, kind, seq=None):
+        self.seen = (trajectory_id, tenant_id, step_n, kind, seq)
+        return self.present
+
+    def list_nodes(self, trajectory_id, tenant_id):
+        self.scans += 1
+        return self.rows
+
+
+def test_stored_integer_failure_skips_the_log_scan_when_the_slot_is_empty():
+    log = _ScanLog(False, [])
+    assert _stored_integer_failure(log, "t", TENANT_ID, 1, 3) is None
+    assert log.scans == 0
+    assert log.seen == ("t", TENANT_ID, 1, "TOOL_RESULT", 3)
+
+
+def test_stored_integer_failure_reads_the_row_when_the_slot_exists():
+    payload = {
+        "error": "integer_domain",
+        "message": "too big",
+        "result_digest": "ab" * 32,
+    }
+    log = _ScanLog(
+        True,
+        [
+            {
+                "step_n": 1,
+                "seq": 3,
+                "kind": "TOOL_RESULT",
+                "payload": payload,
+            }
+        ],
+    )
+    assert _stored_integer_failure(log, "t", TENANT_ID, 1, 3) == payload
+    assert log.scans == 1
+
+
+def test_stored_integer_failure_ignores_a_normal_result():
+    log = _ScanLog(
+        True,
+        [
+            {
+                "step_n": 1,
+                "seq": 3,
+                "kind": "TOOL_RESULT",
+                "payload": {"result": 1},
+            }
+        ],
+    )
+    assert _stored_integer_failure(log, "t", TENANT_ID, 1, 3) is None
+    assert log.scans == 1
+
+
 def test_plain_result_integer_records_one_failure_node(tmp_path):
     calls = {"n": 0}
 
@@ -388,7 +449,7 @@ def _dbos_mint():
     return {"id": BIG}
 
 
-def test_dbos_retries_inference_when_the_plan_integer_is_unsafe(tmp_path, monkeypatch):
+def test_dbos_unsafe_plan_calls_the_model_again_only_on_a_new_workflow_id(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     _DBOS_PLAN_CALLS["model"] = 0
     traj = "dbos-plan"
@@ -396,6 +457,11 @@ def test_dbos_retries_inference_when_the_plan_integer_is_unsafe(tmp_path, monkey
     tools = {"echo": Tool(name="echo", fn=_dbos_echo, effect_class=EffectClass.PURE)}
     run_step = make_run_step(node_log, TENANT_ID, traj, tools)
     init_backend(db_path=str(tmp_path / "nodes.sqlite"))
+
+    with SetWorkflowID(traj), pytest.raises(UnsafePlan, match=str(BIG)):
+        run_step(step_n=1, model_call=_dbos_plan_model, context={})
+    assert _DBOS_PLAN_CALLS["model"] == 1
+    assert _kinds(node_log, traj) == ["PROJECT_CONTEXT"]
 
     with SetWorkflowID(traj), pytest.raises(UnsafePlan, match=str(BIG)):
         run_step(step_n=1, model_call=_dbos_plan_model, context={})

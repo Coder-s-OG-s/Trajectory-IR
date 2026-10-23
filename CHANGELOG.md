@@ -53,13 +53,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- A Python plan with an integer outside the RFC 8785 safe range is not left
-  in the durable memo, so a step with no `DECISION` can infer again. A tool
-  result with one of those integers is stored as a hashable `TOOL_RESULT`
-  with a digest, and resume raises that storage error instead of
-  `BLOCKED_NEEDS_GATE`. Plain tools check that stored failure before they
-  run again. A non-object plan is rejected inside the infer wrapper, before
-  the durable memo records a success (#463).
+- A Python plan with an integer outside the RFC 8785 safe range is rejected
+  before the durable memo stores a success. On the local memo, the same
+  workflow id calls the model again when no `DECISION` exists. DBOS records
+  the raised error on that workflow id and does not call the model again. A
+  new DBOS workflow id does. A tool result with one of those integers is
+  stored as `TOOL_RESULT` `{"error": "integer_domain", "message": "...",
+  "result_digest": "<sha256>"}` instead of `{"result": ...}`. Resume raises
+  that storage error instead of `BLOCKED_NEEDS_GATE`. Plain tools check that
+  stored failure before they run again. A non-object plan is rejected inside
+  the infer wrapper, before the durable memo records a success (#463).
 - Postgres open paths bound ping and schema setup (default 10s, DSN
   `connect_timeout`, or `TRAJIR_PG_CONNECT_TIMEOUT`). S3 clients set an
   explicit 10s connect timeout and 60s read deadline (#406).

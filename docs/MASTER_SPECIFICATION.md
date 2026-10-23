@@ -187,6 +187,18 @@ Every node carries the common fields: `kind`, `step_n`, `seq`, `ts`, `payload_ha
 | `COMMIT_STEP` | Marks a step as closed and durable |
 | `ABORT` / `REDACTION` | Failure marker / privacy redaction marker |
 
+**`TOOL_RESULT` payload.** A finished call records `{"result": <json value>}`. Python hashing follows RFC 8785, which rejects integers outside `-(2^53-1)` .. `2^53-1`. When a tool return contains one of those integers, the Python client does not put that integer in the node. It records this object instead:
+
+```json
+{
+  "error": "integer_domain",
+  "message": "<why the value was rejected>",
+  "result_digest": "<64 lowercase hex chars>"
+}
+```
+
+`result_digest` is SHA-256 over the compact sorted JSON of the rejected value, or over `repr(value)` when that JSON dump fails. Go and any other reader must treat this object as a storage failure, not as `result`, and not as `ABORT` / `BLOCKED_NEEDS_GATE`. Resume raises that error and does not run the tool body again.
+
 ### 6.3 Node identity
 
 Node identity must be computable identically regardless of which language or implementation produced it. This is required for cross agent, cross language, and cross host consistency, and it is the most common place where independent implementations silently diverge, treat it as strict, not advisory.
@@ -294,6 +306,8 @@ This table describes what the trajectory log should show at each state; the "act
 | All tool results present, no `COMMIT_STEP` | Finish any remaining state/artifact writes, then commit | Trajectory IR |
 | Step already committed | Move on; never reopen a committed step | Trajectory IR |
 | Crash mid tool on a `NON_IDEMPOTENT_WRITE` | Block and gate, see §8.3 | Trajectory IR (policy), backend (crash detection) |
+
+A plan integer outside the RFC 8785 range (§6.2) seals no `DECISION`, so the "no `DECISION`" row applies. The local memo does not keep that plan, and the same workflow id calls the model again. DBOS records the raised error as the step result. The same DBOS workflow id replays that error and does not call the model. A new DBOS workflow id runs inference again. That is the backend rule in §8.0: a recorded step is not executed a second time.
 
 ### 8.3 Block and gate
 
@@ -756,6 +770,7 @@ Trajectory IR deliberately does not attempt to:
 | 1.6 | 2026-09-15 | Moves the normative master specification from the repository root to `docs/MASTER_SPECIFICATION.md`. The root `README.md` becomes a landing page for users, students, and contributors while this file remains authoritative. |
 | 1.7 | 2026-09-30 | Honest resume vs world validity (§8.4). Block-and-gate restated as at-most-one automatic attempt, not exactly-once (Two Generals). Idempotency keys recorded on `TOOL_CALL` and required to be forwarded by the host (§7.3). Open-world primitives fail closed by name; no command AST (§7.2). R06 described as an effect-class gate, not a process sandbox. "IR" defined as a runtime trajectory IR, not a compiler (§1, §16). |
 | 1.8 | 2026-09-30 | Hashed §7.3 keys (`sha256` domain-separated, tenant included) exposed via CallMeta / contextvar / `Idempotency-Key` helper, still never injected into tool args. Optional `world_snapshot` on `DECISION` with fail-loud `CheckWorld` / `WORLD_DRIFT` (§8.4). `ExecTool` / `RunStep` refuse open-world primitives tagged safer than `NON_IDEMPOTENT_WRITE` unless `AllowOpenWorldOverride` (§7.2). |
+| 1.9 | 2026-10-23 | `TOOL_RESULT` may be `{"error": "integer_domain", "message", "result_digest"}` when the tool return has an integer outside the RFC 8785 range (§6.2). That row is a storage failure, not `{"result": ...}` and not `ABORT`. A plan with such an integer seals no `DECISION`. The local memo may infer again on the same workflow id. DBOS replays the recorded error until the host uses a new workflow id (§8.2). |
 
 ---
 

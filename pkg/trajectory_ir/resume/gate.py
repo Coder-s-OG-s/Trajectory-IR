@@ -53,6 +53,8 @@ def _integer_failure_payload(message: str, result) -> dict:
 
 
 def _stored_integer_failure(node_log, trajectory_id, tenant_id, step_n, seq):
+    if not node_log.has(trajectory_id, tenant_id, step_n, "TOOL_RESULT", seq=seq):
+        return None
     for row in node_log.list_nodes(trajectory_id, tenant_id=tenant_id):
         if row["step_n"] != step_n or row["seq"] != seq or row["kind"] != "TOOL_RESULT":
             continue
