@@ -14,12 +14,14 @@ class EffectClass(Enum):
 def requires_block_and_gate(effect: EffectClass) -> bool:
     """Whether resume must gate this effect class (README §8 / R02).
 
-    Only ``NON_IDEMPOTENT_WRITE`` is block-and-gated. ``PURE`` (R03) and other
-    non-gated classes may re-execute on resume without raising
+    ``NON_IDEMPOTENT_WRITE`` and ``AGENT_SPAWN`` are block-and-gated: a peer
+    agent invocation is not safe to repeat blindly. ``SENSITIVE`` is a flag
+    layered on another class, so it adds no gate of its own. ``PURE`` (R03) and
+    the other classes may re-execute on resume without raising
     ``BlockedNeedsGate``; durable memoization may still skip re-running the body
     when a prior step result was already recorded.
     """
-    return effect is EffectClass.NON_IDEMPOTENT_WRITE
+    return effect in (EffectClass.NON_IDEMPOTENT_WRITE, EffectClass.AGENT_SPAWN)
 
 
 def is_forbidden_in_sandbox(effect: EffectClass) -> bool:

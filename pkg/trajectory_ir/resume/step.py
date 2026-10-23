@@ -144,7 +144,8 @@ def make_run_step(
     """Build a durable run_step workflow for one agent step.
 
     Resume matrix (README §8, R02 / R03):
-    - ``NON_IDEMPOTENT_WRITE``: block-and-gate via ``make_gated_tool_call`` (R02).
+    - ``NON_IDEMPOTENT_WRITE`` and ``AGENT_SPAWN``: block-and-gate via
+      ``make_gated_tool_call`` (R02).
     - ``PURE`` and other non-gated classes: no gate; body may re-run on resume
       when durable memo is absent (R03 for PURE). Prior TOOL_CALL rows alone
       must not raise ``BlockedNeedsGate`` for these classes.

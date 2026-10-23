@@ -11,11 +11,13 @@ func TestRequiresBlockAndGate(t *testing.T) {
 	if !effects.RequiresBlockAndGate(effects.NON_IDEMPOTENT_WRITE) {
 		t.Fatal("NON_IDEMPOTENT_WRITE must be gated (R02)")
 	}
+	if !effects.RequiresBlockAndGate(effects.AGENT_SPAWN) {
+		t.Fatal("AGENT_SPAWN must be gated (spec 7.1)")
+	}
 	for _, e := range []effects.EffectClass{
 		effects.PURE,
 		effects.READ_ONLY,
 		effects.IDEMPOTENT_WRITE,
-		effects.AGENT_SPAWN,
 		effects.SENSITIVE,
 	} {
 		if effects.RequiresBlockAndGate(e) {

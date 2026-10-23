@@ -61,12 +61,12 @@ def test_non_dict_annotations_fail_closed():
     assert classify_from_mcp(None) == EffectClass.NON_IDEMPOTENT_WRITE  # type: ignore[arg-type]
 
 
-def test_requires_block_and_gate_only_non_idempotent():
+def test_requires_block_and_gate_non_idempotent_and_agent_spawn():
     assert requires_block_and_gate(EffectClass.NON_IDEMPOTENT_WRITE) is True
     assert requires_block_and_gate(EffectClass.PURE) is False
     assert requires_block_and_gate(EffectClass.READ_ONLY) is False
     assert requires_block_and_gate(EffectClass.IDEMPOTENT_WRITE) is False
-    assert requires_block_and_gate(EffectClass.AGENT_SPAWN) is False
+    assert requires_block_and_gate(EffectClass.AGENT_SPAWN) is True
     assert requires_block_and_gate(EffectClass.SENSITIVE) is False
 
 
@@ -114,3 +114,25 @@ def test_is_forbidden_in_sandbox():
     assert is_forbidden_in_sandbox(EffectClass.PURE) is False
     assert is_forbidden_in_sandbox(EffectClass.READ_ONLY) is False
     assert is_forbidden_in_sandbox(EffectClass.IDEMPOTENT_WRITE) is False
+
+
+def test_agent_spawn_tool_is_gated_on_reentry(tmp_path):
+    from trajectory_ir.client.python.trajectory_client import exec_tool, open_trajectory
+    from trajectory_ir.resume.gate import BlockedNeedsGate
+    from trajectory_ir.runtime.tool import Tool
+
+    spawned = []
+
+    def spawn_peer(task):
+        spawned.append(task)
+        return {"agent": "peer-1"}
+
+    tool = Tool(name="spawn_peer", fn=spawn_peer, effect_class=EffectClass.AGENT_SPAWN)
+    trajectory = open_trajectory("demo", "spawn-1", db_path=str(tmp_path / "t.sqlite"))
+    trajectory._log.claim_tool_call(
+        1, {"tool": "spawn_peer", "args": {"task": "x"}}, "spawn-1", "demo", 2
+    )
+
+    with pytest.raises(BlockedNeedsGate):
+        exec_tool(trajectory, step_n=1, call={"args": {"task": "x"}}, tool=tool, seq=2)
+    assert spawned == []

@@ -101,6 +101,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `WorkDir` and may live outside it. The console's `/v1/local/reveal` and
   `/v1/local/open-shell` require `Content-Type: application/json` on every request,
   empty body included, and answer 415 otherwise.
+- `AGENT_SPAWN` is now block-and-gated on resume like `NON_IDEMPOTENT_WRITE`
+  (`requires_block_and_gate` / `RequiresBlockAndGate`), matching spec §7.1.
+  `SENSITIVE` is documented as a layered flag with no resume gate of its own;
+  redaction stays key- and value-based (#321).
 
 ## [0.2.2] - 2026-09-07
 

@@ -225,8 +225,8 @@ Artifact bytes are identified by `content_hash = sha256(bytes)` and stored by th
 | `READ_ONLY` | Reads an external system | May re fetch or use cache per policy |
 | `IDEMPOTENT_WRITE` | Write that is safe to retry with the same key | Replay with the same key |
 | `NON_IDEMPOTENT_WRITE` | Deploy, payment, email, delete, or anything ambiguous | Never retried blindly, see block and gate, §8.3 |
-| `AGENT_SPAWN` | Invokes a peer agent | Policy gated |
-| `SENSITIVE` | Touches secrets or PII (a flag layered on another class) | Extra handling / redaction |
+| `AGENT_SPAWN` | Invokes a peer agent | Block and gate, same as `NON_IDEMPOTENT_WRITE` (§8.3) |
+| `SENSITIVE` | Touches secrets or PII (a flag layered on another class) | No resume gate of its own, follows the class it is layered on. Rejected in sandbox mode (R06). Redaction (R08) scrubs by key name and secret shaped value, not by this flag |
 
 **Re fetch divergence rule (`READ_ONLY`):** a re fetch performed on resume may return a value different from the original run. This is written as a **new** `TOOL_RESULT` node; the original result, if one exists, is never overwritten. Steps that run after a resume see the new observation. This is intentional, honest divergence, it is recorded, not hidden, and it is not treated as an error.
 
@@ -305,7 +305,7 @@ This table describes what the trajectory log should show at each state; the "act
 | `DECISION` sealed with `world_snapshot`, host observation diverges | Fail `WORLD_DRIFT`. Do not re-infer. Host aborts or starts a new step. | Trajectory IR (`CheckWorld`, opt-in) |
 | All tool results present, no `COMMIT_STEP` | Finish any remaining state/artifact writes, then commit | Trajectory IR |
 | Step already committed | Move on; never reopen a committed step | Trajectory IR |
-| Crash mid tool on a `NON_IDEMPOTENT_WRITE` | Block and gate, see §8.3 | Trajectory IR (policy), backend (crash detection) |
+| Crash mid tool on a `NON_IDEMPOTENT_WRITE` or `AGENT_SPAWN` | Block and gate, see §8.3 | Trajectory IR (policy), backend (crash detection) |
 
 A plan integer outside the RFC 8785 range (§6.2) seals no `DECISION`, so the "no `DECISION`" row applies. The local memo does not keep that plan, and the same workflow id calls the model again. DBOS records the raised error as the step result. The same DBOS workflow id replays that error and does not call the model. A new DBOS workflow id runs inference again. That is the backend rule in §8.0: a recorded step is not executed a second time.
 
@@ -771,6 +771,7 @@ Trajectory IR deliberately does not attempt to:
 | 1.7 | 2026-09-30 | Honest resume vs world validity (§8.4). Block-and-gate restated as at-most-one automatic attempt, not exactly-once (Two Generals). Idempotency keys recorded on `TOOL_CALL` and required to be forwarded by the host (§7.3). Open-world primitives fail closed by name; no command AST (§7.2). R06 described as an effect-class gate, not a process sandbox. "IR" defined as a runtime trajectory IR, not a compiler (§1, §16). |
 | 1.8 | 2026-09-30 | Hashed §7.3 keys (`sha256` domain-separated, tenant included) exposed via CallMeta / contextvar / `Idempotency-Key` helper, still never injected into tool args. Optional `world_snapshot` on `DECISION` with fail-loud `CheckWorld` / `WORLD_DRIFT` (§8.4). `ExecTool` / `RunStep` refuse open-world primitives tagged safer than `NON_IDEMPOTENT_WRITE` unless `AllowOpenWorldOverride` (§7.2). |
 | 1.9 | 2026-10-23 | `TOOL_RESULT` may be `{"error": "integer_domain", "message", "result_digest"}` when the tool return has an integer outside the RFC 8785 range (§6.2). That row is a storage failure, not `{"result": ...}` and not `ABORT`. A plan with such an integer seals no `DECISION`. The local memo may infer again on the same workflow id. DBOS replays the recorded error until the host uses a new workflow id (§8.2). |
+| 1.10 | 2026-10-24 | `AGENT_SPAWN` is block-and-gated on resume like `NON_IDEMPOTENT_WRITE` (§7.1, §8.2). `SENSITIVE` is documented as a layered flag with no resume gate of its own. |
 
 ---
 

@@ -29,11 +29,13 @@ def _r03_model_call(context: dict) -> dict:
 
 
 def test_r03_requires_block_and_gate_matrix() -> None:
-    """Only NON_IDEMPOTENT_WRITE is gated; PURE is not (R02 vs R03)."""
+    """NON_IDEMPOTENT_WRITE and AGENT_SPAWN are gated; PURE is not (R02 vs R03)."""
     assert requires_block_and_gate(EffectClass.NON_IDEMPOTENT_WRITE) is True
     assert requires_block_and_gate(EffectClass.PURE) is False
     assert requires_block_and_gate(EffectClass.READ_ONLY) is False
     assert requires_block_and_gate(EffectClass.IDEMPOTENT_WRITE) is False
+    assert requires_block_and_gate(EffectClass.AGENT_SPAWN) is True
+    assert requires_block_and_gate(EffectClass.SENSITIVE) is False
 
 
 def test_r03_pure_tool_may_recompute_after_prior_tool_call(tmp_path) -> None:

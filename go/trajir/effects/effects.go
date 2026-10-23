@@ -20,10 +20,11 @@ const (
 )
 
 // RequiresBlockAndGate reports whether resume must gate this effect (R02).
-// Only NON_IDEMPOTENT_WRITE is gated. PURE (R03) and other classes may
-// re-execute on resume without BlockedNeedsGate.
+// NON_IDEMPOTENT_WRITE and AGENT_SPAWN are gated. SENSITIVE is a flag layered
+// on another class and adds no gate of its own. PURE (R03) and other classes
+// may re-execute on resume without BlockedNeedsGate.
 func RequiresBlockAndGate(e EffectClass) bool {
-	return e == NON_IDEMPOTENT_WRITE
+	return e == NON_IDEMPOTENT_WRITE || e == AGENT_SPAWN
 }
 
 func IsForbiddenInSandbox(e EffectClass) bool {
