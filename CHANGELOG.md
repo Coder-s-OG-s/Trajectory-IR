@@ -73,6 +73,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Gated tool replay: re-entering a `NON_IDEMPOTENT_WRITE` call whose
+  `TOOL_RESULT` is already recorded now returns that result. It used to append
+  `ABORT` next to the completed `TOOL_RESULT` and raise `BlockedNeedsGate`.
+  A claimed `TOOL_CALL` with no `TOOL_RESULT` still blocks. Python and Go.
+
 - Go `PayloadHash` refuses Go integer values and JSON integer literals
   outside `-(2^53-1) .. 2^53-1`, matching Python rfc8785. Floats still
   hash. SQLite, Postgres, and `.tir` load keep number text with

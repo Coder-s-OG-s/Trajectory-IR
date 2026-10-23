@@ -2,6 +2,7 @@ package resume_test
 
 import (
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -20,7 +21,7 @@ func openLog(t *testing.T) *nodelog.NodeLog {
 	return nl
 }
 
-func TestGatedToolRunsOnceThenBlocks(t *testing.T) {
+func TestGatedToolRunsOnceThenReturnsRecordedResult(t *testing.T) {
 	nl := openLog(t)
 	sideEffects := 0
 	tool := func(args map[string]any) (any, error) {
@@ -42,23 +43,53 @@ func TestGatedToolRunsOnceThenBlocks(t *testing.T) {
 		t.Fatalf("unexpected result: %#v", out)
 	}
 
-	_, err = gated(map[string]any{"n": float64(1)})
+	// Replay after the TOOL_RESULT is durable (crash before the backend memo):
+	// same result back, no second side effect, no ABORT.
+	again, err := gated(map[string]any{"n": float64(1)})
+	if err != nil {
+		t.Fatalf("replay: %v", err)
+	}
+	if am := again.(map[string]any); am["ok"] != true || fmt.Sprint(am["n"]) != "1" {
+		t.Fatalf("replay result: %#v", again)
+	}
+	if sideEffects != 1 {
+		t.Fatalf("sideEffects=%d after replay, want 1", sideEffects)
+	}
+	ok, err := nl.Has("t1", "demo", 1, "ABORT", intPtr(3))
+	if err != nil || ok {
+		t.Fatalf("ABORT present=%v err=%v, want none", ok, err)
+	}
+}
+
+func TestGatedToolBlocksWhenCallClaimedWithoutResult(t *testing.T) {
+	nl := openLog(t)
+	step := 1
+	if _, err := nl.Append(
+		"TOOL_CALL", &step,
+		map[string]any{"tool": "deploy_server", "args": map[string]any{}},
+		"t1", "demo", 2,
+	); err != nil {
+		t.Fatal(err)
+	}
+	sideEffects := 0
+	gated := resume.MakeGatedToolCall(nl, "t1", "demo", 1, 2, "deploy_server",
+		func(map[string]any) (any, error) {
+			sideEffects++
+			return nil, nil
+		})
+
+	_, err := gated(nil)
 	var blocked *resume.BlockedNeedsGate
 	if !errors.As(err, &blocked) {
-		t.Fatalf("second call err=%v, want BlockedNeedsGate", err)
+		t.Fatalf("err=%v, want BlockedNeedsGate", err)
 	}
 	if blocked.StepN != 1 || blocked.ToolName != "deploy_server" {
 		t.Fatalf("blocked fields: %+v", blocked)
 	}
-	if sideEffects != 1 {
-		t.Fatalf("sideEffects=%d after block, want 1", sideEffects)
+	if sideEffects != 0 {
+		t.Fatalf("sideEffects=%d after block, want 0", sideEffects)
 	}
-
-	ok, err := nl.Has("t1", "demo", 1, "TOOL_CALL", intPtr(2))
-	if err != nil || !ok {
-		t.Fatalf("TOOL_CALL present=%v err=%v", ok, err)
-	}
-	ok, err = nl.Has("t1", "demo", 1, "ABORT", intPtr(3))
+	ok, err := nl.Has("t1", "demo", 1, "ABORT", intPtr(3))
 	if err != nil || !ok {
 		t.Fatalf("ABORT present=%v err=%v", ok, err)
 	}
@@ -88,11 +119,13 @@ func TestGateKeysOnSeqNotSiblingTool(t *testing.T) {
 		t.Fatalf("calls A=%d B=%d", callsA, callsB)
 	}
 
-	// Re-entry of A still blocks.
-	_, err := a(nil)
-	var blocked *resume.BlockedNeedsGate
-	if !errors.As(err, &blocked) {
-		t.Fatalf("want block on A re-entry, got %v", err)
+	// Re-entry of A returns its own recorded result, not B's, and does not re-run.
+	got, err := a(nil)
+	if err != nil {
+		t.Fatalf("A re-entry: %v", err)
+	}
+	if got != "a" {
+		t.Fatalf("A re-entry result=%v, want a", got)
 	}
 	if callsA != 1 {
 		t.Fatalf("A re-ran: callsA=%d", callsA)

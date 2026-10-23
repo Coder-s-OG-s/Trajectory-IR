@@ -29,7 +29,8 @@ func (e *BlockedNeedsGate) Error() string {
 // ToolFunc is a tool body that receives a free-form args map.
 type ToolFunc func(args map[string]any) (any, error)
 
-// MakeGatedToolCall wraps toolFn so re-entry after TOOL_CALL was claimed blocks.
+// MakeGatedToolCall wraps toolFn so re-entry after TOOL_CALL was claimed blocks,
+// unless a TOOL_RESULT was already recorded, in which case that result is returned.
 //
 // Seq layout matches Python: TOOL_CALL at seq, TOOL_RESULT or ABORT at seq+1.
 // Callers should space tools as seq = 2 + 2*i for tool index i inside a step.
@@ -64,6 +65,15 @@ func MakeGatedToolCall(
 			return nil, err
 		}
 		if !claimed {
+			// The effect already ran and its outcome is durable. Return it
+			// instead of blocking; nothing re-executes.
+			stored, found, err := storedToolResult(log, trajectoryID, tenantID, stepN, seq+1)
+			if err != nil {
+				return nil, err
+			}
+			if found {
+				return stored, nil
+			}
 			if _, err := log.Append(
 				"ABORT",
 				&step,
@@ -94,6 +104,32 @@ func MakeGatedToolCall(
 		}
 		return result, nil
 	}
+}
+
+// storedToolResult returns the result recorded in the TOOL_RESULT node at
+// (stepN, seq), if there is one.
+func storedToolResult(
+	log *nodelog.NodeLog,
+	trajectoryID, tenantID string,
+	stepN, seq int,
+) (any, bool, error) {
+	rows, err := log.ListNodes(trajectoryID, tenantID)
+	if err != nil {
+		return nil, false, err
+	}
+	for _, row := range rows {
+		if row["kind"] != "TOOL_RESULT" || row["step_n"] != stepN || row["seq"] != seq {
+			continue
+		}
+		payload, ok := row["payload"].(map[string]any)
+		if !ok {
+			continue
+		}
+		if result, ok := payload["result"]; ok {
+			return result, true, nil
+		}
+	}
+	return nil, false, nil
 }
 
 // MakePlainToolCall wraps toolFn for non-gated tools with audit logging.

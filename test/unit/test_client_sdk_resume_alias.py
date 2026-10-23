@@ -97,10 +97,11 @@ def test_resume_rejects_other_tenant_on_same_trajectory_id(tmp_path):
     assert resumed.trajectory_id == "shared-traj"
 
 
-def test_resume_does_not_replay_already_claimed_gated_tool_call(tmp_path):
-    """Simulates a crash/restart mid-step: resume() reattaches, and re-driving
-    the same exec_tool call for a NON_IDEMPOTENT_WRITE tool blocks instead of
-    re-running the side effect (README S8, R02)."""
+def test_resume_does_not_replay_already_completed_gated_tool_call(tmp_path):
+    """Simulates a crash/restart after the tool finished but before the backend
+    memoized the step: resume() reattaches, and re-driving the same exec_tool call
+    hands back the recorded result instead of re-running the side effect or
+    gating a call that already completed (README S8, R02)."""
     db_path = str(tmp_path / "trajectory.sqlite")
     calls: list[str] = []
     tool = _deploy_tool(calls)
@@ -111,15 +112,40 @@ def test_resume_does_not_replay_already_claimed_gated_tool_call(tmp_path):
         step_n=1,
         plan={"tool_calls": [{"name": "deploy_server", "args": {"version": "1.0.0"}}]},
     )
-    exec_tool(trajectory, step_n=1, call={"args": {"version": "1.0.0"}}, tool=tool, seq=2)
+    first = exec_tool(trajectory, step_n=1, call={"args": {"version": "1.0.0"}}, tool=tool, seq=2)
     assert calls == ["1.0.0"]
 
     # Simulate crash/restart: drop the in-process trajectory and reattach.
     del trajectory
     resumed = resume("t1", db_path=db_path)
 
+    again = exec_tool(resumed, step_n=1, call={"args": {"version": "1.0.0"}}, tool=tool, seq=2)
+
+    assert again == first
+    assert calls == ["1.0.0"]
+
+
+def test_resume_blocks_gated_tool_call_claimed_without_result(tmp_path):
+    """A claimed TOOL_CALL with no TOOL_RESULT is the real mid-execution crash:
+    re-driving it blocks and the tool body does not run (README S8, R02)."""
+    db_path = str(tmp_path / "trajectory.sqlite")
+    calls: list[str] = []
+    tool = _deploy_tool(calls)
+
+    trajectory = open_trajectory("demo", "t1", db_path=db_path)
+    seal_decision(
+        trajectory,
+        step_n=1,
+        plan={"tool_calls": [{"name": "deploy_server", "args": {"version": "1.0.0"}}]},
+    )
+    trajectory._log.claim_tool_call(
+        1, {"tool": "deploy_server", "args": {"version": "1.0.0"}}, "t1", "demo", 2
+    )
+
+    del trajectory
+    resumed = resume("t1", db_path=db_path)
+
     with pytest.raises(BlockedNeedsGate):
         exec_tool(resumed, step_n=1, call={"args": {"version": "1.0.0"}}, tool=tool, seq=2)
 
-    # The already-claimed slot blocks retry; the tool body must not re-run.
-    assert calls == ["1.0.0"]
+    assert calls == []

@@ -500,3 +500,18 @@ def test_dbos_gated_result_integer_stays_a_storage_error(tmp_path, monkeypatch):
     assert _DBOS_MINT_CALLS["n"] == 1
     assert "ABORT" not in _kinds(node_log, traj)
     assert "COMMIT_STEP" not in _kinds(node_log, traj)
+
+
+def test_gated_replay_after_recorded_result_returns_it_without_abort(tmp_path):
+    calls = {"n": 0}
+    log = NodeLog(str(tmp_path / "replay.sqlite"))
+
+    def deploy(version):
+        calls["n"] += 1
+        return {"deployed": version}
+
+    gated = make_gated_tool_call(log, "t", TENANT_ID, 1, 2, "deploy", deploy)
+    assert gated(version="1.0") == {"deployed": "1.0"}
+    assert gated(version="1.0") == {"deployed": "1.0"}
+    assert calls["n"] == 1
+    assert not log.has("t", TENANT_ID, 1, "ABORT", seq=3)
