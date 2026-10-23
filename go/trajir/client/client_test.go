@@ -175,9 +175,13 @@ func TestExecToolGated(t *testing.T) {
 	if _, err := tr.ExecTool(1, 2, tool, map[string]any{}); err != nil {
 		t.Fatal(err)
 	}
-	_, err = tr.ExecTool(1, 2, tool, map[string]any{})
-	if err == nil {
-		t.Fatal("expected block on second exec")
+	// Re-exec of a completed call hands back the recorded result, no second effect.
+	again, err := tr.ExecTool(1, 2, tool, map[string]any{})
+	if err != nil {
+		t.Fatalf("second exec: %v", err)
+	}
+	if again.Result != "ok" {
+		t.Fatalf("second exec result=%v, want ok", again.Result)
 	}
 	if n.Load() != 1 {
 		t.Fatalf("side effects=%d", n.Load())

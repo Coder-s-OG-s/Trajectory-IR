@@ -68,6 +68,19 @@ def _stored_integer_failure(node_log, trajectory_id, tenant_id, step_n, seq):
     return None
 
 
+def _stored_tool_result(node_log, trajectory_id, tenant_id, step_n, seq):
+    """The ``{"result": ...}`` payload already recorded at ``(step_n, seq)``, or None."""
+    if not node_log.has(trajectory_id, tenant_id, step_n, "TOOL_RESULT", seq=seq):
+        return None
+    for row in node_log.list_nodes(trajectory_id, tenant_id=tenant_id):
+        if row["step_n"] != step_n or row["seq"] != seq or row["kind"] != "TOOL_RESULT":
+            continue
+        payload = row["payload"]
+        if isinstance(payload, dict) and "result" in payload:
+            return payload
+    return None
+
+
 def _raise_stored_integer_failure(payload: dict) -> None:
     message = payload.get("message")
     if not isinstance(message, str) or message == "":
@@ -112,7 +125,8 @@ def make_gated_tool_call(node_log, trajectory_id, tenant_id, step_n, seq, tool_n
     versions, at the cost of one extra durable log write before the effect runs.
 
     Occupies two seq slots for this call: TOOL_CALL at `seq`, and its outcome
-    (TOOL_RESULT, or ABORT when blocked) at `seq + 1`. Callers must space tool
+    (TOOL_RESULT, or ABORT when blocked) at `seq + 1`. Re-entry after the
+    TOOL_RESULT was recorded returns that stored result instead of blocking. Callers must space tool
     calls accordingly so no two nodes in a step collide on seq -- see
     `resume/step.py`.
 
@@ -145,6 +159,12 @@ def make_gated_tool_call(node_log, trajectory_id, tenant_id, step_n, seq, tool_n
             failed = _stored_integer_failure(node_log, trajectory_id, tenant_id, step_n, seq + 1)
             if failed is not None:
                 _raise_stored_integer_failure(failed)
+            # The effect already ran and its outcome is durable (crash between the
+            # TOOL_RESULT commit and the backend's memo). Hand the recorded result
+            # back; nothing re-executes and there is nothing to gate.
+            stored = _stored_tool_result(node_log, trajectory_id, tenant_id, step_n, seq + 1)
+            if stored is not None:
+                return stored["result"]
             node_log.append(
                 "ABORT",
                 step_n,
