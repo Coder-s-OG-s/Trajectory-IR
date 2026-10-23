@@ -1,0 +1,55 @@
+name: PR Approval Label Apply
+
+permissions:
+  contents: read
+
+on:
+  workflow_run:
+    workflows: ["PR Approval Label"]
+    types: [completed]
+
+jobs:
+  apply-label:
+    if: >-
+      github.event.workflow_run.event == 'pull_request_review' &&
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Add "Need Another Approval" label
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            // The number comes from the triggering run's name, which a fork
+            // PR can influence, so check it against the API before labelling.
+            const match = /^PR Approval Label #(\d+)$/.exec(
+              context.payload.workflow_run.display_title
+            )
+            if (!match) {
+              core.setFailed('Could not read PR number from run name')
+              return
+            }
+            const issue_number = Number(match[1])
+            const { owner, repo } = context.repo
+
+            const { data: pr } = await github.rest.pulls.get({
+              owner, repo, pull_number: issue_number
+            })
+            if (pr.state !== 'open') {
+              core.info(`PR #${issue_number} is not open, skipping`)
+              return
+            }
+            const reviews = await github.paginate(
+              github.rest.pulls.listReviews,
+              { owner, repo, pull_number: issue_number }
+            )
+            if (!reviews.some(r => r.state === 'APPROVED')) {
+              core.info(`PR #${issue_number} has no approval, skipping`)
+              return
+            }
+
+            await github.rest.issues.addLabels({
+              owner, repo, issue_number,
+              labels: ['Need Another Approval']
+            })
