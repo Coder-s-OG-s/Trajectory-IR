@@ -75,15 +75,11 @@ func FindArtifactRef(sourceNodes []map[string]any, contentHash string) (map[stri
 			return pi < pj
 		}
 		si, sj := 0, 0
-		if v, ok := matches[i]["seq"].(int); ok {
+		if v, ok := nodes.AsInt(matches[i]["seq"]); ok {
 			si = v
-		} else if v, ok := matches[i]["seq"].(float64); ok {
-			si = int(v)
 		}
-		if v, ok := matches[j]["seq"].(int); ok {
+		if v, ok := nodes.AsInt(matches[j]["seq"]); ok {
 			sj = v
-		} else if v, ok := matches[j]["seq"].(float64); ok {
-			sj = int(v)
 		}
 		return si < sj
 	})

@@ -28,6 +28,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/cas"
@@ -211,6 +212,47 @@ func asStepN(v any) (*int, error) {
 	return &i, nil
 }
 
+func decodeNodeLine(line string) (map[string]any, error) {
+	rec, err := nodes.DecodeObject([]byte(line))
+	if err != nil {
+		return nil, err
+	}
+	for k, v := range rec {
+		if k == "payload" {
+			continue
+		}
+		rec[k] = coerceJSONNumbers(v)
+	}
+	return rec, nil
+}
+
+func coerceJSONNumbers(v any) any {
+	switch n := v.(type) {
+	case json.Number:
+		f, err := n.Float64()
+		if err != nil {
+			return n
+		}
+		s := string(n)
+		if !strings.ContainsAny(s, ".eE") && strconv.FormatFloat(f, 'f', -1, 64) != s {
+			return n
+		}
+		return f
+	case map[string]any:
+		for k, child := range n {
+			n[k] = coerceJSONNumbers(child)
+		}
+		return n
+	case []any:
+		for i := range n {
+			n[i] = coerceJSONNumbers(n[i])
+		}
+		return n
+	default:
+		return v
+	}
+}
+
 func asPayload(v any) (map[string]any, error) {
 	if v == nil {
 		return map[string]any{}, nil
@@ -258,7 +300,7 @@ func redactNodeRecord(rec map[string]any) (map[string]any, error) {
 		return nil, err
 	}
 	var ts float64
-	if v, ok := rec["ts"].(float64); ok {
+	if v, ok := nodes.AsFloat64(rec["ts"]); ok {
 		ts = v
 	}
 	return map[string]any{
@@ -847,8 +889,8 @@ func loadFromZipWithOptions(zr *zip.Reader, verify bool, opts VerifyOptions) (*P
 		if line == "" {
 			continue
 		}
-		var rec map[string]any
-		if err := json.Unmarshal([]byte(line), &rec); err != nil {
+		rec, err := decodeNodeLine(line)
+		if err != nil {
 			return nil, fmt.Errorf("%w: nodes.ndjson: %v", ErrTir, err)
 		}
 		nodeList = append(nodeList, rec)

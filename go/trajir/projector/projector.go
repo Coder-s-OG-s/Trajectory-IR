@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/nodes"
 	"github.com/gowebpki/jcs"
 )
 
@@ -68,16 +69,12 @@ type sortKey struct {
 
 func nodeSortKey(n map[string]any) sortKey {
 	step := 1_000_000_000
-	if v, ok := n["step_n"].(int); ok {
+	if v, ok := nodes.AsInt(n["step_n"]); ok {
 		step = v
-	} else if v, ok := n["step_n"].(float64); ok {
-		step = int(v)
 	}
 	seq := 1_000_000_000
-	if v, ok := n["seq"].(int); ok {
+	if v, ok := nodes.AsInt(n["seq"]); ok {
 		seq = v
-	} else if v, ok := n["seq"].(float64); ok {
-		seq = int(v)
 	}
 	id, _ := n["id"].(string)
 	return sortKey{step: step, seq: seq, id: id, node: n}
