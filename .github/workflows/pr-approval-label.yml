@@ -18,4 +18,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Record approval
-        run: echo "Approval on PR #${{ github.event.pull_request.number }}"
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: echo "Approval on PR $PR_NUMBER"

@@ -21,16 +21,17 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
-            // The number comes from the triggering run's name, which a fork
-            // PR can influence, so check it against the API before labelling.
-            const match = /^PR Approval Label #(\d+)$/.exec(
-              context.payload.workflow_run.display_title
-            )
-            if (!match) {
-              core.setFailed('Could not read PR number from run name')
+            // pull_requests is empty for fork PRs, so fall back to the
+            // number in the run name. A fork can influence that name, so the
+            // PR is checked against the API before labelling.
+            const run = context.payload.workflow_run
+            const match = /^PR Approval Label #(\d+)$/.exec(run.display_title)
+            const issue_number =
+              run.pull_requests?.[0]?.number ?? (match ? Number(match[1]) : null)
+            if (!issue_number) {
+              core.setFailed('Could not resolve PR number from payload or run name')
               return
             }
-            const issue_number = Number(match[1])
             const { owner, repo } = context.repo
 
             const { data: pr } = await github.rest.pulls.get({
@@ -44,8 +45,18 @@ jobs:
               github.rest.pulls.listReviews,
               { owner, repo, pull_number: issue_number }
             )
-            if (!reviews.some(r => r.state === 'APPROVED')) {
-              core.info(`PR #${issue_number} has no approval, skipping`)
+
+            // Latest approval/changes-requested/dismissed review per user,
+            // and only from people with repo access.
+            const trusted = ['OWNER', 'MEMBER', 'COLLABORATOR']
+            const latest = new Map()
+            for (const r of reviews) {
+              if (!['APPROVED', 'CHANGES_REQUESTED', 'DISMISSED'].includes(r.state)) continue
+              if (!trusted.includes(r.author_association)) continue
+              latest.set(r.user.login, r.state)
+            }
+            if (![...latest.values()].includes('APPROVED')) {
+              core.info(`PR #${issue_number} has no current approval, skipping`)
               return
             }
 
