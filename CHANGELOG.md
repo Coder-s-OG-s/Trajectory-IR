@@ -50,9 +50,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   before this change are not found: a step that was in flight during the
   upgrade calls the model again. Gated `NON_IDEMPOTENT_WRITE` tools still
   block on the existing `TOOL_CALL` claim and do not re-run.
+- `dbos` is no longer a core Python dependency. Install `trajectory-ir[dbos]`
+  for the DBOS backend (default `make_run_step` hooks). The client no longer
+  imports DBOS at load time. `open_trajectory` / `resume` start DBOS only when
+  the extra is installed; `durable=True` requires it and `durable=False` skips
+  it (#451).
 
 ### Fixed
 
+- Go `PayloadHash` refuses Go integer values and JSON integer literals
+  outside `-(2^53-1) .. 2^53-1`, matching Python rfc8785. Floats still
+  hash. SQLite, Postgres, and `.tir` load keep number text with
+  `UseNumber`, so a stored integer above that range cannot hash as a
+  rounded float (#461).
 - A Python plan with an integer outside the RFC 8785 safe range is rejected
   before the durable memo stores a success. On the local memo, the same
   workflow id calls the model again when no `DECISION` exists. DBOS records
@@ -66,6 +76,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Postgres open paths bound ping and schema setup (default 10s, DSN
   `connect_timeout`, or `TRAJIR_PG_CONNECT_TIMEOUT`). S3 clients set an
   explicit 10s connect timeout and 60s read deadline (#406).
+- Go: `ClaimToolCall` (SQLite and Postgres) now returns real insert errors instead of
+  reporting "not claimed"; only a unique-slot conflict means another writer won.
+  Postgres connection errors from `OpenDSN` have the DSN password scrubbed while
+  still unwrapping to the cause. Payload numbers read back by `ListNodes` are
+  `json.Number`, so integers above 2^53 survive, and a `payload_json` with trailing
+  data is rejected. `OpenTrajectory` refuses a symlinked sqlite file or `-wal` /
+  `-shm` / `-journal` sidecar; an explicit `NodesPath` / `MemoPath` still overrides
+  `WorkDir` and may live outside it. The console's `/v1/local/reveal` and
+  `/v1/local/open-shell` require `Content-Type: application/json` on every request,
+  empty body included, and answer 415 otherwise.
 
 ## [0.2.2] - 2026-09-07
 

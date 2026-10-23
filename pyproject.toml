@@ -27,7 +27,6 @@ classifiers = [
     "Topic :: Software Development :: Libraries",
 ]
 dependencies = [
-    "dbos",
     "pynacl",
     "rfc8785",
     # cffi 2.1+ reports MIT-0, which the license allowlist does not list yet.
@@ -35,7 +34,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "pytest-cov", "ruff", "mypy", "pip-audit"]
+dev = ["pytest", "pytest-cov", "ruff", "mypy", "pip-audit", "dbos"]
+dbos = ["dbos"]
 postgres = ["psycopg[binary]>=3.1"]
 s3 = ["boto3"]
 rfc8785 = ["rfc8785"]

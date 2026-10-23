@@ -15,6 +15,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/durable"
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/effects"
@@ -22,6 +23,7 @@ import (
 	nodelog "github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/log"
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/resume"
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/sandbox"
+	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/workdir"
 )
 
 // Options configure workdir paths and optional durable backend injection.
@@ -29,8 +31,10 @@ type Options struct {
 	// WorkDir holds default relative paths for sqlite files when set.
 	WorkDir string
 	// NodesPath is the NodeLog sqlite path. Default: WorkDir/nodes.sqlite or nodes.sqlite.
+	// An explicit path overrides WorkDir and may live outside it.
 	NodesPath string
 	// MemoPath is the LocalSQLite durable memo path. Default: WorkDir/memo.sqlite or memo.sqlite.
+	// An explicit path overrides WorkDir and may live outside it.
 	MemoPath string
 	// WorkflowID scopes durable memo keys, together with the tenant. Default: TrajectoryID.
 	WorkflowID string
@@ -97,6 +101,15 @@ func OpenTrajectory(tenantID, trajectoryID string, opts Options) (*Trajectory, e
 	}
 	if mode != sandbox.ModeLive && mode != sandbox.ModeSandbox {
 		return nil, fmt.Errorf("client: unsupported mode %q", mode)
+	}
+
+	if err := checkSQLitePath(opts.WorkDir, opts.NodesPath, nodesPath); err != nil {
+		return nil, fmt.Errorf("client: nodes path: %w", err)
+	}
+	if opts.Backend == nil {
+		if err := checkSQLitePath(opts.WorkDir, opts.MemoPath, memoPath); err != nil {
+			return nil, fmt.Errorf("client: memo path: %w", err)
+		}
 	}
 
 	nl, err := nodelog.Open(nodesPath)
@@ -330,6 +343,27 @@ func (t *Trajectory) Log() *nodelog.NodeLog { return t.log }
 
 // Backend exposes the durable backend for advanced tests.
 func (t *Trajectory) Backend() durable.Backend { return t.backend }
+
+// checkSQLitePath refuses a sqlite file, or one of the sidecars SQLite creates
+// beside it, that is a symlink: SQLite would otherwise write through the link.
+// A path derived from workDir must also resolve inside it. An explicit override
+// (explicit != "") is the caller's choice and is not confined to workDir. The
+// check runs before Open, so it cannot rule out a link planted afterwards.
+func checkSQLitePath(workDir, explicit, path string) error {
+	if path == ":memory:" || strings.HasPrefix(path, "file:") {
+		return nil
+	}
+	root := filepath.Dir(path)
+	if workDir != "" && explicit == "" {
+		root = workDir
+	}
+	for _, p := range []string{path, path + "-wal", path + "-shm", path + "-journal"} {
+		if err := workdir.RequireNonSymlinkLeaf(root, p); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
 func resolvePaths(opts Options) (nodesPath, memoPath string) {
 	base := opts.WorkDir

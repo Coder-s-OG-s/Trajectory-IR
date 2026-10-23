@@ -164,3 +164,49 @@ func TestRequireNonSymlinkLeafRejectsEscape(t *testing.T) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 }
+
+func TestRequireNonSymlinkLeafMissingLeafUnderSymlinkedParentEscapes(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	link := filepath.Join(root, "sub")
+	if err := os.Symlink(outside, link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	err := RequireNonSymlinkLeaf(root, filepath.Join(link, "nodes.sqlite"))
+	if err == nil || !strings.Contains(err.Error(), "escapes root") {
+		t.Fatalf("expected an escape error for a leaf behind a symlinked parent, got: %v", err)
+	}
+	// The same parent link is fine when the link target stays inside root.
+	inside := filepath.Join(root, "real")
+	if err := os.Mkdir(inside, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	okLink := filepath.Join(root, "alias")
+	if err := os.Symlink(inside, okLink); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	if err := RequireNonSymlinkLeaf(root, filepath.Join(okLink, "nodes.sqlite")); err != nil {
+		t.Fatalf("parent symlink that stays inside root must be allowed: %v", err)
+	}
+}
+
+func TestRequireNonSymlinkLeafAcceptsRootBehindSymlink(t *testing.T) {
+	real := t.TempDir()
+	linkRoot := filepath.Join(t.TempDir(), "rootlink")
+	if err := os.Symlink(real, linkRoot); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	// Root and leaf are canonicalized the same way, so a symlinked root is not an escape.
+	if err := RequireNonSymlinkLeaf(linkRoot, filepath.Join(linkRoot, "nodes.sqlite")); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRequireNonSymlinkLeafLeafOutsideRootIsRejected(t *testing.T) {
+	root := t.TempDir()
+	other := t.TempDir()
+	err := RequireNonSymlinkLeaf(root, filepath.Join(other, "nodes.sqlite"))
+	if err == nil || !strings.Contains(err.Error(), "escapes root") {
+		t.Fatalf("expected escapes root, got: %v", err)
+	}
+}

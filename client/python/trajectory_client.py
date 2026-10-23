@@ -4,7 +4,6 @@ from dataclasses import dataclass, field
 from types import SimpleNamespace
 from typing import Any
 
-from drivers.durable_backend.dbos.adapter import init_backend
 from trajectory_ir.console_emit import (
     OBSERVATION_BUDGET,
     note_node,
@@ -82,6 +81,27 @@ class ToolResult:
     result: Any
 
 
+def _init_durable_backend(db_path: str, durable: bool | None) -> None:
+    """Launch DBOS for host code that uses DBOS steps next to this client.
+
+    ``Trajectory`` itself only talks to ``NodeLog`` and never calls DBOS, so
+    a base install (no ``dbos`` extra) must still work. ``durable=None``
+    launches DBOS only when the extra is installed, ``True`` requires it,
+    and ``False`` skips it.
+    """
+    if durable is False:
+        return
+    # Imported here, not at module top: a top-level import is what forced
+    # dbos into the core dependencies (#451).
+    try:
+        from drivers.durable_backend.dbos.adapter import init_backend
+    except ImportError:
+        if durable:
+            raise
+        return
+    init_backend(db_path=db_path)
+
+
 def open_trajectory(
     tenant_id: str,
     trajectory_id: str,
@@ -89,13 +109,17 @@ def open_trajectory(
     *,
     mode: RunMode | str = RunMode.LIVE,
     console_sink: Any = None,
+    durable: bool | None = None,
 ) -> Trajectory:
     """Open a trajectory.
 
     ``mode="sandbox"`` rejects NON_IDEMPOTENT_WRITE, AGENT_SPAWN,
     and SENSITIVE tools (R06).
+
+    ``durable`` controls the DBOS launch (see ``_init_durable_backend``).
+    Pass ``durable=True`` to fail when the ``dbos`` extra is missing.
     """
-    init_backend(db_path=db_path)
+    _init_durable_backend(db_path, durable)
     return Trajectory(
         trajectory_id=trajectory_id,
         tenant_id=tenant_id,
@@ -341,6 +365,7 @@ def resume(
     db_path: str = "trajectory.sqlite",
     *,
     mode: RunMode | str = RunMode.LIVE,
+    durable: bool | None = None,
 ) -> Trajectory:
     """Reattach to a trajectory that already has node log history.
 
@@ -356,8 +381,10 @@ def resume(
     nodes: resuming a trajectory with nothing to resume is almost always a
     caller bug (wrong db_path or trajectory_id), and should fail loudly
     rather than silently behave like ``open_trajectory``.
+
+    ``durable`` behaves as in ``open_trajectory``.
     """
-    init_backend(db_path=db_path)
+    _init_durable_backend(db_path, durable)
     traj = Trajectory(
         trajectory_id=trajectory_id,
         tenant_id=tenant_id,

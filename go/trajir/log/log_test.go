@@ -2,11 +2,15 @@ package nodelog_test
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	nodelog "github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/log"
+	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/nodes"
 
 	_ "modernc.org/sqlite"
 )
@@ -182,6 +186,74 @@ func TestClaimToolCallSingleWinner(t *testing.T) {
 	}
 }
 
+func TestClaimToolCallNonConstraintErrorPropagates(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nodes.sqlite")
+	nl, err := nodelog.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = nl.Close() })
+
+	side, err := sql.Open("sqlite", path+"?_busy_timeout=5000")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = side.Close() })
+
+	// Add an abort trigger on insert that does NOT represent a unique constraint
+	if _, err := side.Exec(`CREATE TRIGGER abort_insert BEFORE INSERT ON nodes BEGIN SELECT RAISE(ABORT, 'forced abort error'); END;`); err != nil {
+		t.Fatal(err)
+	}
+
+	claimed, err := nl.ClaimToolCall(1, map[string]any{"tool": "a"}, "t1", "demo", 2)
+	if err == nil {
+		t.Fatal("expected non-constraint error to be propagated, got nil")
+	}
+	if !strings.Contains(err.Error(), "forced abort error") {
+		t.Fatalf("expected error to contain 'forced abort error', got %v", err)
+	}
+	if claimed {
+		t.Fatal("expected claimed=false when insert fails")
+	}
+}
+
+func TestClaimToolCallUniqueConstraintRaceLostReturnsFalse(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nodes.sqlite")
+	nl, err := nodelog.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = nl.Close() })
+
+	side, err := sql.Open("sqlite", path+"?_busy_timeout=5000")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = side.Close() })
+
+	// Simulate a race loser where another transaction slips in an identical slot
+	// right before our INSERT executes, causing an idx_nodes_slot unique violation on INSERT.
+	_, err = side.Exec(`
+		CREATE TRIGGER race_insert BEFORE INSERT ON nodes
+		WHEN NEW.id != 'winner'
+		BEGIN
+			INSERT INTO nodes (id, trajectory_id, tenant_id, step_n, seq, kind, payload_json, ts)
+			VALUES ('winner', NEW.trajectory_id, NEW.tenant_id, NEW.step_n, NEW.seq, 'TOOL_CALL', '{}', NEW.ts);
+		END;
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	claimed, err := nl.ClaimToolCall(1, map[string]any{"tool": "a"}, "t1", "demo", 2)
+	if err != nil {
+		t.Fatalf("expected nil error on unique constraint collision, got: %v", err)
+	}
+	if claimed {
+		t.Fatal("expected claimed=false when losing race to unique constraint")
+	}
+}
+
 func TestListNodesTenantFilter(t *testing.T) {
 	nl := openTemp(t)
 	step := 1
@@ -213,6 +285,78 @@ func TestPipeInTenantRejected(t *testing.T) {
 	_, err := nl.Append("DECISION", &step, map[string]any{"plan": "x"}, "t1", "a|b", 1)
 	if err == nil {
 		t.Fatal("expected delimiter rejection")
+	}
+}
+
+func TestAppendRejectsIntegerAboveSafeRange(t *testing.T) {
+	nl := openTemp(t)
+	step := 1
+	_, err := nl.Append("TOOL_RESULT", &step, map[string]any{"n": int64(1 << 53)}, "t1", "demo", 2)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	_, err = nl.Append("TOOL_RESULT", &step, map[string]any{"n": int64((1 << 53) + 1)}, "t1", "demo", 2)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	rows, err := nl.ListNodes("t1", "demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 0 {
+		t.Fatalf("rows=%d", len(rows))
+	}
+
+	n, err := nl.Append("TOOL_RESULT", &step, map[string]any{"n": int64(1<<53 - 1)}, "t1", "demo", 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n.PHash != "e1da48c6a6089f06ecb4e0a2259e658e3786b2420f52baccdf929ec6460d7b41" {
+		t.Fatalf("phash=%s", n.PHash)
+	}
+}
+
+func TestListNodesKeepsIntegerLiteral(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nodes.sqlite")
+	nl, err := nodelog.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = nl.Close() })
+
+	step := 1
+	id, err := nodes.NodeID("demo", "t1", &step, 2, "TOOL_RESULT", "66c87d9cb3014e05a11baa97df62282d89d425f22ee15816577c84534e2ef1bb")
+	if err != nil {
+		t.Fatal(err)
+	}
+	side, err := sql.Open("sqlite", path+"?_busy_timeout=5000")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = side.Close() })
+	_, err = side.Exec(
+		`INSERT INTO nodes (id, trajectory_id, tenant_id, step_n, seq, kind, payload_json, ts)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		id, "t1", "demo", 1, 2, "TOOL_RESULT", `{"n":9007199254740993}`, 1.0,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows, err := nl.ListNodes("t1", "demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("rows=%d", len(rows))
+	}
+	payload, _ := rows[0]["payload"].(map[string]any)
+	num, ok := payload["n"].(json.Number)
+	if !ok || num != "9007199254740993" {
+		t.Fatalf("n=%#v", payload["n"])
+	}
+	if _, err := nodes.PayloadHash(payload); err == nil {
+		t.Fatal("hashed a rounded integer")
 	}
 }
 
@@ -375,5 +519,84 @@ func TestHasRejectsEmptyTenant(t *testing.T) {
 	_, err := nl.Has("t1", "", 1, "DECISION", nil)
 	if err == nil {
 		t.Fatal("expected error on empty tenantID")
+	}
+}
+
+// Rows written by an older version or another writer may hold ids the write
+// path would now refuse. Reading must still work.
+func TestReadPathsStillServeRowsWithLegacyIDs(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nodes.sqlite")
+	nl, err := nodelog.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = nl.Close() })
+
+	side, err := sql.Open("sqlite", path+"?_busy_timeout=5000")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = side.Close() })
+
+	longID := strings.Repeat("t", 600)
+	for i, tc := range []struct{ traj, tenant string }{{"legacy|traj", "legacy|tenant"}, {longID, "demo"}} {
+		if _, err := side.Exec(
+			`INSERT INTO nodes (id, trajectory_id, tenant_id, step_n, seq, kind, payload_json, ts) VALUES (?, ?, ?, 1, ?, 'THOUGHT', '{"n":1}', 1.0)`,
+			fmt.Sprintf("legacy-%d", i), tc.traj, tc.tenant, i,
+		); err != nil {
+			t.Fatal(err)
+		}
+		got, err := nl.ListNodes(tc.traj, tc.tenant)
+		if err != nil || len(got) != 1 {
+			t.Fatalf("ListNodes(%q,%q): rows=%d err=%v", tc.traj, tc.tenant, len(got), err)
+		}
+		if all, err := nl.ListNodesAllTenants(tc.traj); err != nil || len(all) != 1 {
+			t.Fatalf("ListNodesAllTenants(%q): rows=%d err=%v", tc.traj, len(all), err)
+		}
+		ok, err := nl.Has(tc.traj, tc.tenant, 1, "THOUGHT", nil)
+		if err != nil || !ok {
+			t.Fatalf("Has(%q,%q) = %v, %v", tc.traj, tc.tenant, ok, err)
+		}
+		if ok, err := nl.HasAllTenants(tc.traj, 1, "THOUGHT", nil); err != nil || !ok {
+			t.Fatalf("HasAllTenants(%q) = %v, %v", tc.traj, ok, err)
+		}
+	}
+}
+
+func TestListNodesKeepsLargeIntegersAndRejectsCorruptPayload(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nodes.sqlite")
+	nl, err := nodelog.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = nl.Close() })
+	side, err := sql.Open("sqlite", path+"?_busy_timeout=5000")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = side.Close() })
+
+	insert := func(id string, seq int, payload string) {
+		t.Helper()
+		if _, err := side.Exec(
+			`INSERT INTO nodes (id, trajectory_id, tenant_id, step_n, seq, kind, payload_json, ts) VALUES (?, 't1', 'demo', 1, ?, 'THOUGHT', ?, 1.0)`,
+			id, seq, payload,
+		); err != nil {
+			t.Fatal(err)
+		}
+	}
+	insert("a", 0, `{"big":9007199254740993}`)
+	rows, err := nl.ListNodes("t1", "demo")
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("rows=%d err=%v", len(rows), err)
+	}
+	payload := rows[0]["payload"].(map[string]any)
+	if n, ok := payload["big"].(json.Number); !ok || n.String() != "9007199254740993" {
+		t.Fatalf("big=%#v, want exact json.Number", payload["big"])
+	}
+
+	insert("b", 1, `{"x":1} trailing`)
+	if _, err := nl.ListNodes("t1", "demo"); err == nil {
+		t.Fatal("expected a payload_json with trailing data to be rejected")
 	}
 }

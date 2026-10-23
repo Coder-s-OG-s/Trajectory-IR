@@ -1,5 +1,10 @@
 name: PR Approval Label
 
+# Fork PRs get a read-only token on pull_request_review, so this workflow
+# only records the PR number in its run name. pr-approval-label-apply.yml
+# runs in the base repo via workflow_run and adds the label.
+run-name: PR Approval Label #${{ github.event.pull_request.number }}
+
 permissions:
   contents: read
 
@@ -11,16 +16,8 @@ jobs:
   label-approval:
     if: github.event.review.state == 'approved'
     runs-on: ubuntu-latest
-    permissions:
-      pull-requests: write
     steps:
-      - name: Add "Need Another Approval" label
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        with:
-          script: |
-            await github.rest.issues.addLabels({
-              issue_number: context.payload.pull_request.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              labels: ['Need Another Approval']
-            })
+      - name: Record approval
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: echo "Approval on PR $PR_NUMBER"

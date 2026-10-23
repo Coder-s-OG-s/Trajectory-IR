@@ -28,6 +28,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/cas"
@@ -211,6 +212,47 @@ func asStepN(v any) (*int, error) {
 	return &i, nil
 }
 
+func decodeNodeLine(line string) (map[string]any, error) {
+	rec, err := nodes.DecodeObject([]byte(line))
+	if err != nil {
+		return nil, err
+	}
+	for k, v := range rec {
+		if k == "payload" {
+			continue
+		}
+		rec[k] = coerceJSONNumbers(v)
+	}
+	return rec, nil
+}
+
+func coerceJSONNumbers(v any) any {
+	switch n := v.(type) {
+	case json.Number:
+		f, err := n.Float64()
+		if err != nil {
+			return n
+		}
+		s := string(n)
+		if !strings.ContainsAny(s, ".eE") && strconv.FormatFloat(f, 'f', -1, 64) != s {
+			return n
+		}
+		return f
+	case map[string]any:
+		for k, child := range n {
+			n[k] = coerceJSONNumbers(child)
+		}
+		return n
+	case []any:
+		for i := range n {
+			n[i] = coerceJSONNumbers(n[i])
+		}
+		return n
+	default:
+		return v
+	}
+}
+
 func asPayload(v any) (map[string]any, error) {
 	if v == nil {
 		return map[string]any{}, nil
@@ -258,7 +300,7 @@ func redactNodeRecord(rec map[string]any) (map[string]any, error) {
 		return nil, err
 	}
 	var ts float64
-	if v, ok := rec["ts"].(float64); ok {
+	if v, ok := nodes.AsFloat64(rec["ts"]); ok {
 		ts = v
 	}
 	return map[string]any{
@@ -790,70 +832,17 @@ func loadFromZipWithOptions(zr *zip.Reader, verify bool, opts VerifyOptions) (*P
 	}
 
 	budget := MaxTotalUncompressedBytes
+	// Also allow reading artifact members not in the initial required set.
+	readAny := func(f *zip.File) ([]byte, error) {
+		return readZipMemberBounded(f, &budget)
+	}
+
 	readMember := func(name string) ([]byte, error) {
 		f, ok := byName[name]
 		if !ok {
 			return nil, fmt.Errorf("%w: missing %s", ErrTir, name)
 		}
-		if f.UncompressedSize64 > MaxUncompressedEntryBytes {
-			return nil, fmt.Errorf(
-				"%w: zip member %q uncompressed size %d exceeds limit %d",
-				ErrLimit, name, f.UncompressedSize64, MaxUncompressedEntryBytes,
-			)
-		}
-		if int(f.UncompressedSize64) > budget {
-			return nil, fmt.Errorf(
-				"%w: zip total uncompressed size would exceed limit %d",
-				ErrLimit, MaxTotalUncompressedBytes,
-			)
-		}
-		rc, err := f.Open()
-		if err != nil {
-			return nil, err
-		}
-		defer rc.Close()
-		// Cap read so a lying local header cannot OOM us.
-		limited := io.LimitReader(rc, int64(MaxUncompressedEntryBytes)+1)
-		data, err := io.ReadAll(limited)
-		if err != nil {
-			return nil, err
-		}
-		if len(data) > MaxUncompressedEntryBytes {
-			return nil, fmt.Errorf("%w: zip member %q expanded beyond per-entry limit", ErrLimit, name)
-		}
-		budget -= len(data)
-		return data, nil
-	}
-
-	// Also allow reading artifact members not in the initial required set.
-	readAny := func(f *zip.File) ([]byte, error) {
-		if f.UncompressedSize64 > MaxUncompressedEntryBytes {
-			return nil, fmt.Errorf(
-				"%w: zip member %q uncompressed size %d exceeds limit %d",
-				ErrLimit, f.Name, f.UncompressedSize64, MaxUncompressedEntryBytes,
-			)
-		}
-		if int(f.UncompressedSize64) > budget {
-			return nil, fmt.Errorf(
-				"%w: zip total uncompressed size would exceed limit %d",
-				ErrLimit, MaxTotalUncompressedBytes,
-			)
-		}
-		rc, err := f.Open()
-		if err != nil {
-			return nil, err
-		}
-		defer rc.Close()
-		limited := io.LimitReader(rc, int64(MaxUncompressedEntryBytes)+1)
-		data, err := io.ReadAll(limited)
-		if err != nil {
-			return nil, err
-		}
-		if len(data) > MaxUncompressedEntryBytes {
-			return nil, fmt.Errorf("%w: zip member %q expanded beyond per-entry limit", ErrLimit, f.Name)
-		}
-		budget -= len(data)
-		return data, nil
+		return readAny(f)
 	}
 
 	rawManifest, err := readMember("manifest.json")
@@ -900,8 +889,8 @@ func loadFromZipWithOptions(zr *zip.Reader, verify bool, opts VerifyOptions) (*P
 		if line == "" {
 			continue
 		}
-		var rec map[string]any
-		if err := json.Unmarshal([]byte(line), &rec); err != nil {
+		rec, err := decodeNodeLine(line)
+		if err != nil {
 			return nil, fmt.Errorf("%w: nodes.ndjson: %v", ErrTir, err)
 		}
 		nodeList = append(nodeList, rec)
