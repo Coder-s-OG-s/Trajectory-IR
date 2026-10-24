@@ -21,7 +21,7 @@ Milestone: **[Phase CI/CD harden](https://github.com/Coder-s-OG-s/Trajectory-IR/
 
 | Workflow | File | Role |
 |----------|------|------|
-| **CI** | `.github/workflows/ci.yml` | DCO, Quality, Package smoke, pip-audit, Go (+ race), Conformance, Postgres, MinIO[^minio] |
+| **CI** | `.github/workflows/ci.yml` | DCO, Quality, Package smoke, pip-audit, Go (+ race), Go fuzz (tir), Conformance, Postgres, MinIO[^minio] |
 | **Release** | `.github/workflows/release.yml` | Build dist, SBOM, attach to GitHub Release |
 | **Scorecard** | `.github/workflows/scorecard.yml` | OpenSSF Scorecard SARIF |
 | **CodeQL** | `.github/workflows/codeql.yml` | Go + Python static analysis |
@@ -36,6 +36,7 @@ listed in [maintainer-branch-protection.md](maintainer-branch-protection.md).
 
 - `Secret scan (gitleaks)`
 - `Workflow lint (actionlint)`
+- `Go fuzz (tir)` once the 30s run stays green
 - Scorecard / CodeQL are often schedule + main push; require only if they run on every PR and stay green
 
 ## Contributor path (strong defaults)
@@ -92,6 +93,27 @@ Regenerate notes: [`.github/ci-requirements/README.md`](../.github/ci-requiremen
 Track remaining Scorecard work under
 [OpenSSF security bar](https://github.com/Coder-s-OG-s/Trajectory-IR/milestone/10)
 (#375 and follow-ons).
+
+## Package load fuzzing
+
+`FuzzLoadPackage` (`go/trajir/tir/load_fuzz_test.go`) passes arbitrary bytes
+to `tir.LoadReader`. That is zip open, member names, the size limits, and
+manifest / node JSON. An error returns a nil package. A loaded package stays
+inside `MaxNodes` and `MaxArtifacts`.
+
+Job `Go fuzz (tir)` runs the target for 30s on pull requests and on `main`.
+It is not a required status check. Plain `go test` still runs the seeds, so
+the `Go` job covers them.
+
+```bash
+cd go
+go test ./trajir/tir -run=FuzzLoadPackage -fuzz=FuzzLoadPackage -fuzztime=30s
+```
+
+Scorecard counts `func FuzzLoadPackage(f *testing.F)` in a `*_test.go` file
+when Go is one of the larger languages, and it also counts an OSS-Fuzz
+project or `.clusterfuzzlite/Dockerfile`. OSS-Fuzz enrollment is separate.
+Atheris is not in CI.
 
 ## Follow-up backlog (issues under Phase CI/CD harden)
 
