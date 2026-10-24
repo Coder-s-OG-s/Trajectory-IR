@@ -108,6 +108,41 @@ Active OpenSSF work tracks under milestone
 [OpenSSF security bar](https://github.com/Coder-s-OG-s/Trajectory-IR/milestone/10).
 Project Security Insights metadata: root [`SECURITY_INSIGHTS.yml`](../SECURITY_INSIGHTS.yml).
 
+## Scorecard snapshot
+
+Scan on 2026-10-24, Scorecard v5.6.0, commit `75819c3`.
+Aggregate **7**. Issue #376 recorded **6.2** on 2026-09-16.
+Source: <https://api.securityscorecards.dev/projects/github.com/Coder-s-OG-s/Trajectory-IR>.
+
+Packaging is -1, so it is left out of the average. The other 17 checks sum to 117.
+117 / 17 = 6.88. The API score field is 7.
+
+At 10: Dependency-Update-Tool, Dangerous-Workflow, Security-Policy,
+Token-Permissions, Code-Review, Binary-Artifacts, Vulnerabilities, SAST,
+License, CI-Tests. Token-Permissions was 0 in the #376 writeup.
+Pinned-Dependencies was 3 and is 5 on this scan.
+
+| Check | Score | Note |
+|-------|------:|------|
+| Pinned-Dependencies | 5 | Actions are SHA pinned. `pip install -e ".[dev]"` and `pip install --upgrade pip` are not. Scorecard counts an editable install as pinned only with `--no-deps`, which would skip pytest and ruff. Lockfile hashing is #375. |
+| CII-Best-Practices | 5 | Passing badge. Silver is 7. Gold is 10. |
+| Branch-Protection | 4 | The scan could read the rule. Admins are exempt, approving reviews are not required, code owner review is not required, last-push approval is off. |
+| Contributors | 3 | One organization: elitefolks. |
+| Maintained | 0 | Created 2026-07-26. This scan still counts the repo as under 90 days old. After that, the check scores commits and issue activity. |
+| Signed-Releases | 0 | v0.2.1 and v0.2.2 have no signature and no provenance. A workflow edit does not change those releases (#373). |
+| Fuzzing | 0 | No Go fuzz target on this commit (#381). |
+| Packaging | -1 | Not averaged. `release.yml` uploads a GitHub Release. Scorecard looks for a registry publish: PyPI, npm, GoReleaser, `docker push`, or `cargo publish` (#378). |
+
+8.0 on these 17 checks is 136 points, 19 more than 117.
+
+If Maintained and Fuzzing each reach 10, the sum is 137 and 137 / 17 = 8.06.
+Packaging can stay -1 in that case. Maintained stays 0 while the repo is
+under 90 days old. After that it follows commits and issue activity.
+12 of those in the window is a 10. Fuzzing stays 0 until a Go fuzz target is on `main`.
+
+Signed releases, the pip install exception, branch settings, the Passing
+badge, and the single organization do not have to move for that line.
+
 ## References
 
 - [CNCF: Securing GitHub Actions CI dependencies (recipe card)](https://www.cncf.io/blog/2026/05/04/securing-github-actions-ci-dependencies-recipe-card/)
