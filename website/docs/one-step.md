@@ -8,10 +8,13 @@ pwsh -File scripts\install_claude.ps1 -Target C:\path\to\your\project
 ```
 
 ```bash
+./scripts/install_claude.sh
 ./scripts/install_claude.sh --target /path/to/your/project
 ```
 
-The installer smoke-checks its own pack. Verify a pack you exported:
+The shell script uses `TRAJIR_PYTHON`, then `.venv/bin/python`, then `.venv/Scripts/python.exe` when that file exists, then `python3`, then `python`. PowerShell uses `TRAJIR_PYTHON`, then the repo `.venv`, then `python`.
+
+The installer smoke-checks its own pack. That smoke does not run the hook scripts. Verify a pack you exported. Install does not create `pack.tir`.
 
 ```bash
 ./go/trajir.exe verify path/to/pack.tir
@@ -21,7 +24,7 @@ The installer smoke-checks its own pack. Verify a pack you exported:
 
 If nothing is listening on `127.0.0.1:8787`, the installer starts `trajir-console` and waits until it accepts a connection. The console data directory is `<target>/.local-evidence/console-data`. If the port is taken, it leaves that process alone. If the new process dies, the installer says so and exits 1. Pass `--skip-console` to skip the start. There is no second console.
 
-The first PreToolUse seals the decision and exits 0 so the host can run the tool. The hook command carries the owner word `project`. The same owner asking again while that call is still pending exits 2 for `NON_IDEMPOTENT_WRITE` and for a row with no effect class. That is a crash before PostToolUse. A different owner on that pending call exits 0. A second registration of this hook must use a different owner word. The same word looks like a retry and blocks the first run. After the result is recorded, a later PreToolUse for that `NON_IDEMPOTENT_WRITE` id exits 2. The hook does not call the tool and does not start DBOS. PostToolUse records the result. That write is best-effort and happens after the tool has run. If it fails, PostToolUse still exits 0 so the host is not asked to run the tool again. PostToolUseFailure records a failed tool and clears its pending row. A missing `TRAJIR_IDENTITY_FILE` exits 2 and names `scripts/install_claude.ps1` or `scripts/install_claude.sh`.
+The first PreToolUse seals the decision and exits 0 so the host can run the tool. The hook command carries the owner word `project`. The same owner asking again while that call is still pending exits 2 for `NON_IDEMPOTENT_WRITE` and for a row with no effect class. That is a crash before PostToolUse. A different owner on that pending call exits 0. A second registration of this hook must use a different owner word. The same word looks like a retry and blocks the first run. After the result is recorded, a later PreToolUse for that `NON_IDEMPOTENT_WRITE` id exits 2. The hook does not call the tool and does not start DBOS. PostToolUse records the result. That write is best-effort and happens after the tool has run. If it fails, PostToolUse still exits 0 so the host is not asked to run the tool again. PostToolUseFailure records a failed tool and clears its pending row. If the host denies the tool after the seal, neither post hook runs. The pending row stays. There is no cleanup command. The next tool is a new step. A missing `TRAJIR_IDENTITY_FILE` exits 2 and names `scripts/install_claude.ps1` or `scripts/install_claude.sh`. If Python itself never starts, the host can still run the tool. Once the launcher process is up, an import error on PreToolUse exits 2.
 
 The installer adds `.local-evidence/`, the project Claude and MCP config files, and `.trajir/*.py` to the target `.gitignore` when those lines are missing.
 
