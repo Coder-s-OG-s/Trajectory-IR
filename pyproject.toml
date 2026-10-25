@@ -110,6 +110,7 @@ module = [
     "boto3",
     "botocore.*",
     "rfc8785",
+    "langchain_core.*",
 ]
 ignore_missing_imports = true
 

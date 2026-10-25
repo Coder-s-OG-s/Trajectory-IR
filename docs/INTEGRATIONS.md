@@ -6,8 +6,8 @@ Trajectory IR connects to hosts two ways:
    so a `DECISION` is sealed **before** the world changes, then `trajir verify`
    on the `.tir` pack. Canonical guide: [EVIDENCE_SIDECAR.md](EVIDENCE_SIDECAR.md).
 2. **MCP server** — stdio tools for status / export / import / signature verify
-   (below). Host plugins live in a separate repo later; they do not reimplement
-   IR semantics.
+   (below). Project-local MCP config is written by the one-step installer.
+   Those entries do not seal the host's own tools and do not reimplement IR.
 
 ---
 
@@ -28,8 +28,10 @@ Do not claim Chain-of-Evidence from a post-hoc OTLP collector.
 ## MCP (primary host protocol)
 
 Trajectory IR exposes agent hosts through a **Model Context Protocol (MCP)**
-server. Host-specific plugins (Claude Code, Cursor configs) live in a **separate
-repo** later and only package config; they do not reimplement IR semantics.
+server. `scripts/install_claude.ps1` and `scripts/install_claude.sh` write
+project-local config for Claude Code, Cursor, VS Code, Gemini CLI, and Codex.
+Those entries start `trajir-mcp`. They do not seal the host's own tools.
+Skill files and UI that are not that config stay out of this repo.
 
 ## Architecture
 

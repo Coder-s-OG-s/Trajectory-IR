@@ -110,6 +110,34 @@ More: **[QUICKSTART.md](QUICKSTART.md)** · kill-mid-deploy demo: [`examples/kil
 
 ---
 
+## Attach it to a project
+
+One command in this checkout builds `trajir.exe`, `trajir-mcp.exe`, and `trajir-console.exe`. It writes project-local hooks and smoke-checks one pack. The user profile is not edited.
+
+```powershell
+pwsh -File scripts\install_claude.ps1
+pwsh -File scripts\install_claude.ps1 -Target C:\path\to\other\repo
+```
+
+```bash
+./scripts/install_claude.sh
+./scripts/install_claude.sh --target /path/to/other/repo
+```
+
+`--target` writes the config into that directory. The hook scripts stay in this install. The same step writes Cursor, VS Code, Gemini CLI, and Codex project MCP config. Those entries do not seal the host's own tools. LangGraph and ADK snippets land in `.trajir/` and import their libraries only when called.
+
+The first PreToolUse exits 0 after the seal so the host can run the tool. The hook command carries the owner word `project`. The same owner asking again while that call is still pending exits 2 for `NON_IDEMPOTENT_WRITE` and for a row with no effect class. That is a crash before PostToolUse. A different owner on that pending call exits 0, so a second registration can watch the same attempt. A second registration of this hook must use a different owner word. The same word looks like a retry and blocks the first run. After PostToolUse records the result, a later PreToolUse for that `NON_IDEMPOTENT_WRITE` id exits 2. A recorded row with no effect class exits 2 as well. The hook does not call the tool and does not start DBOS. PostToolUse is best-effort: if the diary write fails, it still exits 0, and the tool-call row is stored only after the tool has run. A missing `TRAJIR_IDENTITY_FILE` exits 2 and names `scripts/install_claude.ps1` or `scripts/install_claude.sh`. When that variable is unset, the work directory is this install's `.local-evidence/claude-agent`. The launcher only runs `pre_tool_use.py`, `post_tool_use.py`, and `post_tool_use_failure.py` from this install. Any other script exits 2 on PreToolUse and is not executed. If Python itself never starts, the host can still run the tool. Once the launcher process is up, an import error on PreToolUse exits 2.
+
+The installer adds `.local-evidence/`, `.claude/settings.local.json`, `.mcp.json`, `.cursor/mcp.json`, `.vscode/mcp.json`, `.gemini/settings.json`, `.codex/config.toml`, and `.trajir/*.py` to the target `.gitignore` when those lines are missing.
+
+If `127.0.0.1:8787` is free, the installer starts `trajir-console` and waits until it accepts a connection. The console data directory is `<target>/.local-evidence/console-data`. If something is already listening, it leaves that process alone. If the new process dies, the installer says so and exits 1. `--skip-console` skips the start. There is no second console. The binary is `go/trajir-console.exe` on every OS. If that file is missing and `go` is not installed, the installer names the path and stops.
+
+Token numbers on the console are `ceil(chars/4)` estimates. Adopters stay empty. This is not exactly-once, not a process sandbox, and not Sigstore.
+
+The install page is [website/docs/one-step.md](website/docs/one-step.md). GitHub Actions builds it from `.github/workflows/docs-site.yml` after that file is on main.
+
+---
+
 ## Who is this for?
 
 | Audience | Start here |

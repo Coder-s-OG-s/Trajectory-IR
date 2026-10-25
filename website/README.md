@@ -26,12 +26,11 @@ bash website/scripts/capture_demos.sh
 
 ## Deploy
 
-Workflow template (checked in here because some OAuth tokens cannot push
-`.github/workflows/*` without the `workflow` scope):
+`.github/workflows/docs-site.yml` is the file Actions runs. `website/docs-site.workflow.yml` is the same text, kept here because some OAuth tokens cannot push `.github/workflows/*` without the `workflow` scope. Keep the two copies the same. The live file sets top-level `contents: read`, pins the pip install with `website/requirements.lock`, and gives each git ref its own Pages concurrency group.
 
 ```bash
 cp website/docs-site.workflow.yml .github/workflows/docs-site.yml
-git add .github/workflows/docs-site.yml
+git add .github/workflows/docs-site.yml website/docs-site.workflow.yml
 git commit -m "ci: enable docs site GitHub Pages workflow"
 git push
 ```
