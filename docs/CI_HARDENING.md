@@ -99,11 +99,21 @@ Track remaining Scorecard work under
 `FuzzLoadPackage` (`go/trajir/tir/load_fuzz_test.go`) passes arbitrary bytes
 to `tir.LoadReader`. That is zip open, member names, the size limits, and
 manifest / node JSON. An error returns a nil package. A loaded package stays
-inside `MaxNodes` and `MaxArtifacts`.
+inside `MaxNodes`, `MaxSeals`, and `MaxArtifacts`. Node tenant ids agree with
+each other and with a non-empty manifest tenant. A thin package has no
+embedded artifact bytes. A fat package has the bytes named in its artifact
+manifest.
+
+Checked-in seeds are `go/trajir/tir/testdata/fuzz-seeds/`. Plain `go test`
+reads those files. It does not open SQLite or export a package for this
+target. `thin-decision.tir` has a decision seal, `fat-cas.tir` has an
+`artifacts/cas/` member, and `signed-thin.tir` has `SIGNATURE`.
 
 Job `Go fuzz (tir)` runs the target for 30s on pull requests and on `main`.
 It is not a required status check. Plain `go test` still runs the seeds, so
-the `Go` job covers them.
+the `Go` job covers them. If the fuzz step fails, the job uploads
+`go/trajir/tir/testdata/fuzz/` (the crasher corpus). A failure that wrote
+no file there does not fail the upload.
 
 ```bash
 cd go
