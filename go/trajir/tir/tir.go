@@ -782,10 +782,6 @@ func LoadUnverified(path string) (*Package, error) {
 	return loadImplWithOptions(path, false, VerifyOptions{})
 }
 
-func loadImpl(path string, verify bool) (*Package, error) {
-	return loadImplWithOptions(path, verify, VerifyOptions{})
-}
-
 func loadImplWithOptions(path string, verify bool, opts VerifyOptions) (*Package, error) {
 	st, err := os.Stat(path)
 	if err != nil || st.IsDir() {
@@ -798,10 +794,6 @@ func loadImplWithOptions(path string, verify bool, opts VerifyOptions) (*Package
 	}
 	defer zr.Close()
 	return loadFromZipWithOptions(&zr.Reader, verify, opts)
-}
-
-func loadFromZip(zr *zip.Reader, verify bool) (*Package, error) {
-	return loadFromZipWithOptions(zr, verify, VerifyOptions{})
 }
 
 func loadFromZipWithOptions(zr *zip.Reader, verify bool, opts VerifyOptions) (*Package, error) {
