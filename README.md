@@ -224,7 +224,7 @@ Same agent, two modes: **live** does the job; **sandbox** refuses dangerous *cla
 |---|---|
 | Spec | `spec-v0.2-draft` — [master specification](docs/MASTER_SPECIFICATION.md) |
 | Phase | **1C harden and adopt** (Go primary; Python parity) — see [docs/ROADMAP.md](docs/ROADMAP.md) |
-| Library | Latest tag is **v0.2.2**. `pyproject.toml` is **0.3.0** for the import move, and that version is not tagged. The one-step Claude attach is not its own release |
+| Library | Latest tag is **v0.3.0**. `pyproject.toml` is **0.3.0**. The one-step Claude attach ships in that tag, not as its own release |
 | OpenSSF Best Practices | [Project 14075](https://www.bestpractices.dev/projects/14075) |
 | CNCF Sandbox | Preparing — [outline](docs/CNCF_SANDBOX_APPLICATION_OUTLINE.md). **Not** claiming CNCF membership until TOC approval |
 | Adopters | Honest empty list — [ADOPTERS.md](ADOPTERS.md) (add yourself via PR when you consent) |
