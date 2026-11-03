@@ -328,6 +328,40 @@ func TestGatedIntegerDomainWithoutDigestStillBlocks(t *testing.T) {
 	}
 }
 
+func TestGatedIntegerDomainWithoutCallDoesNotRun(t *testing.T) {
+	nl := openLog(t)
+	step := 1
+	if _, err := nl.Append(
+		"TOOL_RESULT", &step,
+		map[string]any{
+			"error":         "integer_domain",
+			"message":       "too big",
+			"result_digest": "abc",
+		},
+		"t1", "demo", 3,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	gated := resume.MakeGatedToolCall(nl, "t1", "demo", 1, 2, "deploy_server",
+		func(map[string]any) (any, error) {
+			t.Fatal("tool body ran")
+			return nil, nil
+		})
+	_, err := gated(nil)
+	var unsafe *resume.UnsafeInteger
+	if !errors.As(err, &unsafe) {
+		t.Fatalf("err=%v, want UnsafeInteger", err)
+	}
+	if unsafe.Error() != "too big" {
+		t.Fatalf("message=%q", unsafe.Error())
+	}
+	ok, hasErr := nl.Has("t1", "demo", 1, "TOOL_CALL", intPtr(2))
+	if hasErr != nil || ok {
+		t.Fatalf("TOOL_CALL present=%v err=%v, want none", ok, hasErr)
+	}
+}
+
 func TestPlainIntegerDomainDoesNotRunOrRecordCall(t *testing.T) {
 	nl := openLog(t)
 	step := 1

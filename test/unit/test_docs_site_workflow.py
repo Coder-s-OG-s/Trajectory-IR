@@ -10,7 +10,17 @@ def test_docs_site_workflow_copy_matches() -> None:
     live = (root / ".github" / "workflows" / "docs-site.yml").read_bytes()
     copy = (root / "website" / "docs-site.workflow.yml").read_bytes()
     assert live == copy
-    text = live.decode("utf-8")
+    text = live.decode("utf-8").replace("\r\n", "\n")
     assert "github.ref != 'refs/heads/main'" in text
-    # Upload and deploy both stay off unless the repo variable is exactly true.
-    assert text.count("vars.ENABLE_PAGES == 'true'") == 2
+    pages_if = (
+        "github.ref == 'refs/heads/main' && github.event_name != 'pull_request' "
+        "&& vars.ENABLE_PAGES == 'true'"
+    )
+    assert (
+        "      - name: Upload Pages artifact\n"
+        f"        if: {pages_if}\n"
+    ) in text
+    assert (
+        "  deploy:\n"
+        f"    if: {pages_if}\n"
+    ) in text

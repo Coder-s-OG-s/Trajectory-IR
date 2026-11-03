@@ -69,6 +69,17 @@ func MakeGatedToolCall(
 		}
 		step := stepN
 
+		// Look up seq+1 once, and only when that slot exists. A stored
+		// integer_domain row is a storage failure, including when the
+		// TOOL_CALL was never written, so the claim must not run the tool.
+		payload, found, err := storedToolPayload(log, trajectoryID, tenantID, stepN, seq+1)
+		if err != nil {
+			return nil, err
+		}
+		if failed := integerFailure(payload); failed != nil {
+			return nil, failed
+		}
+
 		claimed, err := log.ClaimToolCall(
 			stepN,
 			map[string]any{
@@ -84,23 +95,21 @@ func MakeGatedToolCall(
 			return nil, err
 		}
 		if !claimed {
-			// A stored integer_domain row is a storage failure, not a result
-			// and not a crash. Python raises before it looks for {"result": ...}.
-			failed, err := storedIntegerFailure(log, trajectoryID, tenantID, stepN, seq+1)
-			if err != nil {
-				return nil, err
-			}
-			if failed != nil {
-				return nil, failed
+			if !found {
+				payload, found, err = storedToolPayload(log, trajectoryID, tenantID, stepN, seq+1)
+				if err != nil {
+					return nil, err
+				}
+				if failed := integerFailure(payload); failed != nil {
+					return nil, failed
+				}
 			}
 			// The effect already ran and its outcome is durable. Return it
 			// instead of blocking; nothing re-executes.
-			stored, found, err := storedToolResult(log, trajectoryID, tenantID, stepN, seq+1)
-			if err != nil {
-				return nil, err
-			}
 			if found {
-				return stored, nil
+				if result, ok := payload["result"]; ok {
+					return result, nil
+				}
 			}
 			if _, err := log.Append(
 				"ABORT",
@@ -134,13 +143,19 @@ func MakeGatedToolCall(
 	}
 }
 
-// storedToolResult returns the result recorded in the TOOL_RESULT node at
-// (stepN, seq), if there is one.
-func storedToolResult(
+// storedToolPayload returns the TOOL_RESULT payload at (stepN, seq).
+// Has runs first, matching Python, so a first call does not decode the log.
+// Callers branch on that one payload: integer_domain, a stored result, or neither.
+func storedToolPayload(
 	log *nodelog.NodeLog,
 	trajectoryID, tenantID string,
 	stepN, seq int,
-) (any, bool, error) {
+) (map[string]any, bool, error) {
+	slot := seq
+	has, err := log.Has(trajectoryID, tenantID, stepN, "TOOL_RESULT", &slot)
+	if err != nil || !has {
+		return nil, false, err
+	}
 	rows, err := log.ListNodes(trajectoryID, tenantID)
 	if err != nil {
 		return nil, false, err
@@ -151,46 +166,29 @@ func storedToolResult(
 		}
 		payload, ok := row["payload"].(map[string]any)
 		if !ok {
-			continue
+			return nil, false, nil
 		}
-		if result, ok := payload["result"]; ok {
-			return result, true, nil
-		}
+		return payload, true, nil
 	}
 	return nil, false, nil
 }
 
-// storedIntegerFailure matches the Python reader. error must be
-// integer_domain and result_digest must be a string. Any string counts,
-// including a short one. A missing or non-string digest is not this
-// failure, so the caller still gates. An empty message uses the default.
-func storedIntegerFailure(
-	log *nodelog.NodeLog,
-	trajectoryID, tenantID string,
-	stepN, seq int,
-) (*UnsafeInteger, error) {
-	rows, err := log.ListNodes(trajectoryID, tenantID)
-	if err != nil {
-		return nil, err
+// integerFailure matches the Python reader. error must be integer_domain
+// and result_digest must be a string. Any string counts, including a short
+// one. A missing or non-string digest is not this failure, so the caller
+// still gates. An empty message uses the default.
+func integerFailure(payload map[string]any) *UnsafeInteger {
+	if payload == nil || payload["error"] != integerDomain {
+		return nil
 	}
-	for _, row := range rows {
-		if row["kind"] != "TOOL_RESULT" || row["step_n"] != stepN || row["seq"] != seq {
-			continue
-		}
-		payload, ok := row["payload"].(map[string]any)
-		if !ok || payload["error"] != integerDomain {
-			continue
-		}
-		if _, ok := payload["result_digest"].(string); !ok {
-			continue
-		}
-		message, _ := payload["message"].(string)
-		if message == "" {
-			message = defaultUnsafeIntegerMessage
-		}
-		return &UnsafeInteger{Message: message}, nil
+	if _, ok := payload["result_digest"].(string); !ok {
+		return nil
 	}
-	return nil, nil
+	message, _ := payload["message"].(string)
+	if message == "" {
+		message = defaultUnsafeIntegerMessage
+	}
+	return &UnsafeInteger{Message: message}
 }
 
 // MakePlainToolCall wraps toolFn for non-gated tools with audit logging.
@@ -211,11 +209,11 @@ func MakePlainToolCall(
 		}
 		step := stepN
 
-		failed, err := storedIntegerFailure(log, trajectoryID, tenantID, stepN, seq+1)
+		payload, _, err := storedToolPayload(log, trajectoryID, tenantID, stepN, seq+1)
 		if err != nil {
 			return nil, err
 		}
-		if failed != nil {
+		if failed := integerFailure(payload); failed != nil {
 			return nil, failed
 		}
 
