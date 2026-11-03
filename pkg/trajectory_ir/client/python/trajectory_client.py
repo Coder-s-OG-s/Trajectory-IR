@@ -240,6 +240,7 @@ def exec_tool(trajectory: Trajectory, step_n: int, call: dict, tool: Tool, seq: 
                 seq=seq,
                 tool_name=tool.name,
                 tool_fn=tool.fn,
+                resolve_fn=getattr(tool, "resolve", None),
             )
             result = fn(**call["args"])
         else:

@@ -115,6 +115,20 @@ class _FakeStore:
                 ):
                     return [(row["id"],)]
             return []
+        if s.startswith("select payload_json from nodes") and "coalesce" in s:
+            tenant_id, trajectory_id, step_n, seq, kind = params
+            for row in self.rows.values():
+                sn = row["step_n"] if row["step_n"] is not None else -1
+                pn = step_n if step_n is not None else -1
+                if (
+                    row["tenant_id"] == tenant_id
+                    and row["trajectory_id"] == trajectory_id
+                    and sn == pn
+                    and row["seq"] == seq
+                    and row["kind"] == kind
+                ):
+                    return [(row["payload_json"],)]
+            return []
         if "select 1 from nodes" in s and "for update" in s:
             tenant_id, trajectory_id, step_n, kind, seq = params
             for row in self.rows.values():
@@ -339,6 +353,16 @@ def test_has_rejects_empty_tenant(log: PostgresNodeLog):
         log.has("t1", "", 1, "DECISION")
 
 
+def test_get_node_payload_reads_one_slot(log: PostgresNodeLog):
+    log.append("TOOL_CALL", 1, {"seq": 2}, "t1", "demo", 2)
+    log.append("TOOL_RESULT", 1, {"seq": 3}, "t1", "demo", 3)
+    assert log.get_node_payload("t1", "demo", 1, 3, "TOOL_RESULT") == {"seq": 3}
+    assert log.get_node_payload("t1", "demo", 1, 3, "TOOL_CALL") is None
+    assert log.get_node_payload("t1", "other", 1, 3, "TOOL_RESULT") is None
+    with pytest.raises(ValueError):
+        log.get_node_payload("t1", "", 1, 3, "TOOL_RESULT")
+
+
 def test_claim_tool_call_single_winner(log: PostgresNodeLog):
     wins: list[bool] = []
 
@@ -449,5 +473,6 @@ def test_live_postgres_roundtrip():
         assert log.has("live-t", "demo", 1, "DECISION")
         rows = log.list_nodes("live-t", tenant_id="demo")
         assert rows[0]["id"] == n.id
+        assert log.get_node_payload("live-t", "demo", 1, 1, "DECISION") == {"plan": "live"}
     finally:
         log.close()

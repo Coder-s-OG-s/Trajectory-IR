@@ -254,6 +254,7 @@ def make_run_step(
                     seq,
                     name,
                     tool.fn,
+                    resolve_fn=getattr(tool, "resolve", None),
                 )
                 result = durable_tool(gated)(**args)
             else:

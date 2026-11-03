@@ -258,7 +258,7 @@ func (t *Trajectory) ExecTool(stepN, seq int, tool resume.Tool, args map[string]
 	meta := resume.NewCallMeta(t.TenantID, t.TrajectoryID, stepN, seq)
 	bound := resume.BoundToolFn(tool, meta)
 	if effects.RequiresBlockAndGate(tool.Effect) {
-		fn := resume.MakeGatedToolCall(
+		fn := resume.MakeGatedToolCallWithResolve(
 			t.log,
 			t.TrajectoryID,
 			t.TenantID,
@@ -266,6 +266,7 @@ func (t *Trajectory) ExecTool(stepN, seq int, tool resume.Tool, args map[string]
 			seq,
 			tool.Name,
 			bound,
+			tool.Resolve,
 		)
 		result, err := fn(args)
 		t.emitToolNodes(stepN, seq, tool.Effect)

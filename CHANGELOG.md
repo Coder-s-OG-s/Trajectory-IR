@@ -122,6 +122,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Post-merge fixes to #483 and #484 (#488). `SENSITIVE` is block-and-gated
+  on resume in Go and Python. A tool carries one class, so the layered
+  wording left a sensitive write ungated. A gated call that finds its slot
+  claimed checks that the tool name and args match the stored `TOOL_CALL`
+  by RFC 8785 hash. A mismatch raises `ToolCallConflict` (a slot conflict)
+  instead of returning the old result. Go reads an `integer_domain`
+  `TOOL_RESULT` as `UnsafeInteger` on the gated and plain paths, and no
+  longer writes `ABORT` for it. Gated tools take an optional resolve hook
+  (`Tool.resolve`, `Tool.Resolve`). It runs only for a claimed call with
+  no outcome, gets the args and idempotency key, and must not start the
+  effect again. A result it returns is recorded as the `TOOL_RESULT`.
+  `UNRESOLVED` (Python) or `resolved=false` (Go) blocks as before. The gate
+  reads one slot with `get_node_payload` / `GetNodePayload` on the SQLite
+  and Postgres logs instead of decoding the whole trajectory.
 - Package load rejects a `seals.json` array longer than 100000 entries.
   Go calls that cap `MaxSeals`. Python calls it `MAX_SEALS`. Node and
   artifact caps are unchanged.

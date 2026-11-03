@@ -22,6 +22,9 @@ type Tool struct {
 	// PURE, READ_ONLY, or IDEMPOTENT_WRITE. Without it, ExecTool / RunStep
 	// refuse the claim.
 	AllowOpenWorldOverride bool
+	// Resolve is for gated tools only. It looks up how a claimed call with no
+	// recorded outcome ended. See MakeGatedToolCallWithResolve.
+	Resolve ResolveFunc
 }
 
 // ToolFuncWithMeta is a tool body that also receives CallMeta.
@@ -191,7 +194,7 @@ func RunStep(
 		var result any
 		stepKey := fmt.Sprintf("%s@%d", call.Name, seq)
 		if effects.RequiresBlockAndGate(tool.Effect) {
-			gated := MakeGatedToolCall(
+			gated := MakeGatedToolCallWithResolve(
 				cfg.Log,
 				cfg.TrajectoryID,
 				cfg.TenantID,
@@ -199,6 +202,7 @@ func RunStep(
 				seq,
 				call.Name,
 				fn,
+				tool.Resolve,
 			)
 			result, err = durable.Tool(ctx, cfg.Backend, memoScope, stepKey, func(context.Context) (any, error) {
 				return gated(args)

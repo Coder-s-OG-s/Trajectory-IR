@@ -245,6 +245,30 @@ class NodeLog:
             cur = self._conn.execute("SELECT COUNT(*) FROM nodes WHERE id = ?", (node_id,))
             return int(cur.fetchone()[0])
 
+    def get_node_payload(
+        self,
+        trajectory_id: str,
+        tenant_id: str,
+        step_n: int,
+        seq: int,
+        kind: str,
+    ) -> dict | None:
+        """Payload of the node at one logical slot, or None when the slot is empty.
+
+        A point lookup on ``idx_nodes_slot``. The resume gate uses it instead
+        of ``list_nodes``, which reads and decodes the whole trajectory.
+        """
+        if not tenant_id:
+            raise ValueError("tenant_id must be a non-empty string")
+        with self._lock:
+            cur = self._conn.execute(
+                "SELECT payload_json FROM nodes WHERE tenant_id = ? AND trajectory_id = ? "
+                "AND IFNULL(step_n, -1) = IFNULL(?, -1) AND seq = ? AND kind = ? LIMIT 1",
+                (tenant_id, trajectory_id, step_n, seq, kind),
+            )
+            row = cur.fetchone()
+        return json.loads(row[0]) if row is not None else None
+
     def list_nodes(
         self,
         trajectory_id: str,
