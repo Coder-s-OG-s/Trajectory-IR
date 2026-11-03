@@ -16,11 +16,5 @@ def test_docs_site_workflow_copy_matches() -> None:
         "github.ref == 'refs/heads/main' && github.event_name != 'pull_request' "
         "&& vars.ENABLE_PAGES == 'true'"
     )
-    assert (
-        "      - name: Upload Pages artifact\n"
-        f"        if: {pages_if}\n"
-    ) in text
-    assert (
-        "  deploy:\n"
-        f"    if: {pages_if}\n"
-    ) in text
+    assert (f"      - name: Upload Pages artifact\n        if: {pages_if}\n") in text
+    assert (f"  deploy:\n    if: {pages_if}\n") in text
