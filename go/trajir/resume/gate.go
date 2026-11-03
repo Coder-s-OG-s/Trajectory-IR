@@ -26,6 +26,25 @@ func (e *BlockedNeedsGate) Error() string {
 	)
 }
 
+const integerDomain = "integer_domain"
+
+const defaultUnsafeIntegerMessage = "integer exceeds safe integer domain for JSON floats"
+
+// UnsafeInteger is a stored integer_domain TOOL_RESULT. A peer writer
+// refused to store an integer outside the RFC 8785 range, so the number
+// is not in the log. Resume reports that storage failure. It does not
+// run the tool again and it does not write ABORT.
+type UnsafeInteger struct {
+	Message string
+}
+
+func (e *UnsafeInteger) Error() string {
+	if e == nil || e.Message == "" {
+		return defaultUnsafeIntegerMessage
+	}
+	return e.Message
+}
+
 // ToolFunc is a tool body that receives a free-form args map.
 type ToolFunc func(args map[string]any) (any, error)
 
@@ -65,6 +84,15 @@ func MakeGatedToolCall(
 			return nil, err
 		}
 		if !claimed {
+			// A stored integer_domain row is a storage failure, not a result
+			// and not a crash. Python raises before it looks for {"result": ...}.
+			failed, err := storedIntegerFailure(log, trajectoryID, tenantID, stepN, seq+1)
+			if err != nil {
+				return nil, err
+			}
+			if failed != nil {
+				return nil, failed
+			}
 			// The effect already ran and its outcome is durable. Return it
 			// instead of blocking; nothing re-executes.
 			stored, found, err := storedToolResult(log, trajectoryID, tenantID, stepN, seq+1)
@@ -132,6 +160,39 @@ func storedToolResult(
 	return nil, false, nil
 }
 
+// storedIntegerFailure matches the Python reader. error must be
+// integer_domain and result_digest must be a string. Any string counts,
+// including a short one. A missing or non-string digest is not this
+// failure, so the caller still gates. An empty message uses the default.
+func storedIntegerFailure(
+	log *nodelog.NodeLog,
+	trajectoryID, tenantID string,
+	stepN, seq int,
+) (*UnsafeInteger, error) {
+	rows, err := log.ListNodes(trajectoryID, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		if row["kind"] != "TOOL_RESULT" || row["step_n"] != stepN || row["seq"] != seq {
+			continue
+		}
+		payload, ok := row["payload"].(map[string]any)
+		if !ok || payload["error"] != integerDomain {
+			continue
+		}
+		if _, ok := payload["result_digest"].(string); !ok {
+			continue
+		}
+		message, _ := payload["message"].(string)
+		if message == "" {
+			message = defaultUnsafeIntegerMessage
+		}
+		return &UnsafeInteger{Message: message}, nil
+	}
+	return nil, nil
+}
+
 // MakePlainToolCall wraps toolFn for non-gated tools with audit logging.
 //
 // Seq layout matches Python: TOOL_CALL at seq, TOOL_RESULT at seq+1.
@@ -149,6 +210,14 @@ func MakePlainToolCall(
 			args = map[string]any{}
 		}
 		step := stepN
+
+		failed, err := storedIntegerFailure(log, trajectoryID, tenantID, stepN, seq+1)
+		if err != nil {
+			return nil, err
+		}
+		if failed != nil {
+			return nil, failed
+		}
 
 		if _, err := log.Append(
 			"TOOL_CALL",
