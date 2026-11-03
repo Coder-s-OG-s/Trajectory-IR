@@ -2,9 +2,14 @@
 package resume
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"strings"
 
 	nodelog "github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/log"
+	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/nodes"
 )
 
 // BlockedNeedsGate is raised when a NON_IDEMPOTENT_WRITE tool was already
@@ -30,10 +35,10 @@ const integerDomain = "integer_domain"
 
 const defaultUnsafeIntegerMessage = "integer exceeds safe integer domain for JSON floats"
 
-// UnsafeInteger is a stored integer_domain TOOL_RESULT. A peer writer
-// refused to store an integer outside the RFC 8785 range, so the number
-// is not in the log. Resume reports that storage failure. It does not
-// run the tool again and it does not write ABORT.
+// UnsafeInteger is a stored integer_domain TOOL_RESULT. The raw number
+// is outside the RFC 8785 range, so the log keeps a digest instead.
+// Resume reports that storage failure. It does not run the tool again
+// and it does not write ABORT.
 type UnsafeInteger struct {
 	Message string
 }
@@ -129,17 +134,7 @@ func MakeGatedToolCall(
 			return nil, err
 		}
 
-		if _, err := log.Append(
-			"TOOL_RESULT",
-			&step,
-			map[string]any{"result": result},
-			trajectoryID,
-			tenantID,
-			seq+1,
-		); err != nil {
-			return nil, err
-		}
-		return result, nil
+		return appendToolResult(log, trajectoryID, tenantID, stepN, seq+1, result)
 	}
 }
 
@@ -237,16 +232,74 @@ func MakePlainToolCall(
 			return nil, err
 		}
 
+		return appendToolResult(log, trajectoryID, tenantID, stepN, seq+1, result)
+	}
+}
+
+// appendToolResult stores {"result": ...} when the value can be hashed.
+// An integer outside the safe JSON range is stored as integer_domain, with
+// a digest in place of the number, and returned as UnsafeInteger. The tool
+// body has already run. A later call reads that row and does not run again.
+func appendToolResult(
+	log *nodelog.NodeLog,
+	trajectoryID, tenantID string,
+	stepN, seq int,
+	result any,
+) (any, error) {
+	step := stepN
+	payload := map[string]any{"result": result}
+	if _, err := nodes.PayloadHash(payload); err != nil {
+		message, ok := integerDomainMessage(err)
+		if !ok {
+			return nil, err
+		}
 		if _, err := log.Append(
 			"TOOL_RESULT",
 			&step,
-			map[string]any{"result": result},
+			map[string]any{
+				"error":         integerDomain,
+				"message":       message,
+				"result_digest": resultDigest(result),
+			},
 			trajectoryID,
 			tenantID,
-			seq+1,
+			seq,
 		); err != nil {
 			return nil, err
 		}
-		return result, nil
+		return nil, &UnsafeInteger{Message: message}
 	}
+	if _, err := log.Append(
+		"TOOL_RESULT",
+		&step,
+		payload,
+		trajectoryID,
+		tenantID,
+		seq,
+	); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func integerDomainMessage(err error) (string, bool) {
+	if err == nil {
+		return "", false
+	}
+	message := err.Error()
+	if !strings.Contains(message, "exceeds safe integer domain") {
+		return "", false
+	}
+	return message, true
+}
+
+// resultDigest is SHA-256 hex of compact JSON, with object keys sorted.
+// That matches Python json.dumps(..., sort_keys=True, separators=(",", ":")).
+func resultDigest(result any) string {
+	raw, err := json.Marshal(result)
+	if err != nil {
+		raw = []byte(fmt.Sprintf("%T", result))
+	}
+	sum := sha256.Sum256(raw)
+	return hex.EncodeToString(sum[:])
 }
