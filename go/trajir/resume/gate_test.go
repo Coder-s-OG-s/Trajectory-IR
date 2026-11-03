@@ -1,6 +1,9 @@
 package resume_test
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -8,6 +11,7 @@ import (
 	"testing"
 
 	nodelog "github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/log"
+	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/nodes"
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/resume"
 )
 
@@ -394,6 +398,119 @@ func TestPlainIntegerDomainDoesNotRunOrRecordCall(t *testing.T) {
 	if hasErr != nil || ok {
 		t.Fatalf("TOOL_CALL present=%v err=%v, want none", ok, hasErr)
 	}
+}
+
+func TestGatedUnsafeResultIsStoredAndNotRerun(t *testing.T) {
+	nl := openLog(t)
+	calls := 0
+	big := int64(1<<53) + 1
+	gated := resume.MakeGatedToolCall(nl, "t1", "demo", 1, 2, "mint",
+		func(map[string]any) (any, error) {
+			calls++
+			return map[string]any{"id": big}, nil
+		})
+
+	_, err := gated(nil)
+	var unsafe *resume.UnsafeInteger
+	if !errors.As(err, &unsafe) {
+		t.Fatalf("first err=%v, want UnsafeInteger", err)
+	}
+	want := "9007199254740993 exceeds safe integer domain for JSON floats"
+	if unsafe.Error() != want {
+		t.Fatalf("message=%q", unsafe.Error())
+	}
+	if calls != 1 {
+		t.Fatalf("calls=%d after first, want 1", calls)
+	}
+
+	_, err = gated(nil)
+	if !errors.As(err, &unsafe) {
+		t.Fatalf("second err=%v, want UnsafeInteger", err)
+	}
+	if calls != 1 {
+		t.Fatalf("calls=%d after second, want 1", calls)
+	}
+	ok, hasErr := nl.Has("t1", "demo", 1, "ABORT", intPtr(3))
+	if hasErr != nil || ok {
+		t.Fatalf("ABORT present=%v err=%v, want none", ok, hasErr)
+	}
+
+	payload := toolResultPayload(t, nl, 3)
+	if payload["error"] != "integer_domain" || payload["message"] != want {
+		t.Fatalf("payload=%v", payload)
+	}
+	raw, err := json.Marshal(map[string]any{"id": big})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(raw)
+	if payload["result_digest"] != hex.EncodeToString(sum[:]) {
+		t.Fatalf("digest=%v", payload["result_digest"])
+	}
+	if _, err := nodes.PayloadHash(payload); err != nil {
+		t.Fatalf("failure row is not hashable: %v", err)
+	}
+}
+
+func TestPlainUnsafeResultIsStoredAndNotRerun(t *testing.T) {
+	nl := openLog(t)
+	calls := 0
+	big := int64(1<<53) + 1
+	plain := resume.MakePlainToolCall(nl, "t1", "demo", 1, 2, "mint",
+		func(map[string]any) (any, error) {
+			calls++
+			return map[string]any{"id": big}, nil
+		})
+
+	_, err := plain(nil)
+	var unsafe *resume.UnsafeInteger
+	if !errors.As(err, &unsafe) {
+		t.Fatalf("first err=%v, want UnsafeInteger", err)
+	}
+	_, err = plain(nil)
+	if !errors.As(err, &unsafe) {
+		t.Fatalf("second err=%v, want UnsafeInteger", err)
+	}
+	if calls != 1 {
+		t.Fatalf("calls=%d, want 1", calls)
+	}
+	rows, err := nl.ListNodes("t1", "demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	toolCalls := 0
+	for _, row := range rows {
+		if row["kind"] == "TOOL_CALL" {
+			toolCalls++
+		}
+	}
+	if toolCalls != 1 {
+		t.Fatalf("TOOL_CALL count=%d, want 1", toolCalls)
+	}
+	payload := toolResultPayload(t, nl, 3)
+	if payload["error"] != "integer_domain" {
+		t.Fatalf("payload=%v", payload)
+	}
+}
+
+func toolResultPayload(t *testing.T, nl *nodelog.NodeLog, seq int) map[string]any {
+	t.Helper()
+	rows, err := nl.ListNodes("t1", "demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range rows {
+		if row["kind"] != "TOOL_RESULT" || row["seq"] != seq {
+			continue
+		}
+		payload, ok := row["payload"].(map[string]any)
+		if !ok {
+			t.Fatalf("payload type %T", row["payload"])
+		}
+		return payload
+	}
+	t.Fatalf("no TOOL_RESULT at seq %d", seq)
+	return nil
 }
 
 func intPtr(v int) *int { return &v }

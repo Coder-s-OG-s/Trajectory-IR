@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Go stores a `TOOL_RESULT` with `error` `integer_domain` when a tool
+  result holds an integer outside the safe JSON range. The number itself
+  is not in the log. A later call raises that storage failure, does not
+  run the tool again, and does not write `ABORT`.
+
 ## [0.3.0] - 2026-11-03
 
 ### Added
