@@ -12,3 +12,5 @@ def test_docs_site_workflow_copy_matches() -> None:
     assert live == copy
     text = live.decode("utf-8")
     assert "github.ref != 'refs/heads/main'" in text
+    # Upload and deploy both stay off unless the repo variable is exactly true.
+    assert text.count("vars.ENABLE_PAGES == 'true'") == 2
