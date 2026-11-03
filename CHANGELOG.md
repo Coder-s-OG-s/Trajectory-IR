@@ -122,6 +122,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Package load rejects a `seals.json` array longer than 100000 entries.
+  Go calls that cap `MaxSeals`. Python calls it `MAX_SEALS`. Node and
+  artifact caps are unchanged.
 - `scripts/install_claude.sh` uses `TRAJIR_PYTHON`, then `.venv/bin/python`,
   then `python3`, then `python`. The installer used to run under a bare
   `python`, which could resolve to the wrong interpreter. The hook command
