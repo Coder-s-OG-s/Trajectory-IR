@@ -2,9 +2,43 @@ import hashlib
 import json
 
 from trajectory_ir.resume.idempotency import CallMeta, bind_call_meta
-from trajectory_ir.runtime.nodes import UnsafeInteger, reject_unsafe_integers
+from trajectory_ir.runtime.log import SlotConflictError
+from trajectory_ir.runtime.nodes import UnsafeInteger, payload_hash, reject_unsafe_integers
 
 _INTEGER_DOMAIN = "integer_domain"
+
+
+class _Unresolved:
+    def __repr__(self) -> str:
+        return "UNRESOLVED"
+
+
+UNRESOLVED = _Unresolved()
+"""Returned by a ``resolve_fn`` that cannot say how an interrupted call ended.
+
+The gate then blocks as if no hook were set.
+"""
+
+
+class ToolCallConflict(SlotConflictError):
+    """Re-entry reached a claimed TOOL_CALL slot with a different tool or args.
+
+    The stored outcome belongs to the call that claimed the slot. Handing it
+    back for a different call would be wrong, and so would running the new
+    call in a slot that already holds an attempt.
+    """
+
+    def __init__(self, step_n: int, seq: int, tool_name: str):
+        self.step_n = step_n
+        self.seq = seq
+        self.tool_name = tool_name
+        super().__init__(
+            f"step {step_n} seq {seq}: '{tool_name}' does not match the TOOL_CALL "
+            "already claimed at this slot (different tool or args)"
+        )
+
+    def __reduce__(self):
+        return (self.__class__, (self.step_n, self.seq, self.tool_name))
 
 
 class BlockedNeedsGate(Exception):
@@ -53,32 +87,42 @@ def _integer_failure_payload(message: str, result) -> dict:
 
 
 def _stored_integer_failure(node_log, trajectory_id, tenant_id, step_n, seq):
-    if not node_log.has(trajectory_id, tenant_id, step_n, "TOOL_RESULT", seq=seq):
-        return None
-    for row in node_log.list_nodes(trajectory_id, tenant_id=tenant_id):
-        if row["step_n"] != step_n or row["seq"] != seq or row["kind"] != "TOOL_RESULT":
-            continue
-        payload = row["payload"]
-        if (
-            isinstance(payload, dict)
-            and payload.get("error") == _INTEGER_DOMAIN
-            and isinstance(payload.get("result_digest"), str)
-        ):
-            return payload
+    payload = node_log.get_node_payload(trajectory_id, tenant_id, step_n, seq, "TOOL_RESULT")
+    if (
+        isinstance(payload, dict)
+        and payload.get("error") == _INTEGER_DOMAIN
+        and isinstance(payload.get("result_digest"), str)
+    ):
+        return payload
     return None
 
 
 def _stored_tool_result(node_log, trajectory_id, tenant_id, step_n, seq):
     """The ``{"result": ...}`` payload already recorded at ``(step_n, seq)``, or None."""
-    if not node_log.has(trajectory_id, tenant_id, step_n, "TOOL_RESULT", seq=seq):
-        return None
-    for row in node_log.list_nodes(trajectory_id, tenant_id=tenant_id):
-        if row["step_n"] != step_n or row["seq"] != seq or row["kind"] != "TOOL_RESULT":
-            continue
-        payload = row["payload"]
-        if isinstance(payload, dict) and "result" in payload:
-            return payload
+    payload = node_log.get_node_payload(trajectory_id, tenant_id, step_n, seq, "TOOL_RESULT")
+    if isinstance(payload, dict) and "result" in payload:
+        return payload
     return None
+
+
+def _call_identity(tool_name, args) -> str:
+    return payload_hash({"tool": tool_name, "args": args})
+
+
+def _assert_same_call(node_log, trajectory_id, tenant_id, step_n, seq, tool_name, args) -> None:
+    """Raise ToolCallConflict unless the claimed TOOL_CALL has this tool and args.
+
+    Compared by RFC 8785 hash, so ``1`` and ``1.0`` or a tuple and a list match
+    the way they would in the node id.
+    """
+    stored = node_log.get_node_payload(trajectory_id, tenant_id, step_n, seq, "TOOL_CALL")
+    if not isinstance(stored, dict):
+        raise ToolCallConflict(step_n, seq, tool_name)
+    stored_args = stored.get("args")
+    if stored_args is None:
+        stored_args = {}
+    if _call_identity(stored.get("tool"), stored_args) != _call_identity(tool_name, args):
+        raise ToolCallConflict(step_n, seq, tool_name)
 
 
 def _raise_stored_integer_failure(payload: dict) -> None:
@@ -112,7 +156,37 @@ def _append_tool_result(node_log, trajectory_id, tenant_id, step_n, seq, result)
     )
 
 
-def make_gated_tool_call(node_log, trajectory_id, tenant_id, step_n, seq, tool_name, tool_fn):
+def _record_gated_outcome(node_log, trajectory_id, tenant_id, step_n, seq, result):
+    """Record ``result`` at the outcome slot and return the outcome that stands.
+
+    Two workers can finish the same claimed call: a resolver racing another
+    resolver, or a resolver racing the worker still running the tool. The first
+    commit wins. The loser hands back the winner's row instead of failing a step
+    whose outcome is already durable.
+    """
+    try:
+        _append_tool_result(node_log, trajectory_id, tenant_id, step_n, seq, result)
+    except SlotConflictError:
+        failed = _stored_integer_failure(node_log, trajectory_id, tenant_id, step_n, seq)
+        if failed is not None:
+            _raise_stored_integer_failure(failed)
+        stored = _stored_tool_result(node_log, trajectory_id, tenant_id, step_n, seq)
+        if stored is None:
+            raise
+        return stored["result"]
+    return result
+
+
+def make_gated_tool_call(
+    node_log,
+    trajectory_id,
+    tenant_id,
+    step_n,
+    seq,
+    tool_name,
+    tool_fn,
+    resolve_fn=None,
+):
     """Wrap a NON_IDEMPOTENT_WRITE tool so that a crash anywhere after the call
     started blocks instead of silently re-running the side effect on resume.
 
@@ -132,6 +206,20 @@ def make_gated_tool_call(node_log, trajectory_id, tenant_id, step_n, seq, tool_n
 
     The claim of the TOOL_CALL slot is atomic (``BEGIN IMMEDIATE`` + insert)
     so concurrent workers cannot both pass a non-atomic has-then-append race.
+
+    Re-entry must carry the same tool name and args as the claimed TOOL_CALL.
+    Otherwise it raises ``ToolCallConflict`` and returns nothing stored.
+
+    ``resolve_fn`` is an optional status lookup for a call that was claimed
+    but has no recorded outcome, for example a peer agent (``AGENT_SPAWN``)
+    still running on its own durable backend. It is called like the tool, with
+    the same kwargs and ``current_call_meta()`` bound, so it can look the call
+    up by its idempotency key. It must not start the effect again. A return
+    value other than ``UNRESOLVED`` is recorded as the TOOL_RESULT and returned.
+    ``UNRESOLVED`` raises ``BlockedNeedsGate`` without writing ABORT, because
+    the call may still finish and one slot holds one outcome. It is asked again
+    on the next re-entry. An ABORT already at this slot is final: the hook is
+    not asked and the call blocks.
     """
 
     def gated(**kwargs):
@@ -156,6 +244,7 @@ def make_gated_tool_call(node_log, trajectory_id, tenant_id, step_n, seq, tool_n
             seq,
         )
         if not claimed:
+            _assert_same_call(node_log, trajectory_id, tenant_id, step_n, seq, tool_name, kwargs)
             failed = _stored_integer_failure(node_log, trajectory_id, tenant_id, step_n, seq + 1)
             if failed is not None:
                 _raise_stored_integer_failure(failed)
@@ -165,6 +254,14 @@ def make_gated_tool_call(node_log, trajectory_id, tenant_id, step_n, seq, tool_n
             stored = _stored_tool_result(node_log, trajectory_id, tenant_id, step_n, seq + 1)
             if stored is not None:
                 return stored["result"]
+            aborted = node_log.get_node_payload(trajectory_id, tenant_id, step_n, seq + 1, "ABORT")
+            if resolve_fn is not None and aborted is None:
+                resolved = bind_call_meta(meta, resolve_fn, kwargs)
+                if resolved is UNRESOLVED:
+                    raise BlockedNeedsGate(step_n, tool_name)
+                return _record_gated_outcome(
+                    node_log, trajectory_id, tenant_id, step_n, seq + 1, resolved
+                )
             node_log.append(
                 "ABORT",
                 step_n,
@@ -176,8 +273,7 @@ def make_gated_tool_call(node_log, trajectory_id, tenant_id, step_n, seq, tool_n
             raise BlockedNeedsGate(step_n, tool_name)
 
         result = bind_call_meta(meta, tool_fn, kwargs)
-        _append_tool_result(node_log, trajectory_id, tenant_id, step_n, seq + 1, result)
-        return result
+        return _record_gated_outcome(node_log, trajectory_id, tenant_id, step_n, seq + 1, result)
 
     return gated
 

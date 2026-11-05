@@ -8,6 +8,7 @@ from trajectory_ir.effects.classify import (
     is_forbidden_in_sandbox,
     is_open_world_primitive,
     requires_block_and_gate,
+    sandbox_effect,
 )
 
 __all__ = [
@@ -20,4 +21,5 @@ __all__ = [
     "is_forbidden_in_sandbox",
     "is_open_world_primitive",
     "requires_block_and_gate",
+    "sandbox_effect",
 ]

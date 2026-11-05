@@ -224,64 +224,41 @@ def test_result_digest_survives_repr_errors():
     assert len(digest) == 64
 
 
-class _ScanLog:
-    def __init__(self, present: bool, rows: list):
-        self.present = present
-        self.rows = rows
-        self.scans = 0
+class _SlotLog:
+    """Answers one slot lookup and fails on a full trajectory scan."""
+
+    def __init__(self, payload):
+        self.payload = payload
         self.seen = None
 
-    def has(self, trajectory_id, tenant_id, step_n, kind, seq=None):
-        self.seen = (trajectory_id, tenant_id, step_n, kind, seq)
-        return self.present
+    def get_node_payload(self, trajectory_id, tenant_id, step_n, seq, kind):
+        self.seen = (trajectory_id, tenant_id, step_n, seq, kind)
+        return self.payload
 
     def list_nodes(self, trajectory_id, tenant_id):
-        self.scans += 1
-        return self.rows
+        raise AssertionError("the gate must not scan the whole trajectory")
 
 
-def test_stored_integer_failure_skips_the_log_scan_when_the_slot_is_empty():
-    log = _ScanLog(False, [])
+def test_stored_integer_failure_is_none_when_the_slot_is_empty():
+    log = _SlotLog(None)
     assert _stored_integer_failure(log, "t", TENANT_ID, 1, 3) is None
-    assert log.scans == 0
-    assert log.seen == ("t", TENANT_ID, 1, "TOOL_RESULT", 3)
+    assert log.seen == ("t", TENANT_ID, 1, 3, "TOOL_RESULT")
 
 
-def test_stored_integer_failure_reads_the_row_when_the_slot_exists():
+def test_stored_integer_failure_reads_one_slot():
     payload = {
         "error": "integer_domain",
         "message": "too big",
         "result_digest": "ab" * 32,
     }
-    log = _ScanLog(
-        True,
-        [
-            {
-                "step_n": 1,
-                "seq": 3,
-                "kind": "TOOL_RESULT",
-                "payload": payload,
-            }
-        ],
-    )
+    log = _SlotLog(payload)
     assert _stored_integer_failure(log, "t", TENANT_ID, 1, 3) == payload
-    assert log.scans == 1
+    assert log.seen == ("t", TENANT_ID, 1, 3, "TOOL_RESULT")
 
 
 def test_stored_integer_failure_ignores_a_normal_result():
-    log = _ScanLog(
-        True,
-        [
-            {
-                "step_n": 1,
-                "seq": 3,
-                "kind": "TOOL_RESULT",
-                "payload": {"result": 1},
-            }
-        ],
-    )
+    log = _SlotLog({"result": 1})
     assert _stored_integer_failure(log, "t", TENANT_ID, 1, 3) is None
-    assert log.scans == 1
 
 
 def test_plain_result_integer_records_one_failure_node(tmp_path):
