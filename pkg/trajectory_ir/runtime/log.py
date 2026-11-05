@@ -249,7 +249,7 @@ class NodeLog:
         self,
         trajectory_id: str,
         tenant_id: str,
-        step_n: int,
+        step_n: int | None,
         seq: int,
         kind: str,
     ) -> dict | None:

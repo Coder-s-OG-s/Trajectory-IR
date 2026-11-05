@@ -28,6 +28,15 @@ func TestRequiresBlockAndGate(t *testing.T) {
 	}
 }
 
+func TestSandboxEffect(t *testing.T) {
+	if got := effects.SandboxEffect(effects.READ_ONLY, true); got != effects.SENSITIVE {
+		t.Fatalf("sensitive read=%s, want SENSITIVE", got)
+	}
+	if got := effects.SandboxEffect(effects.READ_ONLY, false); got != effects.READ_ONLY {
+		t.Fatalf("plain read=%s, want READ_ONLY", got)
+	}
+}
+
 func TestIsForbiddenInSandbox(t *testing.T) {
 	forbidden := []effects.EffectClass{
 		effects.NON_IDEMPOTENT_WRITE,

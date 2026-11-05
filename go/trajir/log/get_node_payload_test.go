@@ -11,7 +11,7 @@ func TestGetNodePayloadReadsOneSlot(t *testing.T) {
 		}
 	}
 
-	got, found, err := nl.GetNodePayload("t1", "demo", 1, 3, "TOOL_RESULT")
+	got, found, err := nl.GetNodePayload("t1", "demo", &step, 3, "TOOL_RESULT")
 	if err != nil || !found {
 		t.Fatalf("found=%v err=%v", found, err)
 	}
@@ -28,13 +28,28 @@ func TestGetNodePayloadReadsOneSlot(t *testing.T) {
 		{"demo", 5, "TOOL_RESULT"},
 		{"other", 3, "TOOL_RESULT"},
 	} {
-		_, found, err := nl.GetNodePayload("t1", miss.tenant, 1, miss.seq, miss.kind)
+		_, found, err := nl.GetNodePayload("t1", miss.tenant, &step, miss.seq, miss.kind)
 		if err != nil || found {
 			t.Fatalf("%+v: found=%v err=%v, want miss", miss, found, err)
 		}
 	}
 
-	if _, _, err := nl.GetNodePayload("t1", "", 1, 3, "TOOL_RESULT"); err == nil {
+	if _, _, err := nl.GetNodePayload("t1", "", &step, 3, "TOOL_RESULT"); err == nil {
 		t.Fatal("empty tenant must be rejected")
+	}
+}
+
+func TestGetNodePayloadReadsTrajectoryLevelSlot(t *testing.T) {
+	nl := openTemp(t)
+	if _, err := nl.Append("STATE_SET", nil, map[string]any{"k": "v"}, "t1", "demo", 0); err != nil {
+		t.Fatal(err)
+	}
+	got, found, err := nl.GetNodePayload("t1", "demo", nil, 0, "STATE_SET")
+	if err != nil || !found || got["k"] != "v" {
+		t.Fatalf("got=%#v found=%v err=%v", got, found, err)
+	}
+	step := 1
+	if _, found, err := nl.GetNodePayload("t1", "demo", &step, 0, "STATE_SET"); err != nil || found {
+		t.Fatalf("step 1: found=%v err=%v, want miss", found, err)
 	}
 }

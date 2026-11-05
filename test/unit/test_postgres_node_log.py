@@ -361,6 +361,8 @@ def test_get_node_payload_reads_one_slot(log: PostgresNodeLog):
     assert log.get_node_payload("t1", "other", 1, 3, "TOOL_RESULT") is None
     with pytest.raises(ValueError):
         log.get_node_payload("t1", "", 1, 3, "TOOL_RESULT")
+    log.append("STATE_SET", None, {"k": "v"}, "t1", "demo", 0)
+    assert log.get_node_payload("t1", "demo", None, 0, "STATE_SET") == {"k": "v"}
 
 
 def test_claim_tool_call_single_winner(log: PostgresNodeLog):

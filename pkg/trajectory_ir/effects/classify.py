@@ -15,10 +15,10 @@ def requires_block_and_gate(effect: EffectClass) -> bool:
     """Whether resume must gate this effect class (README §8 / R02).
 
     ``NON_IDEMPOTENT_WRITE`` and ``AGENT_SPAWN`` are block-and-gated: a peer
-    agent invocation is not safe to repeat blindly. ``SENSITIVE`` is gated too.
-    ``Tool.effect_class`` holds one class, so a tool tagged ``SENSITIVE`` has
-    no recorded base class, and a sensitive write (key rotation, payment,
-    deleting a user) must not re-run blind. ``PURE`` (R03) and the other
+    agent invocation is not safe to repeat blindly. ``SENSITIVE`` as the class
+    is gated too, because it records no base class and a sensitive write must
+    not re-run blind. To keep a sensitive read re-fetchable, set
+    ``Tool.sensitive`` with its base class instead. ``PURE`` (R03) and the other
     classes may re-execute on resume without raising ``BlockedNeedsGate``;
     durable memoization may still skip re-running the body when a prior step
     result was already recorded.
@@ -28,6 +28,11 @@ def requires_block_and_gate(effect: EffectClass) -> bool:
         EffectClass.AGENT_SPAWN,
         EffectClass.SENSITIVE,
     )
+
+
+def sandbox_effect(effect: EffectClass, sensitive: bool = False) -> EffectClass:
+    """The class the sandbox judges: ``Tool.sensitive`` is rejected on any base class."""
+    return EffectClass.SENSITIVE if sensitive else effect
 
 
 def is_forbidden_in_sandbox(effect: EffectClass) -> bool:

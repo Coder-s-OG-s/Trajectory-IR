@@ -165,6 +165,14 @@ func decodeJSON(raw []byte) (any, error) {
 	return v, nil
 }
 
+// UnsafeIntegerError reports an integer outside the RFC 8785 range. The value
+// cannot be hashed or stored as a number.
+type UnsafeIntegerError struct {
+	Message string
+}
+
+func (e *UnsafeIntegerError) Error() string { return e.Message }
+
 func rejectUnsafeValues(v any) error {
 	if v == nil {
 		return nil
@@ -208,7 +216,7 @@ func rejectUnsafeValues(v any) error {
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 		u := rv.Uint()
 		if u > uint64(maxSafeInteger) {
-			return fmt.Errorf("%d exceeds safe integer domain for JSON floats", u)
+			return &UnsafeIntegerError{Message: fmt.Sprintf("%d exceeds safe integer domain for JSON floats", u)}
 		}
 		return nil
 	case reflect.Slice, reflect.Array:
@@ -233,7 +241,7 @@ func rejectUnsafeValues(v any) error {
 
 func checkInt64(n int64) error {
 	if n > maxSafeInteger || n < -maxSafeInteger {
-		return fmt.Errorf("%d exceeds safe integer domain for JSON floats", n)
+		return &UnsafeIntegerError{Message: fmt.Sprintf("%d exceeds safe integer domain for JSON floats", n)}
 	}
 	return nil
 }
@@ -246,7 +254,7 @@ func checkJSONNumber(n json.Number) error {
 	if jsonIntegerExactFloat64(s) {
 		return nil
 	}
-	return fmt.Errorf("%s exceeds safe integer domain for JSON floats", s)
+	return &UnsafeIntegerError{Message: fmt.Sprintf("%s exceeds safe integer domain for JSON floats", s)}
 }
 
 func jsonIntegerExactFloat64(s string) bool {

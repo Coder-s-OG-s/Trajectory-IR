@@ -16,3 +16,6 @@ class Tool:
     # recorded outcome; see make_gated_tool_call. Return UNRESOLVED when the
     # host cannot tell, and the gate blocks.
     resolve: Callable | None = None
+    # Touches secrets or PII. Resume follows effect_class, so a sensitive read
+    # may re-fetch and a sensitive write is gated. Sandbox mode rejects it.
+    sensitive: bool = False

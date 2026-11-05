@@ -288,21 +288,27 @@ func (l *NodeLog) has(trajectoryID string, tenantID *string, stepN int, kind str
 	return true, nil
 }
 
-// GetNodePayload returns the payload stored at one logical slot. found is
-// false when the slot is empty. This is a point lookup on idx_nodes_slot; the
-// resume gate uses it instead of ListNodes, which decodes the whole trajectory.
-func (l *NodeLog) GetNodePayload(trajectoryID, tenantID string, stepN, seq int, kind string) (map[string]any, bool, error) {
+// GetNodePayload returns the payload stored at one logical slot. A nil stepN
+// is a trajectory-level slot, as in Append. found is false when the slot is
+// empty. This is a point lookup on idx_nodes_slot; the resume gate uses it
+// instead of ListNodes, which decodes the whole trajectory.
+func (l *NodeLog) GetNodePayload(trajectoryID, tenantID string, stepN *int, seq int, kind string) (map[string]any, bool, error) {
 	if tenantID == "" {
 		return nil, false, fmt.Errorf("tenantID must be a non-empty string")
 	}
+	var step any
+	if stepN != nil {
+		step = *stepN
+	}
+
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
 	var payloadJSON string
 	err := l.db.QueryRow(
 		`SELECT payload_json FROM nodes WHERE tenant_id = ? AND trajectory_id = ?
-		 AND IFNULL(step_n, -1) = ? AND seq = ? AND kind = ? LIMIT 1`,
-		tenantID, trajectoryID, stepN, seq, kind,
+		 AND IFNULL(step_n, -1) = IFNULL(?, -1) AND seq = ? AND kind = ? LIMIT 1`,
+		tenantID, trajectoryID, step, seq, kind,
 	).Scan(&payloadJSON)
 	if err == sql.ErrNoRows {
 		return nil, false, nil

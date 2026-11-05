@@ -12,6 +12,8 @@ from trajectory_ir.resume.gate import (
 )
 from trajectory_ir.resume.idempotency import CallMeta, current_idempotency_key
 from trajectory_ir.runtime.log import NodeLog, SlotConflictError
+from trajectory_ir.runtime.nodes import UnsafeInteger
+from trajectory_ir.runtime.sandbox import SandboxForbidden
 from trajectory_ir.runtime.tool import Tool
 
 TENANT = "demo"
@@ -126,10 +128,69 @@ def test_unresolved_blocks_then_resolves_on_a_later_reentry(node_log):
     )
     with pytest.raises(BlockedNeedsGate):
         gated(task="build")
-    assert node_log.has(TRAJ, TENANT, 1, "ABORT", seq=3)
+    # No ABORT yet: the child may still finish, and one slot has one outcome.
+    assert not node_log.has(TRAJ, TENANT, 1, "ABORT", seq=3)
 
     state["finished"] = True
     assert gated(task="build") == "child-ok"
+    assert not node_log.has(TRAJ, TENANT, 1, "ABORT", seq=3)
+
+
+def test_abort_is_final_and_resolve_is_not_asked(node_log):
+    _claim(node_log)
+
+    def boom():
+        raise AssertionError("must not run")
+
+    with pytest.raises(BlockedNeedsGate):
+        make_gated_tool_call(node_log, TRAJ, TENANT, 1, 2, "spawn_builder", boom)()
+    assert node_log.has(TRAJ, TENANT, 1, "ABORT", seq=3)
+
+    gated = make_gated_tool_call(
+        node_log, TRAJ, TENANT, 1, 2, "spawn_builder", boom, resolve_fn=boom
+    )
+    with pytest.raises(BlockedNeedsGate):
+        gated()
+    assert not node_log.has(TRAJ, TENANT, 1, "TOOL_RESULT", seq=3)
+
+
+def test_losing_a_resolve_race_returns_the_winners_result(node_log):
+    _claim(node_log)
+
+    def resolve():
+        # Another worker commits its outcome while this lookup is in flight.
+        node_log.append("TOOL_RESULT", 1, {"result": "winner"}, TRAJ, TENANT, 3)
+        return "loser"
+
+    gated = make_gated_tool_call(
+        node_log, TRAJ, TENANT, 1, 2, "spawn_builder", lambda: None, resolve_fn=resolve
+    )
+    assert gated() == "winner"
+    assert node_log.get_node_payload(TRAJ, TENANT, 1, 3, "TOOL_RESULT") == {"result": "winner"}
+
+
+def test_losing_a_race_to_an_integer_failure_raises_it(node_log):
+    _claim(node_log)
+    failure = {"error": "integer_domain", "message": "too big", "result_digest": "ab" * 32}
+
+    def resolve():
+        node_log.append("TOOL_RESULT", 1, failure, TRAJ, TENANT, 3)
+        return "loser"
+
+    gated = make_gated_tool_call(
+        node_log, TRAJ, TENANT, 1, 2, "spawn_builder", lambda: None, resolve_fn=resolve
+    )
+    with pytest.raises(UnsafeInteger, match="too big"):
+        gated()
+
+
+def test_running_tool_that_loses_to_a_resolver_returns_the_recorded_result(node_log):
+    def spawn():
+        node_log.append("TOOL_RESULT", 1, {"result": "resolved"}, TRAJ, TENANT, 3)
+        return "ran"
+
+    gated = make_gated_tool_call(node_log, TRAJ, TENANT, 1, 2, "spawn_builder", spawn)
+    assert gated() == "resolved"
 
 
 def test_resolve_error_propagates_without_abort(node_log):
@@ -163,7 +224,11 @@ def test_exec_tool_passes_tool_resolve_to_the_gate(tmp_path):
     assert out.result == {"child": "build"}
 
 
-def test_sensitive_tool_is_gated_on_reentry(tmp_path):
+def _sensitive_trajectory(tmp_path, mode="live"):
+    return open_trajectory(TENANT, TRAJ, db_path=str(tmp_path / "t.sqlite"), mode=mode)
+
+
+def test_bare_sensitive_class_is_gated_on_reentry(tmp_path):
     rotated = []
 
     def rotate_key(key_id):
@@ -171,12 +236,58 @@ def test_sensitive_tool_is_gated_on_reentry(tmp_path):
         return {"rotated": key_id}
 
     tool = Tool(name="rotate_key", fn=rotate_key, effect_class=EffectClass.SENSITIVE)
-    trajectory = open_trajectory(TENANT, TRAJ, db_path=str(tmp_path / "t.sqlite"))
+    trajectory = _sensitive_trajectory(tmp_path)
     _claim(trajectory._log, tool="rotate_key", args={"key_id": "k1"})
 
     with pytest.raises(BlockedNeedsGate):
         exec_tool(trajectory, step_n=1, call={"args": {"key_id": "k1"}}, tool=tool, seq=2)
     assert rotated == []
+
+
+def test_sensitive_flag_on_a_read_refetches_on_resume(tmp_path):
+    reads = []
+
+    def read_secret(name):
+        reads.append(name)
+        return {"name": name}
+
+    tool = Tool(
+        name="read_secret",
+        fn=read_secret,
+        effect_class=EffectClass.READ_ONLY,
+        sensitive=True,
+    )
+    trajectory = _sensitive_trajectory(tmp_path)
+    for _ in range(2):
+        out = exec_tool(trajectory, step_n=1, call={"args": {"name": "k"}}, tool=tool, seq=2)
+        assert out.result == {"name": "k"}
+    assert reads == ["k", "k"]
+
+
+def test_sensitive_flag_on_a_write_is_gated(tmp_path):
+    tool = Tool(
+        name="rotate_key",
+        fn=lambda: pytest.fail("must not run"),
+        effect_class=EffectClass.NON_IDEMPOTENT_WRITE,
+        sensitive=True,
+    )
+    trajectory = _sensitive_trajectory(tmp_path)
+    _claim(trajectory._log, tool="rotate_key")
+    with pytest.raises(BlockedNeedsGate):
+        exec_tool(trajectory, step_n=1, call={"args": {}}, tool=tool, seq=2)
+
+
+def test_sandbox_rejects_the_sensitive_flag_on_a_read(tmp_path):
+    tool = Tool(
+        name="read_secret",
+        fn=lambda: pytest.fail("must not run"),
+        effect_class=EffectClass.READ_ONLY,
+        sensitive=True,
+    )
+    trajectory = _sensitive_trajectory(tmp_path, mode="sandbox")
+    with pytest.raises(SandboxForbidden) as info:
+        exec_tool(trajectory, step_n=1, call={"args": {}}, tool=tool, seq=2)
+    assert info.value.effect_class is EffectClass.SENSITIVE
 
 
 def test_get_node_payload_reads_one_slot(node_log):
@@ -189,3 +300,9 @@ def test_get_node_payload_reads_one_slot(node_log):
     assert node_log.get_node_payload(TRAJ, "other", 1, 3, "TOOL_RESULT") is None
     with pytest.raises(ValueError):
         node_log.get_node_payload(TRAJ, "", 1, 3, "TOOL_RESULT")
+
+
+def test_get_node_payload_reads_a_trajectory_level_slot(node_log):
+    node_log.append("STATE_SET", None, {"k": "v"}, TRAJ, TENANT, 0)
+    assert node_log.get_node_payload(TRAJ, TENANT, None, 0, "STATE_SET") == {"k": "v"}
+    assert node_log.get_node_payload(TRAJ, TENANT, 1, 0, "STATE_SET") is None

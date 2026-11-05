@@ -25,6 +25,10 @@ type Tool struct {
 	// Resolve is for gated tools only. It looks up how a claimed call with no
 	// recorded outcome ended. See MakeGatedToolCallWithResolve.
 	Resolve ResolveFunc
+	// Sensitive marks a tool that touches secrets or PII. Resume follows
+	// Effect, so a sensitive read may re-fetch and a sensitive write is gated.
+	// Sandbox mode rejects it.
+	Sensitive bool
 }
 
 // ToolFuncWithMeta is a tool body that also receives CallMeta.
@@ -184,7 +188,7 @@ func RunStep(
 		if err := effects.AssertOpenWorldEffect(call.Name, tool.Effect, tool.AllowOpenWorldOverride); err != nil {
 			return nil, err
 		}
-		if err := sandbox.AssertToolAllowed(cfg.Mode, call.Name, tool.Effect); err != nil {
+		if err := sandbox.AssertToolAllowed(cfg.Mode, call.Name, effects.SandboxEffect(tool.Effect, tool.Sensitive)); err != nil {
 			return nil, err
 		}
 

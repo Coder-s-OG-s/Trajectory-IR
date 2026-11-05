@@ -609,6 +609,82 @@ func TestOpenTrajectoryRejectsSymlinkedSQLiteFiles(t *testing.T) {
 	}
 }
 
+func TestSensitiveFlagFollowsBaseClassOnResume(t *testing.T) {
+	tr, err := client.OpenTrajectory("demo", "t-sens", client.Options{WorkDir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tr.Close()
+
+	reads := 0
+	read := resume.Tool{
+		Name:      "read_secret",
+		Effect:    effects.READ_ONLY,
+		Sensitive: true,
+		Fn: func(map[string]any) (any, error) {
+			reads++
+			return "value", nil
+		},
+	}
+	for i := 0; i < 2; i++ {
+		if _, err := tr.ExecTool(1, 2, read, nil); err != nil {
+			t.Fatalf("read %d: %v", i, err)
+		}
+	}
+	if reads != 2 {
+		t.Fatalf("reads=%d, want a re-fetch", reads)
+	}
+
+	step := 1
+	if _, err := tr.Log().Append(
+		"TOOL_CALL", &step,
+		map[string]any{"tool": "rotate_key", "args": map[string]any{}},
+		"t-sens", "demo", 4,
+	); err != nil {
+		t.Fatal(err)
+	}
+	write := resume.Tool{
+		Name:      "rotate_key",
+		Effect:    effects.NON_IDEMPOTENT_WRITE,
+		Sensitive: true,
+		Fn: func(map[string]any) (any, error) {
+			t.Fatal("rotate_key must not run again")
+			return nil, nil
+		},
+	}
+	var blocked *resume.BlockedNeedsGate
+	if _, err := tr.ExecTool(1, 4, write, nil); !errors.As(err, &blocked) {
+		t.Fatalf("err=%v, want BlockedNeedsGate", err)
+	}
+}
+
+func TestSandboxRejectsSensitiveFlagOnARead(t *testing.T) {
+	tr, err := client.OpenTrajectory("demo", "t-sens-sb", client.Options{
+		WorkDir: t.TempDir(),
+		Mode:    sandbox.ModeSandbox,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tr.Close()
+	tool := resume.Tool{
+		Name:      "read_secret",
+		Effect:    effects.READ_ONLY,
+		Sensitive: true,
+		Fn: func(map[string]any) (any, error) {
+			t.Fatal("must not run in sandbox")
+			return nil, nil
+		},
+	}
+	var forbidden *sandbox.Forbidden
+	if _, err := tr.ExecTool(1, 2, tool, nil); !errors.As(err, &forbidden) {
+		t.Fatalf("err=%v, want sandbox.Forbidden", err)
+	}
+	if forbidden.Effect != effects.SENSITIVE {
+		t.Fatalf("effect=%s, want SENSITIVE", forbidden.Effect)
+	}
+}
+
 func TestExecToolAgentSpawnGated(t *testing.T) {
 	dir := t.TempDir()
 	tr, err := client.OpenTrajectory("demo", "t-spawn", client.Options{WorkDir: dir})

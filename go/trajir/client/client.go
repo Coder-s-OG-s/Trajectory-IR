@@ -252,7 +252,7 @@ func (t *Trajectory) ExecTool(stepN, seq int, tool resume.Tool, args map[string]
 	if err := effects.AssertOpenWorldEffect(tool.Name, tool.Effect, tool.AllowOpenWorldOverride); err != nil {
 		return nil, err
 	}
-	if err := sandbox.AssertToolAllowed(t.Mode, tool.Name, tool.Effect); err != nil {
+	if err := sandbox.AssertToolAllowed(t.Mode, tool.Name, effects.SandboxEffect(tool.Effect, tool.Sensitive)); err != nil {
 		return nil, err
 	}
 	meta := resume.NewCallMeta(t.TenantID, t.TrajectoryID, stepN, seq)

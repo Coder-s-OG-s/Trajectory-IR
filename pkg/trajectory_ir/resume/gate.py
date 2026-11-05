@@ -156,6 +156,27 @@ def _append_tool_result(node_log, trajectory_id, tenant_id, step_n, seq, result)
     )
 
 
+def _record_gated_outcome(node_log, trajectory_id, tenant_id, step_n, seq, result):
+    """Record ``result`` at the outcome slot and return the outcome that stands.
+
+    Two workers can finish the same claimed call: a resolver racing another
+    resolver, or a resolver racing the worker still running the tool. The first
+    commit wins. The loser hands back the winner's row instead of failing a step
+    whose outcome is already durable.
+    """
+    try:
+        _append_tool_result(node_log, trajectory_id, tenant_id, step_n, seq, result)
+    except SlotConflictError:
+        failed = _stored_integer_failure(node_log, trajectory_id, tenant_id, step_n, seq)
+        if failed is not None:
+            _raise_stored_integer_failure(failed)
+        stored = _stored_tool_result(node_log, trajectory_id, tenant_id, step_n, seq)
+        if stored is None:
+            raise
+        return stored["result"]
+    return result
+
+
 def make_gated_tool_call(
     node_log,
     trajectory_id,
@@ -195,8 +216,10 @@ def make_gated_tool_call(
     the same kwargs and ``current_call_meta()`` bound, so it can look the call
     up by its idempotency key. It must not start the effect again. A return
     value other than ``UNRESOLVED`` is recorded as the TOOL_RESULT and returned.
-    ``UNRESOLVED`` falls through to the gate. It is asked again on each
-    re-entry, including after an earlier ABORT at this slot.
+    ``UNRESOLVED`` raises ``BlockedNeedsGate`` without writing ABORT, because
+    the call may still finish and one slot holds one outcome. It is asked again
+    on the next re-entry. An ABORT already at this slot is final: the hook is
+    not asked and the call blocks.
     """
 
     def gated(**kwargs):
@@ -231,13 +254,14 @@ def make_gated_tool_call(
             stored = _stored_tool_result(node_log, trajectory_id, tenant_id, step_n, seq + 1)
             if stored is not None:
                 return stored["result"]
-            if resolve_fn is not None:
+            aborted = node_log.get_node_payload(trajectory_id, tenant_id, step_n, seq + 1, "ABORT")
+            if resolve_fn is not None and aborted is None:
                 resolved = bind_call_meta(meta, resolve_fn, kwargs)
-                if resolved is not UNRESOLVED:
-                    _append_tool_result(
-                        node_log, trajectory_id, tenant_id, step_n, seq + 1, resolved
-                    )
-                    return resolved
+                if resolved is UNRESOLVED:
+                    raise BlockedNeedsGate(step_n, tool_name)
+                return _record_gated_outcome(
+                    node_log, trajectory_id, tenant_id, step_n, seq + 1, resolved
+                )
             node_log.append(
                 "ABORT",
                 step_n,
@@ -249,8 +273,7 @@ def make_gated_tool_call(
             raise BlockedNeedsGate(step_n, tool_name)
 
         result = bind_call_meta(meta, tool_fn, kwargs)
-        _append_tool_result(node_log, trajectory_id, tenant_id, step_n, seq + 1, result)
-        return result
+        return _record_gated_outcome(node_log, trajectory_id, tenant_id, step_n, seq + 1, result)
 
     return gated
 

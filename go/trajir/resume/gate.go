@@ -2,7 +2,15 @@
 package resume
 
 import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"strings"
+	"unicode/utf16"
+	"unicode/utf8"
 
 	nodelog "github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/log"
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/nodes"
@@ -50,14 +58,11 @@ func (e *ToolCallConflict) Error() string {
 
 func (e *ToolCallConflict) Unwrap() error { return nodelog.ErrSlotConflict }
 
-// UnsafeInteger is returned when the TOOL_RESULT at this slot is the
-// integer_domain storage failure the Python client records (spec §6.2).
-// It is not a result and not ABORT. The tool body does not run again.
-type UnsafeInteger struct {
-	Message string
-}
-
-func (e *UnsafeInteger) Error() string { return e.Message }
+// UnsafeInteger is returned when a tool result has an integer outside the
+// RFC 8785 range, and on re-entry when the TOOL_RESULT at this slot is the
+// integer_domain storage failure recorded for it (spec §6.2). It is not a
+// result and not ABORT. The tool body does not run again.
+type UnsafeInteger = nodes.UnsafeIntegerError
 
 // ToolFunc is a tool body that receives a free-form args map.
 type ToolFunc func(args map[string]any) (any, error)
@@ -93,9 +98,10 @@ func MakeGatedToolCall(
 // MakeGatedToolCallWithResolve is MakeGatedToolCall with a status lookup.
 // When the slot is claimed and has no recorded outcome, resolve is asked
 // before blocking. A resolved result is recorded as the TOOL_RESULT and
-// returned. Unresolved falls through to ABORT and BlockedNeedsGate. resolve
-// is asked again on each re-entry, including after an earlier ABORT here.
-// A nil resolve behaves like MakeGatedToolCall.
+// returned. Unresolved returns BlockedNeedsGate without writing ABORT, because
+// the call may still finish and one slot holds one outcome. resolve is asked
+// again on the next re-entry. An ABORT already at this slot is final: resolve
+// is not asked and the call blocks. A nil resolve behaves like MakeGatedToolCall.
 func MakeGatedToolCallWithResolve(
 	log *nodelog.NodeLog,
 	trajectoryID, tenantID string,
@@ -109,13 +115,14 @@ func MakeGatedToolCallWithResolve(
 			args = map[string]any{}
 		}
 		step := stepN
+		meta := NewCallMeta(tenantID, trajectoryID, stepN, seq)
 
 		claimed, err := log.ClaimToolCall(
 			stepN,
 			map[string]any{
 				"tool":            toolName,
 				"args":            args,
-				"idempotency_key": IdempotencyKey(tenantID, trajectoryID, stepN, seq),
+				"idempotency_key": meta.IdempotencyKey,
 			},
 			trajectoryID,
 			tenantID,
@@ -140,17 +147,19 @@ func MakeGatedToolCallWithResolve(
 			if found {
 				return stored, nil
 			}
-			if resolve != nil {
-				result, resolved, err := resolve(args, NewCallMeta(tenantID, trajectoryID, stepN, seq))
+			_, aborted, err := log.GetNodePayload(trajectoryID, tenantID, &step, seq+1, "ABORT")
+			if err != nil {
+				return nil, err
+			}
+			if resolve != nil && !aborted {
+				result, resolved, err := resolve(args, meta)
 				if err != nil {
 					return nil, err
 				}
-				if resolved {
-					if err := appendToolResult(log, trajectoryID, tenantID, stepN, seq+1, result); err != nil {
-						return nil, err
-					}
-					return result, nil
+				if !resolved {
+					return nil, &BlockedNeedsGate{StepN: stepN, ToolName: toolName}
 				}
+				return recordGatedOutcome(log, trajectoryID, tenantID, stepN, seq+1, result)
 			}
 			if _, err := log.Append(
 				"ABORT",
@@ -169,13 +178,39 @@ func MakeGatedToolCallWithResolve(
 		if err != nil {
 			return nil, err
 		}
-		if err := appendToolResult(log, trajectoryID, tenantID, stepN, seq+1, result); err != nil {
-			return nil, err
-		}
-		return result, nil
+		return recordGatedOutcome(log, trajectoryID, tenantID, stepN, seq+1, result)
 	}
 }
 
+// recordGatedOutcome records result at the outcome slot and returns the outcome
+// that stands. Two workers can finish the same claimed call: a resolver racing
+// another resolver, or a resolver racing the worker still running the tool. The
+// first commit wins. The loser hands back the winner's row instead of failing a
+// step whose outcome is already durable.
+func recordGatedOutcome(log *nodelog.NodeLog, trajectoryID, tenantID string, stepN, seq int, result any) (any, error) {
+	err := appendToolResult(log, trajectoryID, tenantID, stepN, seq, result)
+	if err == nil {
+		return result, nil
+	}
+	if !errors.Is(err, nodelog.ErrSlotConflict) {
+		return nil, err
+	}
+	if failed := storedIntegerFailure(log, trajectoryID, tenantID, stepN, seq); failed != nil {
+		return nil, failed
+	}
+	stored, found, readErr := storedToolResult(log, trajectoryID, tenantID, stepN, seq)
+	if readErr != nil {
+		return nil, readErr
+	}
+	if !found {
+		return nil, err
+	}
+	return stored, nil
+}
+
+// appendToolResult records {"result": result} at (stepN, seq). A result with an
+// integer outside the RFC 8785 range records the integer_domain failure row
+// instead and returns UnsafeInteger (spec §6.2).
 func appendToolResult(log *nodelog.NodeLog, trajectoryID, tenantID string, stepN, seq int, result any) error {
 	step := stepN
 	_, err := log.Append(
@@ -186,7 +221,59 @@ func appendToolResult(log *nodelog.NodeLog, trajectoryID, tenantID string, stepN
 		tenantID,
 		seq,
 	)
-	return err
+	var unsafe *UnsafeInteger
+	if !errors.As(err, &unsafe) {
+		return err
+	}
+	if _, err := log.Append(
+		"TOOL_RESULT",
+		&step,
+		map[string]any{
+			"error":         integerDomain,
+			"message":       unsafe.Message,
+			"result_digest": resultDigest(result),
+		},
+		trajectoryID,
+		tenantID,
+		seq,
+	); err != nil {
+		return err
+	}
+	return unsafe
+}
+
+// resultDigest is SHA-256 over the compact sorted JSON of result, escaped the
+// way Python's json.dumps does so both clients agree on strings, integers, and
+// containers. Float text can differ. A value JSON cannot encode hashes its %v
+// form where Python uses repr.
+func resultDigest(result any) string {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	var text string
+	if err := enc.Encode(result); err != nil {
+		text = fmt.Sprintf("%v", result)
+	} else {
+		text = asciiJSON(strings.TrimSuffix(buf.String(), "\n"))
+	}
+	sum := sha256.Sum256([]byte(text))
+	return hex.EncodeToString(sum[:])
+}
+
+func asciiJSON(text string) string {
+	var b strings.Builder
+	for _, r := range text {
+		switch {
+		case r < utf8.RuneSelf:
+			b.WriteRune(r)
+		case r < 0x10000:
+			fmt.Fprintf(&b, "\\u%04x", r)
+		default:
+			r1, r2 := utf16.EncodeRune(r)
+			fmt.Fprintf(&b, "\\u%04x\\u%04x", r1, r2)
+		}
+	}
+	return b.String()
 }
 
 // assertSameCall returns ToolCallConflict unless the claimed TOOL_CALL at
@@ -199,7 +286,7 @@ func assertSameCall(
 	toolName string,
 	args map[string]any,
 ) error {
-	stored, found, err := log.GetNodePayload(trajectoryID, tenantID, stepN, seq, "TOOL_CALL")
+	stored, found, err := log.GetNodePayload(trajectoryID, tenantID, &stepN, seq, "TOOL_CALL")
 	if err != nil {
 		return err
 	}
@@ -232,7 +319,7 @@ func storedIntegerFailure(
 	trajectoryID, tenantID string,
 	stepN, seq int,
 ) error {
-	payload, found, err := log.GetNodePayload(trajectoryID, tenantID, stepN, seq, "TOOL_RESULT")
+	payload, found, err := log.GetNodePayload(trajectoryID, tenantID, &stepN, seq, "TOOL_RESULT")
 	if err != nil || !found {
 		return err
 	}
@@ -256,7 +343,7 @@ func storedToolResult(
 	trajectoryID, tenantID string,
 	stepN, seq int,
 ) (any, bool, error) {
-	payload, found, err := log.GetNodePayload(trajectoryID, tenantID, stepN, seq, "TOOL_RESULT")
+	payload, found, err := log.GetNodePayload(trajectoryID, tenantID, &stepN, seq, "TOOL_RESULT")
 	if err != nil || !found {
 		return nil, false, err
 	}
