@@ -599,7 +599,7 @@ def _load_tir_impl(
         # Signature check after hash/seal integrity (README 9.1 order).
         # Use the already open archive only — never re open path (TOCTOU / CWE-367).
         # Present but invalid SIGNATURE fails even for load_tir_unverified (tamper).
-        # Unsigned packages skip the second decompress pass (match Go loadImpl).
+        # Unsigned packages skip the second decompress pass (match Go loadFromZipWithOptions).
         sig_info = None
         requires_sig = (
             require_signature or (trusted_keys is not None) or (trusted_key_ids is not None)
