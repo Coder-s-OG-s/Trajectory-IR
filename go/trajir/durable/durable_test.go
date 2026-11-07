@@ -1,8 +1,11 @@
 package durable_test
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -128,5 +131,134 @@ func TestFirstSaveWins(t *testing.T) {
 	}
 	if string(raw) != `"first"` {
 		t.Fatalf("got %s, want first", raw)
+	}
+}
+
+func TestStepKeepsUnsafeIntegerDigits(t *testing.T) {
+	ctx := context.Background()
+	b := durable.NewMemory()
+	t.Cleanup(func() { _ = b.Close() })
+
+	const unsafe int64 = (1 << 53) + 1
+	const safe int64 = (1 << 53) - 1
+	fn := func(context.Context) (any, error) {
+		return map[string]any{
+			"n":    unsafe,
+			"neg":  -unsafe,
+			"ok":   safe,
+			"pow":  int64(1 << 53),
+			"x":    1.5,
+			"nest": []any{map[string]any{"id": unsafe}},
+		}, nil
+	}
+
+	check := func(v any) {
+		t.Helper()
+		m := v.(map[string]any)
+		n, ok := m["n"].(json.Number)
+		if !ok || n.String() != "9007199254740993" {
+			t.Fatalf("n=%#v (%T)", m["n"], m["n"])
+		}
+		neg, ok := m["neg"].(json.Number)
+		if !ok || neg.String() != "-9007199254740993" {
+			t.Fatalf("neg=%#v (%T)", m["neg"], m["neg"])
+		}
+		if m["ok"] != float64(safe) {
+			t.Fatalf("ok=%#v (%T)", m["ok"], m["ok"])
+		}
+		if m["pow"] != float64(int64(1<<53)) {
+			t.Fatalf("pow=%#v (%T)", m["pow"], m["pow"])
+		}
+		if m["x"] != 1.5 {
+			t.Fatalf("x=%#v (%T)", m["x"], m["x"])
+		}
+		nest := m["nest"].([]any)[0].(map[string]any)["id"]
+		id, ok := nest.(json.Number)
+		if !ok || id.String() != "9007199254740993" {
+			t.Fatalf("nest id=%#v (%T)", nest, nest)
+		}
+	}
+
+	v1, err := durable.Step(ctx, b, "wf", "k", fn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	check(v1)
+	v2, err := durable.Step(ctx, b, "wf", "k", func(context.Context) (any, error) {
+		t.Fatal("replay called fn")
+		return nil, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	check(v2)
+
+	raw, found, err := b.Load(ctx, "wf", "k")
+	if err != nil || !found {
+		t.Fatalf("load found=%v err=%v", found, err)
+	}
+	if !json.Valid(raw) || !bytes.Contains(raw, []byte("9007199254740993")) {
+		t.Fatalf("stored %s", raw)
+	}
+}
+
+func TestStepLostSaveReturnsStored(t *testing.T) {
+	t.Run("memory", func(t *testing.T) {
+		b := durable.NewMemory()
+		t.Cleanup(func() { _ = b.Close() })
+		assertLostSaveReturnsStored(t, b)
+	})
+	t.Run("sqlite", func(t *testing.T) {
+		b, err := durable.OpenLocal(filepath.Join(t.TempDir(), "memo.sqlite"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = b.Close() })
+		assertLostSaveReturnsStored(t, b)
+	})
+}
+
+func assertLostSaveReturnsStored(t *testing.T, b durable.Backend) {
+	t.Helper()
+	ctx := context.Background()
+	start := make(chan struct{})
+	var ready sync.WaitGroup
+	ready.Add(2)
+	results := make([]any, 2)
+	errs := make([]error, 2)
+	var wg sync.WaitGroup
+	for i, id := range []string{"alpha", "beta"} {
+		wg.Add(1)
+		go func(i int, id string) {
+			defer wg.Done()
+			results[i], errs[i] = durable.Step(ctx, b, "wf", "race", func(context.Context) (any, error) {
+				ready.Done()
+				<-start
+				return id, nil
+			})
+		}(i, id)
+	}
+	ready.Wait()
+	close(start)
+	wg.Wait()
+
+	for i, err := range errs {
+		if err != nil {
+			t.Fatalf("call %d: %v", i, err)
+		}
+	}
+	if results[0] != results[1] {
+		t.Fatalf("results differ: %#v vs %#v", results[0], results[1])
+	}
+	raw, found, err := b.Load(ctx, "wf", "race")
+	if err != nil || !found {
+		t.Fatalf("load found=%v err=%v", found, err)
+	}
+	quoted, err := json.Marshal(results[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(raw) != string(quoted) {
+		t.Fatalf("stored %s, results %s", raw, quoted)
 	}
 }

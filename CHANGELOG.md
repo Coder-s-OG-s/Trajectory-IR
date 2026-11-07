@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Go `durable.Step` reads the memo back after `Save` and returns that
+  value, so a caller that lost the insert does not keep a different
+  object. An integer that does not fit in a float64 keeps its digits.
+  `RunStep` rejects a plan `PayloadHash` cannot seal before that plan is
+  memoized, so a later resume can call the model again. A memo that
+  already stored one of those integers used to replay as the rounded
+  float. It now returns the safe-integer error instead of sealing the
+  rounded plan (#507).
+
 ## [0.3.0] - 2026-11-03
 
 ### Added

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -562,5 +563,140 @@ func TestRunStepMemoIsTenantScoped(t *testing.T) {
 	}
 	if res, calls := run("beta"); calls != 1 || res[0] != "beta" {
 		t.Fatalf("beta got a memo from another tenant: calls=%d res=%#v", calls, res)
+	}
+}
+
+func TestRunStepDoesNotMemoizeUnsafeIntegerPlan(t *testing.T) {
+	ctx := context.Background()
+	nl, backend := testEnv(t)
+	var calls atomic.Int32
+	var ran atomic.Int32
+	var saw any
+	cfg := resume.RunStepConfig{
+		Log:          nl,
+		Backend:      backend,
+		TenantID:     "demo",
+		TrajectoryID: "t1",
+		Tools: map[string]resume.Tool{
+			"echo": {
+				Name:   "echo",
+				Effect: effects.PURE,
+				Fn: func(args map[string]any) (any, error) {
+					ran.Add(1)
+					saw = args["id"]
+					return args, nil
+				},
+			},
+		},
+	}
+	model := func(context.Context, map[string]any) (map[string]any, error) {
+		if calls.Add(1) == 1 {
+			return map[string]any{
+				"tool_calls": []any{
+					map[string]any{
+						"name": "echo",
+						"args": map[string]any{"id": int64((1 << 53) + 1)},
+					},
+				},
+			}, nil
+		}
+		return map[string]any{
+			"tool_calls": []any{
+				map[string]any{"name": "echo", "args": map[string]any{"id": int64(7)}},
+			},
+		}, nil
+	}
+	_, err := resume.RunStep(ctx, cfg, 1, model, nil)
+	if err == nil || !strings.Contains(err.Error(), "exceeds safe integer domain") {
+		t.Fatalf("err=%v", err)
+	}
+	if ran.Load() != 0 {
+		t.Fatalf("tool ran %d times on the bad plan", ran.Load())
+	}
+	if _, err := resume.RunStep(ctx, cfg, 1, model, nil); err != nil {
+		t.Fatal(err)
+	}
+	if calls.Load() != 2 {
+		t.Fatalf("model calls=%d, want 2", calls.Load())
+	}
+	if ran.Load() != 1 || saw != float64(7) {
+		t.Fatalf("ran=%d saw=%#v (%T)", ran.Load(), saw, saw)
+	}
+}
+
+func TestRunStepSafeIntegerStillCommits(t *testing.T) {
+	ctx := context.Background()
+	nl, backend := testEnv(t)
+	const id int64 = (1 << 53) - 1
+	var saw any
+	cfg := resume.RunStepConfig{
+		Log:          nl,
+		Backend:      backend,
+		TenantID:     "demo",
+		TrajectoryID: "t1",
+		Tools: map[string]resume.Tool{
+			"echo": {
+				Name:   "echo",
+				Effect: effects.PURE,
+				Fn: func(args map[string]any) (any, error) {
+					saw = args["id"]
+					return args["id"], nil
+				},
+			},
+		},
+	}
+	model := func(context.Context, map[string]any) (map[string]any, error) {
+		return map[string]any{
+			"tool_calls": []any{
+				map[string]any{"name": "echo", "args": map[string]any{"id": id}},
+			},
+		}, nil
+	}
+	results, err := resume.RunStep(ctx, cfg, 1, model, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saw != float64(id) || len(results) != 1 || results[0] != float64(id) {
+		t.Fatalf("saw=%#v (%T) results=%#v", saw, saw, results)
+	}
+	if _, err := resume.RunStep(ctx, cfg, 1, model, nil); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRunStepStoredUnsafeIntegerIsNotSealed(t *testing.T) {
+	ctx := context.Background()
+	nl, backend := testEnv(t)
+	raw := []byte(`{"tool_calls":[{"name":"echo","args":{"id":9007199254740993}}]}`)
+	if err := backend.Save(ctx, "demo|t1", "infer:step1", raw); err != nil {
+		t.Fatal(err)
+	}
+	var ran atomic.Int32
+	cfg := resume.RunStepConfig{
+		Log:          nl,
+		Backend:      backend,
+		TenantID:     "demo",
+		TrajectoryID: "t1",
+		Tools: map[string]resume.Tool{
+			"echo": {
+				Name:   "echo",
+				Effect: effects.PURE,
+				Fn: func(map[string]any) (any, error) {
+					ran.Add(1)
+					return nil, nil
+				},
+			},
+		},
+	}
+	model := func(context.Context, map[string]any) (map[string]any, error) {
+		t.Fatal("model was called for a stored plan")
+		return nil, nil
+	}
+	_, err := resume.RunStep(ctx, cfg, 1, model, nil)
+	if err == nil || !strings.Contains(err.Error(), "exceeds safe integer domain") {
+		t.Fatalf("err=%v", err)
+	}
+	if ran.Load() != 0 {
+		t.Fatalf("tool ran %d times", ran.Load())
 	}
 }
