@@ -92,7 +92,7 @@ Regenerate notes: [`.github/ci-requirements/README.md`](../.github/ci-requiremen
 
 Track remaining Scorecard work under
 [OpenSSF security bar](https://github.com/Coder-s-OG-s/Trajectory-IR/milestone/10)
-(#375 and follow-ons).
+(#197 and follow-ons).
 
 ## Package load fuzzing
 
@@ -132,13 +132,31 @@ Atheris is not in CI.
 3. **SLSA provenance** / cosign sign release artifacts (when maintainers pick a key strategy)
 4. **Fork PR approval** settings: require approval for first-time contributors (org setting)
 5. **zizmor fail-closed** after reviewing residual findings
-6. ~~**Pin workflow CLI installs**~~ — #375 / PR #400: hashed ci-requirements + tarball checksums
+6. ~~**Pin workflow CLI installs**~~ — done in PR #400: hashed ci-requirements + tarball checksums (follow-ups in #197)
 7. **`docker-compose.live.yml`**: swap dead `quay.io/minio/minio` for `adobe/s3mock` (same
    root cause as the CI job above; local dev live-integration stack is currently broken)
 
 Active OpenSSF work tracks under milestone
 [OpenSSF security bar](https://github.com/Coder-s-OG-s/Trajectory-IR/milestone/10).
 Project Security Insights metadata: root [`SECURITY_INSIGHTS.yml`](../SECURITY_INSIGHTS.yml).
+
+## Scorecard blockers
+
+Live score and per-check results:
+[Scorecard viewer](https://scorecard.dev/viewer/?uri=github.com/Coder-s-OG-s/Trajectory-IR).
+Scorecard weights checks by risk, so the aggregate is not a plain average of the checks below.
+
+What still holds these checks back:
+
+| Check | Blocker |
+|-------|---------|
+| Pinned-Dependencies | Actions are SHA pinned. `pip install -e ".[dev]"` and `pip install --upgrade pip` are not. Scorecard counts an editable install as pinned only with `--no-deps`, which would skip pytest and ruff. Lockfile hashing is #197. |
+| Code-Review | Score 6 (7 of 11 approved changesets). Needs a higher share of approved reviews on recent changesets. |
+| CII-Best-Practices | Passing badge. Silver and Gold are the next levels. |
+| Branch-Protection | Admins are exempt, approving reviews are not required, code owner review is not required, last-push approval is off. |
+| Contributors | One organization: elitefolks. |
+| Signed-Releases | v0.2.1, v0.2.2, and v0.3.0 have no signature and no provenance. A workflow edit does not change those releases (#373). |
+| Packaging | Not scored. `release.yml` uploads a GitHub Release. Scorecard looks for a registry publish: PyPI, npm, GoReleaser, `docker push`, or `cargo publish` (#378). |
 
 ## References
 
