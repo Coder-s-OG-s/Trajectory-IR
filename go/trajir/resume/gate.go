@@ -117,6 +117,11 @@ func MakeGatedToolCallWithResolve(
 		step := stepN
 		meta := NewCallMeta(tenantID, trajectoryID, stepN, seq)
 
+		prior, err := checkSlotBeforeCall(log, trajectoryID, tenantID, stepN, seq, toolName, args)
+		if err != nil {
+			return nil, err
+		}
+
 		claimed, err := log.ClaimToolCall(
 			stepN,
 			map[string]any{
@@ -132,11 +137,14 @@ func MakeGatedToolCallWithResolve(
 			return nil, err
 		}
 		if !claimed {
-			if err := assertSameCall(log, trajectoryID, tenantID, stepN, seq, toolName, args); err != nil {
-				return nil, err
-			}
-			if err := storedIntegerFailure(log, trajectoryID, tenantID, stepN, seq+1); err != nil {
-				return nil, err
+			if !prior {
+				// Another worker claimed the slot after the check above.
+				if _, err := checkSlotBeforeCall(log, trajectoryID, tenantID, stepN, seq, toolName, args); err != nil {
+					return nil, err
+				}
+				if err := assertSameCall(log, trajectoryID, tenantID, stepN, seq, toolName, args); err != nil {
+					return nil, err
+				}
 			}
 			// The effect already ran and its outcome is durable. Return it
 			// instead of blocking; nothing re-executes.
@@ -147,11 +155,16 @@ func MakeGatedToolCallWithResolve(
 			if found {
 				return stored, nil
 			}
+			// An ABORT here is final. Writing another one could differ from a
+			// host's own ABORT payload and fail as a slot conflict.
 			_, aborted, err := log.GetNodePayload(trajectoryID, tenantID, &step, seq+1, "ABORT")
 			if err != nil {
 				return nil, err
 			}
-			if resolve != nil && !aborted {
+			if aborted {
+				return nil, &BlockedNeedsGate{StepN: stepN, ToolName: toolName}
+			}
+			if resolve != nil {
 				result, resolved, err := resolve(args, meta)
 				if err != nil {
 					return nil, err
@@ -290,10 +303,41 @@ func assertSameCall(
 	if err != nil {
 		return err
 	}
-	conflict := &ToolCallConflict{StepN: stepN, Seq: seq, ToolName: toolName}
 	if !found {
-		return conflict
+		return &ToolCallConflict{StepN: stepN, Seq: seq, ToolName: toolName}
 	}
+	return requireSameCall(stored, stepN, seq, toolName, args)
+}
+
+// checkSlotBeforeCall runs before a call claims or records anything. A
+// TOOL_CALL already at seq must be this call, so a stored outcome is never
+// read for a different one. Then an integer_domain row at seq+1 returns
+// UnsafeInteger, even with no TOOL_CALL, so the body does not run and no
+// TOOL_CALL is written for it. prior reports whether a TOOL_CALL was there.
+func checkSlotBeforeCall(
+	log *nodelog.NodeLog,
+	trajectoryID, tenantID string,
+	stepN, seq int,
+	toolName string,
+	args map[string]any,
+) (prior bool, err error) {
+	stored, prior, err := log.GetNodePayload(trajectoryID, tenantID, &stepN, seq, "TOOL_CALL")
+	if err != nil {
+		return false, err
+	}
+	if prior {
+		if err := requireSameCall(stored, stepN, seq, toolName, args); err != nil {
+			return false, err
+		}
+	}
+	if err := storedIntegerFailure(log, trajectoryID, tenantID, stepN, seq+1); err != nil {
+		return false, err
+	}
+	return prior, nil
+}
+
+func requireSameCall(stored map[string]any, stepN, seq int, toolName string, args map[string]any) error {
+	conflict := &ToolCallConflict{StepN: stepN, Seq: seq, ToolName: toolName}
 	storedArgs := stored["args"]
 	if storedArgs == nil {
 		storedArgs = map[string]any{}
@@ -330,9 +374,6 @@ func storedIntegerFailure(
 		return nil
 	}
 	message, _ := payload["message"].(string)
-	if message == "" {
-		message = "integer exceeds safe integer domain for JSON floats"
-	}
 	return &UnsafeInteger{Message: message}
 }
 
@@ -355,9 +396,10 @@ func storedToolResult(
 //
 // Seq layout matches Python: TOOL_CALL at seq, TOOL_RESULT at seq+1.
 // TOOL_CALL is recorded prior to tool execution so failed attempts are audited.
-// On success, TOOL_RESULT is recorded at seq+1 with {"result": ...}. An
-// integer_domain TOOL_RESULT already at seq+1 returns UnsafeInteger and the
-// body does not run, matching Python.
+// On success, TOOL_RESULT is recorded at seq+1 with {"result": ...}. A
+// TOOL_CALL already at seq with other args returns ToolCallConflict. An
+// integer_domain TOOL_RESULT at seq+1 then returns UnsafeInteger, the body
+// does not run, and no TOOL_CALL is written, matching Python.
 func MakePlainToolCall(
 	log *nodelog.NodeLog,
 	trajectoryID, tenantID string,
@@ -371,7 +413,7 @@ func MakePlainToolCall(
 		}
 		step := stepN
 
-		if err := storedIntegerFailure(log, trajectoryID, tenantID, stepN, seq+1); err != nil {
+		if _, err := checkSlotBeforeCall(log, trajectoryID, tenantID, stepN, seq, toolName, args); err != nil {
 			return nil, err
 		}
 		if _, err := log.Append(

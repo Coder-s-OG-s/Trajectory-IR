@@ -140,7 +140,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the `TOOL_RESULT`. `UNRESOLVED` (Python) or `resolved=false` (Go) blocks
   without writing `ABORT`, and the hook is asked again on the next re-entry.
   A worker that loses the race to record an outcome gets the winner's row back
-  instead of a slot conflict. The gate reads one slot with `get_node_payload` /
+  instead of a slot conflict. An `ABORT` already at the slot blocks without
+  writing a second one. A `TOOL_CALL` already at the slot is checked for the
+  same tool and args before an `integer_domain` row is read, on the gated
+  and plain paths. The gate reads one slot with `get_node_payload` /
   `GetNodePayload` on the SQLite and Postgres logs instead of decoding the
   whole trajectory.
 - Package load rejects a `seals.json` array longer than 100000 entries.

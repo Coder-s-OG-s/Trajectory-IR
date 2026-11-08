@@ -9,6 +9,7 @@ from trajectory_ir.resume.gate import (
     BlockedNeedsGate,
     ToolCallConflict,
     make_gated_tool_call,
+    make_plain_tool_call,
 )
 from trajectory_ir.resume.idempotency import CallMeta, current_idempotency_key
 from trajectory_ir.runtime.log import NodeLog, SlotConflictError
@@ -306,3 +307,69 @@ def test_get_node_payload_reads_a_trajectory_level_slot(node_log):
     node_log.append("STATE_SET", None, {"k": "v"}, TRAJ, TENANT, 0)
     assert node_log.get_node_payload(TRAJ, TENANT, None, 0, "STATE_SET") == {"k": "v"}
     assert node_log.get_node_payload(TRAJ, TENANT, 1, 0, "STATE_SET") is None
+
+
+def test_existing_abort_blocks_without_a_second_abort_write(node_log):
+    _claim(node_log)
+    # A host wrote its own ABORT here; another ABORT payload would hit the slot.
+    node_log.append(
+        "ABORT", 1, {"reason": "HOST_FAILURE", "tool": "spawn_builder"}, TRAJ, TENANT, 3
+    )
+
+    def boom():
+        raise AssertionError("must not run")
+
+    for resolve in (None, boom):
+        gated = make_gated_tool_call(
+            node_log, TRAJ, TENANT, 1, 2, "spawn_builder", boom, resolve_fn=resolve
+        )
+        with pytest.raises(BlockedNeedsGate):
+            gated()
+    assert node_log.get_node_payload(TRAJ, TENANT, 1, 3, "ABORT") == {
+        "reason": "HOST_FAILURE",
+        "tool": "spawn_builder",
+    }
+
+
+_FAILURE = {"error": "integer_domain", "message": "too big", "result_digest": "ab" * 32}
+
+
+def test_plain_call_with_different_args_conflicts_before_the_integer_failure(node_log):
+    node_log.append(
+        "TOOL_CALL",
+        1,
+        {
+            "tool": "mint",
+            "args": {"n": 1},
+            "idempotency_key": CallMeta.make(TENANT, TRAJ, 1, 2).idempotency_key,
+        },
+        TRAJ,
+        TENANT,
+        2,
+    )
+    node_log.append("TOOL_RESULT", 1, _FAILURE, TRAJ, TENANT, 3)
+    plain = make_plain_tool_call(node_log, TRAJ, TENANT, 1, 2, "mint", lambda n: n)
+    with pytest.raises(ToolCallConflict):
+        plain(n=2)
+    with pytest.raises(UnsafeInteger, match="too big"):
+        plain(n=1)
+
+
+def test_gated_call_with_different_args_conflicts_before_the_integer_failure(node_log):
+    _claim(node_log, args={"task": "build"})
+    node_log.append("TOOL_RESULT", 1, _FAILURE, TRAJ, TENANT, 3)
+    gated = make_gated_tool_call(node_log, TRAJ, TENANT, 1, 2, "spawn_builder", lambda task: task)
+    with pytest.raises(ToolCallConflict):
+        gated(task="deploy")
+
+
+def test_integer_failure_without_a_call_does_not_run_or_record_one(node_log):
+    node_log.append("TOOL_RESULT", 1, _FAILURE, TRAJ, TENANT, 3)
+
+    def boom(**_):
+        raise AssertionError("must not run")
+
+    for wrap in (make_gated_tool_call, make_plain_tool_call):
+        with pytest.raises(UnsafeInteger, match="too big"):
+            wrap(node_log, TRAJ, TENANT, 1, 2, "mint", boom)()
+    assert not node_log.has(TRAJ, TENANT, 1, "TOOL_CALL", seq=2)

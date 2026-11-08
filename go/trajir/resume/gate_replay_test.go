@@ -413,3 +413,82 @@ func TestPlainUnsafeResultRecordsIntegerFailure(t *testing.T) {
 		t.Fatalf("runs=%d, want 1", runs)
 	}
 }
+
+func TestGatedExistingAbortBlocksWithoutSecondAbortWrite(t *testing.T) {
+	nl := openLog(t)
+	claimWithoutResult(t, nl, "spawn_builder")
+	step := 1
+	// A host wrote its own ABORT here; another ABORT payload would hit the slot.
+	host := map[string]any{"reason": "HOST_FAILURE", "tool": "spawn_builder"}
+	if _, err := nl.Append("ABORT", &step, host, "t1", "demo", 3); err != nil {
+		t.Fatal(err)
+	}
+	body := func(map[string]any) (any, error) {
+		t.Fatal("tool must not run")
+		return nil, nil
+	}
+	resolve := func(map[string]any, resume.CallMeta) (any, bool, error) {
+		t.Fatal("resolve must not be asked")
+		return nil, false, nil
+	}
+	args := map[string]any{"task": "build"}
+	for _, r := range []resume.ResolveFunc{nil, resolve} {
+		gated := resume.MakeGatedToolCallWithResolve(nl, "t1", "demo", 1, 2, "spawn_builder", body, r)
+		var blocked *resume.BlockedNeedsGate
+		if _, err := gated(args); !errors.As(err, &blocked) {
+			t.Fatalf("err=%v, want BlockedNeedsGate", err)
+		}
+	}
+	got, _, err := nl.GetNodePayload("t1", "demo", &step, 3, "ABORT")
+	if err != nil || got["reason"] != "HOST_FAILURE" {
+		t.Fatalf("ABORT=%#v err=%v", got, err)
+	}
+}
+
+func appendFailureRow(t *testing.T, nl *nodelog.NodeLog) {
+	t.Helper()
+	step := 1
+	if _, err := nl.Append("TOOL_RESULT", &step, map[string]any{
+		"error":         "integer_domain",
+		"message":       "too big",
+		"result_digest": strings.Repeat("ab", 32),
+	}, "t1", "demo", 3); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestPlainDifferentArgsConflictBeforeIntegerFailure(t *testing.T) {
+	nl := openLog(t)
+	step := 1
+	if _, err := nl.Append("TOOL_CALL", &step, map[string]any{
+		"tool":            "mint",
+		"args":            map[string]any{"n": 1},
+		"idempotency_key": resume.IdempotencyKey("demo", "t1", 1, 2),
+	}, "t1", "demo", 2); err != nil {
+		t.Fatal(err)
+	}
+	appendFailureRow(t, nl)
+	plain := resume.MakePlainToolCall(nl, "t1", "demo", 1, 2, "mint",
+		func(map[string]any) (any, error) { return nil, nil })
+
+	var conflict *resume.ToolCallConflict
+	if _, err := plain(map[string]any{"n": 2}); !errors.As(err, &conflict) {
+		t.Fatalf("err=%v, want ToolCallConflict", err)
+	}
+	var unsafe *resume.UnsafeInteger
+	if _, err := plain(map[string]any{"n": 1}); !errors.As(err, &unsafe) {
+		t.Fatalf("err=%v, want UnsafeInteger", err)
+	}
+}
+
+func TestGatedDifferentArgsConflictBeforeIntegerFailure(t *testing.T) {
+	nl := openLog(t)
+	claimWithoutResult(t, nl, "spawn_builder")
+	appendFailureRow(t, nl)
+	gated := resume.MakeGatedToolCall(nl, "t1", "demo", 1, 2, "spawn_builder",
+		func(map[string]any) (any, error) { return nil, nil })
+	var conflict *resume.ToolCallConflict
+	if _, err := gated(map[string]any{"task": "deploy"}); !errors.As(err, &conflict) {
+		t.Fatalf("err=%v, want ToolCallConflict", err)
+	}
+}

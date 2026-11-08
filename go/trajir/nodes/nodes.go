@@ -171,7 +171,14 @@ type UnsafeIntegerError struct {
 	Message string
 }
 
-func (e *UnsafeIntegerError) Error() string { return e.Message }
+func (e *UnsafeIntegerError) Error() string {
+	if e == nil || e.Message == "" {
+		return defaultUnsafeIntegerMessage
+	}
+	return e.Message
+}
+
+const defaultUnsafeIntegerMessage = "integer exceeds safe integer domain for JSON floats"
 
 func rejectUnsafeValues(v any) error {
 	if v == nil {

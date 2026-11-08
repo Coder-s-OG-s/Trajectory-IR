@@ -116,6 +116,10 @@ def _assert_same_call(node_log, trajectory_id, tenant_id, step_n, seq, tool_name
     the way they would in the node id.
     """
     stored = node_log.get_node_payload(trajectory_id, tenant_id, step_n, seq, "TOOL_CALL")
+    _require_same_call(stored, step_n, seq, tool_name, args)
+
+
+def _require_same_call(stored, step_n, seq, tool_name, args) -> None:
     if not isinstance(stored, dict):
         raise ToolCallConflict(step_n, seq, tool_name)
     stored_args = stored.get("args")
@@ -123,6 +127,23 @@ def _assert_same_call(node_log, trajectory_id, tenant_id, step_n, seq, tool_name
         stored_args = {}
     if _call_identity(stored.get("tool"), stored_args) != _call_identity(tool_name, args):
         raise ToolCallConflict(step_n, seq, tool_name)
+
+
+def _check_slot_before_call(node_log, trajectory_id, tenant_id, step_n, seq, tool_name, args):
+    """Check the slot before this call claims or records anything.
+
+    A TOOL_CALL already at ``seq`` must be this call, so a stored outcome is
+    never read for a different one. Then an ``integer_domain`` row at
+    ``seq + 1`` raises, even with no TOOL_CALL, so the body does not run and no
+    TOOL_CALL is written for it. Returns the TOOL_CALL payload, or None.
+    """
+    prior = node_log.get_node_payload(trajectory_id, tenant_id, step_n, seq, "TOOL_CALL")
+    if prior is not None:
+        _require_same_call(prior, step_n, seq, tool_name, args)
+    failed = _stored_integer_failure(node_log, trajectory_id, tenant_id, step_n, seq + 1)
+    if failed is not None:
+        _raise_stored_integer_failure(failed)
+    return prior
 
 
 def _raise_stored_integer_failure(payload: dict) -> None:
@@ -232,6 +253,9 @@ def make_gated_tool_call(
         # nodes present. A `not TOOL_RESULT` conjunct fails open there.
         reject_unsafe_integers({"args": kwargs})
         meta = CallMeta.make(tenant_id, trajectory_id, step_n, seq)
+        prior = _check_slot_before_call(
+            node_log, trajectory_id, tenant_id, step_n, seq, tool_name, kwargs
+        )
         claimed = node_log.claim_tool_call(
             step_n,
             {
@@ -244,18 +268,25 @@ def make_gated_tool_call(
             seq,
         )
         if not claimed:
-            _assert_same_call(node_log, trajectory_id, tenant_id, step_n, seq, tool_name, kwargs)
-            failed = _stored_integer_failure(node_log, trajectory_id, tenant_id, step_n, seq + 1)
-            if failed is not None:
-                _raise_stored_integer_failure(failed)
+            if prior is None:
+                # Another worker claimed the slot after the check above.
+                _check_slot_before_call(
+                    node_log, trajectory_id, tenant_id, step_n, seq, tool_name, kwargs
+                )
+                _assert_same_call(
+                    node_log, trajectory_id, tenant_id, step_n, seq, tool_name, kwargs
+                )
             # The effect already ran and its outcome is durable (crash between the
             # TOOL_RESULT commit and the backend's memo). Hand the recorded result
             # back; nothing re-executes and there is nothing to gate.
             stored = _stored_tool_result(node_log, trajectory_id, tenant_id, step_n, seq + 1)
             if stored is not None:
                 return stored["result"]
-            aborted = node_log.get_node_payload(trajectory_id, tenant_id, step_n, seq + 1, "ABORT")
-            if resolve_fn is not None and aborted is None:
+            # An ABORT here is final. Writing another one could differ from a
+            # host's own ABORT payload and fail as a slot conflict.
+            if node_log.get_node_payload(trajectory_id, tenant_id, step_n, seq + 1, "ABORT"):
+                raise BlockedNeedsGate(step_n, tool_name)
+            if resolve_fn is not None:
                 resolved = bind_call_meta(meta, resolve_fn, kwargs)
                 if resolved is UNRESOLVED:
                     raise BlockedNeedsGate(step_n, tool_name)
@@ -288,9 +319,7 @@ def make_plain_tool_call(node_log, trajectory_id, tenant_id, step_n, seq, tool_n
 
     def plain(**kwargs):
         reject_unsafe_integers({"args": kwargs})
-        failed = _stored_integer_failure(node_log, trajectory_id, tenant_id, step_n, seq + 1)
-        if failed is not None:
-            _raise_stored_integer_failure(failed)
+        _check_slot_before_call(node_log, trajectory_id, tenant_id, step_n, seq, tool_name, kwargs)
         meta = CallMeta.make(tenant_id, trajectory_id, step_n, seq)
         node_log.append(
             "TOOL_CALL",
