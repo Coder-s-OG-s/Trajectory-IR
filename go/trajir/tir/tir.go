@@ -45,6 +45,7 @@ const (
 	MaxUncompressedEntryBytes = 32 * 1024 * 1024  // 32 MiB
 	MaxTotalUncompressedBytes = 128 * 1024 * 1024 // 128 MiB
 	MaxNodes                  = 100_000
+	MaxSeals                  = 100_000
 	MaxArtifacts              = 10_000
 )
 
@@ -781,10 +782,6 @@ func LoadUnverified(path string) (*Package, error) {
 	return loadImplWithOptions(path, false, VerifyOptions{})
 }
 
-func loadImpl(path string, verify bool) (*Package, error) {
-	return loadImplWithOptions(path, verify, VerifyOptions{})
-}
-
 func loadImplWithOptions(path string, verify bool, opts VerifyOptions) (*Package, error) {
 	st, err := os.Stat(path)
 	if err != nil || st.IsDir() {
@@ -797,10 +794,6 @@ func loadImplWithOptions(path string, verify bool, opts VerifyOptions) (*Package
 	}
 	defer zr.Close()
 	return loadFromZipWithOptions(&zr.Reader, verify, opts)
-}
-
-func loadFromZip(zr *zip.Reader, verify bool) (*Package, error) {
-	return loadFromZipWithOptions(zr, verify, VerifyOptions{})
 }
 
 func loadFromZipWithOptions(zr *zip.Reader, verify bool, opts VerifyOptions) (*Package, error) {
@@ -861,6 +854,9 @@ func loadFromZipWithOptions(zr *zip.Reader, verify bool, opts VerifyOptions) (*P
 	var seals []map[string]any
 	if err := json.Unmarshal(rawSeals, &seals); err != nil {
 		return nil, fmt.Errorf("%w: seals.json: %v", ErrTir, err)
+	}
+	if len(seals) > MaxSeals {
+		return nil, fmt.Errorf("%w: too many seals: > %d", ErrLimit, MaxSeals)
 	}
 
 	rawArtMan, err := readMember("artifacts-manifest.json")

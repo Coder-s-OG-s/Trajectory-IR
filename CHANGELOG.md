@@ -7,8 +7,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-03
+
 ### Added
 
+- `scripts/install_claude.ps1` and `scripts/install_claude.sh` take a target
+  directory. Hooks and MCP config land in that project. The hook command is
+  `integrations/attach/launch_hook.py` with `TRAJIR_IDENTITY_FILE`. The user
+  profile is not edited. The same step writes Cursor, VS Code, Gemini CLI,
+  and Codex project config, plus `.trajir` snippets for LangGraph and ADK.
+  Those MCP entries do not seal the host's own tools. The snippets do not
+  import those libraries until a function is called. This command is not a
+  tagged release.
+- Claude PreToolUse still exits 0 on the first seal. The hook command
+  carries the owner word `project`. The same owner asking again while
+  that call is still pending exits 2 for `NON_IDEMPOTENT_WRITE` and for
+  a row with no effect class. That is a crash before PostToolUse. A
+  different owner on that pending call exits 0. A second registration
+  must use a different owner word. A later PreToolUse after the result
+  is recorded exits 2 for `NON_IDEMPOTENT_WRITE` and for a recorded row
+  with no effect class. The hook does not call the tool and does not
+  start DBOS. PostToolUse still exits 0 when the diary write fails. The
+  tool-call row is stored only after the tool has run. If the host denies
+  the tool after the seal, the pending row stays. There is no cleanup
+  command. A missing `TRAJIR_IDENTITY_FILE` exits 2 and names
+  `scripts/install_claude.ps1` or `scripts/install_claude.sh`.
+- The installer resolves `--target` before it changes directory, reads an
+  identity file only from `TRAJIR_IDENTITY_FILE`, and adds
+  `.local-evidence/`, `.claude/settings.local.json`, `.mcp.json`,
+  `.cursor/mcp.json`, `.vscode/mcp.json`, `.gemini/settings.json`,
+  `.codex/config.toml`, and `.trajir/*.py` to the target `.gitignore`
+  when those lines are missing. An existing `.local-evidence` line
+  counts. MCP command paths in the project config are absolute on that
+  machine.
+- The Claude hook launcher only runs `integrations/claude/pre_tool_use.py`,
+  `post_tool_use.py`, and `post_tool_use_failure.py` from this install.
+  Another path exits 2 on pre, exits 0 on post, and is not executed.
+  The install root on `sys.path` is this checkout. `scripts/install_claude.sh`
+  uses `.venv/Scripts/python.exe` when that file is present, including when
+  Git Bash does not mark it executable. A hook command that names the
+  launcher with the other slash form is replaced on the next run. If
+  `go/trajir-console.exe` is missing and `go` is not installed, the console
+  step names that path.
+- The installer starts `trajir-console` on `127.0.0.1:8787` when that
+  port is free and waits until the process accepts a connection. The
+  data directory is `<target>/.local-evidence/console-data`. It does not
+  replace a process that is already listening. If the new process dies,
+  the installer exits 1. `--skip-console` skips the start.
+- `.github/workflows/docs-site.yml` builds the MkDocs site. The deploy job
+  runs on pushes to main. Turning on GitHub Pages for the live site is a
+  repository setting after that workflow is on main.
+- Article 12 field map in `docs/ARTICLE_12_FIELD_MAP.md` and the one-step
+  page `website/docs/one-step.md`. The map names pack fields. It is not a
+  compliance claim.
 - Seal-derived idempotency keys on every `TOOL_CALL`. Format is
   `hex(sha256(length-prefixed utf-8 fields))` with domain
   `trajir-idempotency-v1`: each field is `uint32be(byte length) || utf-8`,
@@ -73,11 +124,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Package load rejects a `seals.json` array longer than 100000 entries.
+  Go calls that cap `MaxSeals`. Python calls it `MAX_SEALS`. Node and
+  artifact caps are unchanged.
+- `scripts/install_claude.sh` uses `TRAJIR_PYTHON`, then `.venv/bin/python`,
+  then `python3`, then `python`. The installer used to run under a bare
+  `python`, which could resolve to the wrong interpreter. The hook command
+  stores that interpreter's absolute path.
+- Unsigned `.tir` loads reject duplicate zip members (#469). Postgres
+  `Append` returns the slot-lookup error (#465). An S3 outage is not
+  reported as a missing object (#467). Go memo keys are `tenant|workflow`
+  (#471). Id length counts characters (#466). `node_id` checks every
+  preimage field (#468).
 - Gated tool replay: re-entering a `NON_IDEMPOTENT_WRITE` call whose
   `TOOL_RESULT` is already recorded now returns that result. It used to append
   `ABORT` next to the completed `TOOL_RESULT` and raise `BlockedNeedsGate`.
   A claimed `TOOL_CALL` with no `TOOL_RESULT` still blocks. Python and Go.
-
 - Go `PayloadHash` refuses Go integer values and JSON integer literals
   outside `-(2^53-1) .. 2^53-1`, matching Python rfc8785. Floats still
   hash. SQLite, Postgres, and `.tir` load keep number text with
@@ -97,7 +159,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `connect_timeout`, or `TRAJIR_PG_CONNECT_TIMEOUT`). S3 clients set an
   explicit 10s connect timeout and 60s read deadline (#406).
 - Go: `ClaimToolCall` (SQLite and Postgres) now returns real insert errors instead of
-  reporting "not claimed"; only a unique-slot conflict means another writer won.
+  reporting "not claimed"; only a unique-slot conflict means another writer won (#458).
   Postgres connection errors from `OpenDSN` have the DSN password scrubbed while
   still unwrapping to the cause. Payload numbers read back by `ListNodes` are
   `json.Number`, so integers above 2^53 survive, and a `payload_json` with trailing

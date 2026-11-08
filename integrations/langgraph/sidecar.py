@@ -15,7 +15,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
 from trajectory_ir.client.python.trajectory_client import (
     commit_step,
@@ -269,7 +269,7 @@ class TrajIRToolGuard:
             return
         with self._lock:
             if self._closed:
-                return
+                return  # type: ignore[unreachable]
             self._commit_open_step()
 
     def export_tir(self, dest: str | Path, *, redacted: bool = False) -> str:
@@ -349,7 +349,7 @@ def _tool_call_from_request(request: Any) -> Mapping[str, Any]:
     if isinstance(tc, Mapping):
         return tc
     if tc is not None and hasattr(tc, "get"):
-        return tc  # type: ignore[return-value]
+        return cast(Mapping[str, Any], tc)
     raise TypeError(f"cannot read tool_call from request type {type(request)!r}")
 
 

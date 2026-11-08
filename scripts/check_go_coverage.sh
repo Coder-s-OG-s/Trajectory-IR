@@ -5,7 +5,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT/go"
 
-MIN="${GO_COV_FAIL_UNDER:-50}"
+MIN="${GO_COV_FAIL_UNDER:-80}"
 PROFILE="${GO_COVERPROFILE:-coverage.out}"
 
 # Default unit floor excludes durable/temporal: that package needs a live

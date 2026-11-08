@@ -5,6 +5,7 @@ import pytest
 
 from trajectory_ir.package.tir import (
     TirLimitError,
+    TirVerificationError,
     _read_zip_member,
 )
 
@@ -40,3 +41,32 @@ def test_read_zip_member_enforces_entry_limit(tmp_path: Path, monkeypatch):
         pytest.raises(TirLimitError, match="exceeds limit"),
     ):
         _read_zip_member(zf, "bomb.txt", budget=budget)
+
+
+def _seals_zip(path: Path, seals: bytes) -> None:
+    with zipfile.ZipFile(path, "w") as zf:
+        zf.writestr("manifest.json", b"{}")
+        zf.writestr("nodes.ndjson", b"\n")
+        zf.writestr("seals.json", seals)
+        zf.writestr("artifacts-manifest.json", b"[]")
+        zf.writestr("COMPAT.json", b"{}")
+
+
+def test_load_rejects_too_many_seals(tmp_path: Path, monkeypatch) -> None:
+    import trajectory_ir.package.tir as tir
+
+    monkeypatch.setattr(tir, "MAX_SEALS", 1)
+    zip_path = tmp_path / "seals.tir"
+    _seals_zip(zip_path, b"[{},{}]")
+    with pytest.raises(TirLimitError, match="too many seals"):
+        tir.load_tir(zip_path)
+
+
+def test_load_allows_seal_count_at_cap(tmp_path: Path, monkeypatch) -> None:
+    import trajectory_ir.package.tir as tir
+
+    monkeypatch.setattr(tir, "MAX_SEALS", 1)
+    zip_path = tmp_path / "seals.tir"
+    _seals_zip(zip_path, b"[{}]")
+    with pytest.raises(TirVerificationError, match="package has no nodes"):
+        tir.load_tir(zip_path)

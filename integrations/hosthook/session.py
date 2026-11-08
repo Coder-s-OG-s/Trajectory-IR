@@ -10,9 +10,11 @@ HOST_REPORTED_FAILURE, then COMMIT_STEP. The pending row is cleared. The tool
 is not run again.
 
 This path does not open the durable backend. A crash after the seal leaves the
-decision in the log. The next tool is a new step. This is not exactly-once.
-On this path TOOL_CALL is written after the host tool, so it records the call
-and does not gate it.
+decision in the log. The same hook owner asking again for that tool_use_id
+is blocked when the effect is gated or missing. A different owner on the
+still-pending call is another registration and is not blocked. The next tool
+id is a new step. This is not exactly-once. On this path TOOL_CALL is written
+after the host tool, so it records the call and does not gate the first run.
 """
 
 from __future__ import annotations
@@ -184,6 +186,15 @@ def _close_pending(
     _save_state(work_dir, state)
 
 
+def _retry_blocked(record: dict[str, Any]) -> bool:
+    """A repeat from the same owner blocks a gated effect, and an unknown one."""
+    try:
+        effect = EffectClass(str(record.get("effect_class") or ""))
+    except ValueError:
+        return True
+    return requires_block_and_gate(effect)
+
+
 def seal_before_tool(
     work_dir: str | Path,
     tenant_id: str,
@@ -192,8 +203,14 @@ def seal_before_tool(
     args: dict[str, Any] | None,
     tool_use_id: str,
     annotations: dict[str, Any] | None = None,
+    owner: str = "",
 ) -> dict[str, Any]:
-    """Seal one tool call. Do not run the tool."""
+    """Seal one tool call. Do not run the tool.
+
+    ``owner`` names the hook registration. The same owner asking again while
+    the call is pending is a crash before PostToolUse. A different owner is
+    another registration of this same attempt.
+    """
     if not tool_use_id:
         raise ValueError("tool_use_id is required")
     root = Path(work_dir)
@@ -201,9 +218,28 @@ def seal_before_tool(
     effect = classify_tool(tool_name, annotations)
     with _Lock(root):
         state = _load_state(root)
-        existing = state["pending"].get(tool_use_id) or state["done"].get(tool_use_id)
-        if existing:
-            return dict(existing)
+        done = state["done"].get(tool_use_id)
+        if done:
+            # replay is a return-only flag. It is not written into hook_state.json.
+            # It means this tool_use_id already finished (result or failure).
+            found = dict(done)
+            found["replay"] = True
+            return found
+        pending = state["pending"].get(tool_use_id)
+        if pending:
+            found = dict(pending)
+            stored_owner = str(pending.get("owner") or "")
+            incoming = owner or ""
+            if incoming != stored_owner:
+                # Another registration is watching this same attempt.
+                found["duplicate"] = True
+                return found
+            # This registration is asking again before a result exists.
+            if _retry_blocked(found):
+                found["replay"] = True
+            else:
+                found["duplicate"] = True
+            return found
         step_n = int(state["next_step"])
         decision_id = ""
         content_hash = ""
@@ -237,6 +273,7 @@ def seal_before_tool(
             "args": safe_args,
             "effect_class": effect.value,
             "sealed": True,
+            "owner": owner or "",
         }
         state["pending"][tool_use_id] = record
         state["next_step"] = step_n + 1

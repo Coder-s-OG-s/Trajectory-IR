@@ -60,6 +60,7 @@ MAX_ZIP_ENTRIES = 10_000
 MAX_UNCOMPRESSED_ENTRY_BYTES = 32 * 1024 * 1024  # 32 MiB per member
 MAX_TOTAL_UNCOMPRESSED_BYTES = 128 * 1024 * 1024  # 128 MiB total
 MAX_NODES = 100_000
+MAX_SEALS = 100_000
 MAX_ARTIFACTS = 10_000
 
 _REQUIRED_MEMBERS = frozenset(
@@ -536,6 +537,8 @@ def _load_tir_impl(
         budget = [MAX_TOTAL_UNCOMPRESSED_BYTES]
         manifest = json.loads(_read_zip_member(zf, "manifest.json", budget=budget))
         seals = json.loads(_read_zip_member(zf, "seals.json", budget=budget))
+        if isinstance(seals, list) and len(seals) > MAX_SEALS:
+            raise TirLimitError(f"too many seals: > {MAX_SEALS}")
         artifacts_manifest = json.loads(
             _read_zip_member(zf, "artifacts-manifest.json", budget=budget)
         )
@@ -596,7 +599,7 @@ def _load_tir_impl(
         # Signature check after hash/seal integrity (README 9.1 order).
         # Use the already open archive only — never re open path (TOCTOU / CWE-367).
         # Present but invalid SIGNATURE fails even for load_tir_unverified (tamper).
-        # Unsigned packages skip the second decompress pass (match Go loadImpl).
+        # Unsigned packages skip the second decompress pass (match Go loadFromZipWithOptions).
         sig_info = None
         requires_sig = (
             require_signature or (trusted_keys is not None) or (trusted_key_ids is not None)

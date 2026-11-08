@@ -99,6 +99,7 @@ go/_demo_capture*/
 # Built verify CLI and local evidence scratch
 /go/trajir.exe
 /go/trajir-mcp.exe
+/go/trajir-console.exe
 /go/trajir/trajir
 /.local-evidence/
 
