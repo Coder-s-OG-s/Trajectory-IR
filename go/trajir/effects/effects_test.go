@@ -14,15 +14,26 @@ func TestRequiresBlockAndGate(t *testing.T) {
 	if !effects.RequiresBlockAndGate(effects.AGENT_SPAWN) {
 		t.Fatal("AGENT_SPAWN must be gated (spec 7.1)")
 	}
+	if !effects.RequiresBlockAndGate(effects.SENSITIVE) {
+		t.Fatal("SENSITIVE must be gated (spec 7.1, no base class recorded)")
+	}
 	for _, e := range []effects.EffectClass{
 		effects.PURE,
 		effects.READ_ONLY,
 		effects.IDEMPOTENT_WRITE,
-		effects.SENSITIVE,
 	} {
 		if effects.RequiresBlockAndGate(e) {
 			t.Fatalf("%s must not be gated (R03 matrix)", e)
 		}
+	}
+}
+
+func TestSandboxEffect(t *testing.T) {
+	if got := effects.SandboxEffect(effects.READ_ONLY, true); got != effects.SENSITIVE {
+		t.Fatalf("sensitive read=%s, want SENSITIVE", got)
+	}
+	if got := effects.SandboxEffect(effects.READ_ONLY, false); got != effects.READ_ONLY {
+		t.Fatalf("plain read=%s, want READ_ONLY", got)
 	}
 }
 

@@ -1,7 +1,11 @@
 from collections.abc import Callable, Mapping
 from typing import Any
 
-from trajectory_ir.effects import assert_open_world_effect, requires_block_and_gate
+from trajectory_ir.effects import (
+    assert_open_world_effect,
+    requires_block_and_gate,
+    sandbox_effect,
+)
 from trajectory_ir.resume.gate import make_gated_tool_call, make_plain_tool_call
 from trajectory_ir.resume.world import check_world, decision_payload, sealed_world_snapshot
 from trajectory_ir.runtime.nodes import UnsafeInteger, UnsafePlan, reject_unsafe_integers
@@ -243,7 +247,7 @@ def make_run_step(
             assert_tool_allowed_in_mode(
                 run_mode,
                 tool_name=name,
-                effect_class=tool.effect_class,
+                effect_class=sandbox_effect(tool.effect_class, getattr(tool, "sensitive", False)),
             )
             if requires_block_and_gate(tool.effect_class):
                 gated = make_gated_tool_call(
@@ -254,6 +258,7 @@ def make_run_step(
                     seq,
                     name,
                     tool.fn,
+                    resolve_fn=getattr(tool, "resolve", None),
                 )
                 result = durable_tool(gated)(**args)
             else:

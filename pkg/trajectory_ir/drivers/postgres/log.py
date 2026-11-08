@@ -324,6 +324,31 @@ class PostgresNodeLog:
             row = cur.fetchone()
             return int(row[0]) if row else 0
 
+    def get_node_payload(
+        self,
+        trajectory_id: str,
+        tenant_id: str,
+        step_n: int | None,
+        seq: int,
+        kind: str,
+    ) -> dict | None:
+        """Payload at one logical slot via ``idx_nodes_slot``, or None. Matches SQLite."""
+        if not tenant_id:
+            raise ValueError("tenant_id must be a non-empty string")
+        with self._lock, self._conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT payload_json FROM nodes
+                WHERE tenant_id = %s AND trajectory_id = %s
+                  AND COALESCE(step_n, -1) = COALESCE(%s, -1)
+                  AND seq = %s AND kind = %s
+                LIMIT 1
+                """,
+                (tenant_id, trajectory_id, step_n, seq, kind),
+            )
+            row = cur.fetchone()
+        return json.loads(row[0]) if row is not None else None
+
     def list_nodes(
         self,
         trajectory_id: str,

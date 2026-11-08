@@ -10,7 +10,11 @@ from trajectory_ir.console_emit import (
     note_projection,
     note_seal,
 )
-from trajectory_ir.effects import assert_open_world_effect, requires_block_and_gate
+from trajectory_ir.effects import (
+    assert_open_world_effect,
+    requires_block_and_gate,
+    sandbox_effect,
+)
 from trajectory_ir.resume.gate import make_gated_tool_call, make_plain_tool_call
 from trajectory_ir.resume.world import WorldDrift, decision_payload
 from trajectory_ir.resume.world import check_world as _check_world
@@ -227,7 +231,7 @@ def exec_tool(trajectory: Trajectory, step_n: int, call: dict, tool: Tool, seq: 
     assert_tool_allowed_in_mode(
         trajectory.mode,
         tool_name=tool.name,
-        effect_class=tool.effect_class,
+        effect_class=sandbox_effect(tool.effect_class, getattr(tool, "sensitive", False)),
     )
     log = trajectory._log
     try:
@@ -240,6 +244,7 @@ def exec_tool(trajectory: Trajectory, step_n: int, call: dict, tool: Tool, seq: 
                 seq=seq,
                 tool_name=tool.name,
                 tool_fn=tool.fn,
+                resolve_fn=getattr(tool, "resolve", None),
             )
             result = fn(**call["args"])
         else:

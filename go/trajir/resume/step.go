@@ -23,6 +23,13 @@ type Tool struct {
 	// PURE, READ_ONLY, or IDEMPOTENT_WRITE. Without it, ExecTool / RunStep
 	// refuse the claim.
 	AllowOpenWorldOverride bool
+	// Resolve is for gated tools only. It looks up how a claimed call with no
+	// recorded outcome ended. See MakeGatedToolCallWithResolve.
+	Resolve ResolveFunc
+	// Sensitive marks a tool that touches secrets or PII. Resume follows
+	// Effect, so a sensitive read may re-fetch and a sensitive write is gated.
+	// Sandbox mode rejects it.
+	Sensitive bool
 }
 
 // ToolFuncWithMeta is a tool body that also receives CallMeta.
@@ -189,7 +196,7 @@ func RunStep(
 		if err := effects.AssertOpenWorldEffect(call.Name, tool.Effect, tool.AllowOpenWorldOverride); err != nil {
 			return nil, err
 		}
-		if err := sandbox.AssertToolAllowed(cfg.Mode, call.Name, tool.Effect); err != nil {
+		if err := sandbox.AssertToolAllowed(cfg.Mode, call.Name, effects.SandboxEffect(tool.Effect, tool.Sensitive)); err != nil {
 			return nil, err
 		}
 
@@ -199,7 +206,7 @@ func RunStep(
 		var result any
 		stepKey := fmt.Sprintf("%s@%d", call.Name, seq)
 		if effects.RequiresBlockAndGate(tool.Effect) {
-			gated := MakeGatedToolCall(
+			gated := MakeGatedToolCallWithResolve(
 				cfg.Log,
 				cfg.TrajectoryID,
 				cfg.TenantID,
@@ -207,6 +214,7 @@ func RunStep(
 				seq,
 				call.Name,
 				fn,
+				tool.Resolve,
 			)
 			result, err = durable.Tool(ctx, cfg.Backend, memoScope, stepKey, func(context.Context) (any, error) {
 				return gated(args)
