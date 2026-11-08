@@ -61,13 +61,13 @@ def test_non_dict_annotations_fail_closed():
     assert classify_from_mcp(None) == EffectClass.NON_IDEMPOTENT_WRITE  # type: ignore[arg-type]
 
 
-def test_requires_block_and_gate_non_idempotent_and_agent_spawn():
+def test_requires_block_and_gate_non_idempotent_agent_spawn_and_sensitive():
     assert requires_block_and_gate(EffectClass.NON_IDEMPOTENT_WRITE) is True
     assert requires_block_and_gate(EffectClass.PURE) is False
     assert requires_block_and_gate(EffectClass.READ_ONLY) is False
     assert requires_block_and_gate(EffectClass.IDEMPOTENT_WRITE) is False
     assert requires_block_and_gate(EffectClass.AGENT_SPAWN) is True
-    assert requires_block_and_gate(EffectClass.SENSITIVE) is False
+    assert requires_block_and_gate(EffectClass.SENSITIVE) is True
 
 
 def test_classify_tool_fail_closes_bash_even_if_readonly_hint():

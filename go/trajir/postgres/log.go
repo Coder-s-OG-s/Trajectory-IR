@@ -464,6 +464,40 @@ func (l *NodeLog) has(trajectoryID string, tenantID *string, stepN int, kind str
 	return err == nil, err
 }
 
+// GetNodePayload returns the payload stored at one logical slot via
+// idx_nodes_slot. A nil stepN is a trajectory-level slot, as in Append. found
+// is false when the slot is empty. Matches SQLite.
+func (l *NodeLog) GetNodePayload(trajectoryID, tenantID string, stepN *int, seq int, kind string) (map[string]any, bool, error) {
+	if tenantID == "" {
+		return nil, false, fmt.Errorf("tenantID must be a non-empty string")
+	}
+	var step any
+	if stepN != nil {
+		step = *stepN
+	}
+
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	var payloadJSON string
+	err := l.db.QueryRow(
+		`SELECT payload_json FROM nodes WHERE tenant_id = $1 AND trajectory_id = $2
+		 AND COALESCE(step_n, -1) = COALESCE($3::integer, -1) AND seq = $4 AND kind = $5 LIMIT 1`,
+		tenantID, trajectoryID, step, seq, kind,
+	).Scan(&payloadJSON)
+	if err == sql.ErrNoRows {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	payload, err := nodes.DecodePayloadJSON(payloadJSON)
+	if err != nil {
+		return nil, false, err
+	}
+	return payload, true, nil
+}
+
 // ListNodes returns nodes for a trajectory scoped to tenantID.
 func (l *NodeLog) ListNodes(trajectoryID, tenantID string) ([]map[string]any, error) {
 	return l.listNodes(trajectoryID, &tenantID)

@@ -124,6 +124,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Post-merge fixes to #483 and #484 (#488). `Tool.sensitive` / `Tool.Sensitive`
+  marks a tool that touches secrets or PII next to its base class. Resume
+  follows the base class, so a sensitive read may re-fetch and a sensitive
+  write is gated. Sandbox mode rejects the flag. The bare `SENSITIVE` class
+  records no base class, so it is now block-and-gated. A gated call that
+  finds its slot claimed checks that the tool name and args match the stored
+  `TOOL_CALL` by RFC 8785 hash. A mismatch raises `ToolCallConflict` (a slot
+  conflict) instead of returning the old result. Go records and reads the
+  `integer_domain` `TOOL_RESULT` on the gated and plain paths, returns
+  `UnsafeInteger`, and no longer writes `ABORT` for it. Gated tools take an
+  optional resolve hook (`Tool.resolve`, `Tool.Resolve`). It runs only for a
+  claimed call with no outcome and no `ABORT`, gets the args and idempotency
+  key, and must not start the effect again. A result it returns is recorded as
+  the `TOOL_RESULT`. `UNRESOLVED` (Python) or `resolved=false` (Go) blocks
+  without writing `ABORT`, and the hook is asked again on the next re-entry.
+  A worker that loses the race to record an outcome gets the winner's row back
+  instead of a slot conflict. An `ABORT` already at the slot blocks without
+  writing a second one. A `TOOL_CALL` already at the slot is checked for the
+  same tool and args before an `integer_domain` row is read, on the gated
+  and plain paths. The gate reads one slot with `get_node_payload` /
+  `GetNodePayload` on the SQLite and Postgres logs instead of decoding the
+  whole trajectory.
 - Package load rejects a `seals.json` array longer than 100000 entries.
   Go calls that cap `MaxSeals`. Python calls it `MAX_SEALS`. Node and
   artifact caps are unchanged.

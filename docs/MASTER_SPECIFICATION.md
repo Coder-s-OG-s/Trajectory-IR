@@ -187,7 +187,7 @@ Every node carries the common fields: `kind`, `step_n`, `seq`, `ts`, `payload_ha
 | `COMMIT_STEP` | Marks a step as closed and durable |
 | `ABORT` / `REDACTION` | Failure marker / privacy redaction marker |
 
-**`TOOL_RESULT` payload.** A finished call records `{"result": <json value>}`. Python hashing follows RFC 8785, which rejects integers outside `-(2^53-1)` .. `2^53-1`. When a tool return contains one of those integers, the Python client does not put that integer in the node. It records this object instead:
+**`TOOL_RESULT` payload.** A finished call records `{"result": <json value>}`. Python hashing follows RFC 8785, which rejects integers outside `-(2^53-1)` .. `2^53-1`. When a tool return contains one of those integers, the Go and Python clients do not put that integer in the node. They record this object instead:
 
 ```json
 {
@@ -197,7 +197,7 @@ Every node carries the common fields: `kind`, `step_n`, `seq`, `ts`, `payload_ha
 }
 ```
 
-`result_digest` is SHA-256 over the compact sorted JSON of the rejected value, or over `repr(value)` when that JSON dump fails. Go and any other reader must treat this object as a storage failure, not as `result`, and not as `ABORT` / `BLOCKED_NEEDS_GATE`. Resume raises that error and does not run the tool body again.
+`result_digest` is SHA-256 over the compact sorted JSON of the rejected value, with non-ASCII characters escaped as `\uXXXX`, or over `repr(value)` (Go: `%v`) when that JSON dump fails. Go and Python agree on strings, integers, and containers; float text can differ. Go and any other reader must treat this object as a storage failure, not as `result`, and not as `ABORT` / `BLOCKED_NEEDS_GATE`. Resume raises that error and does not run the tool body again, including when no `TOOL_CALL` was recorded at that slot; it writes no `TOOL_CALL` for it either. A `TOOL_CALL` already at the slot is checked first: a call with a different tool or args gets a slot conflict, not this error.
 
 ### 6.3 Node identity
 
@@ -226,7 +226,7 @@ Artifact bytes are identified by `content_hash = sha256(bytes)` and stored by th
 | `IDEMPOTENT_WRITE` | Write that is safe to retry with the same key | Replay with the same key |
 | `NON_IDEMPOTENT_WRITE` | Deploy, payment, email, delete, or anything ambiguous | Never retried blindly, see block and gate, §8.3 |
 | `AGENT_SPAWN` | Invokes a peer agent | Block and gate, same as `NON_IDEMPOTENT_WRITE` (§8.3) |
-| `SENSITIVE` | Touches secrets or PII (a flag layered on another class) | No resume gate of its own, follows the class it is layered on. Rejected in sandbox mode (R06). Redaction (R08) scrubs by key name and secret shaped value, not by this flag |
+| `SENSITIVE` | Touches secrets or PII. Set as a flag on the tool (`Tool.sensitive`, `Tool.Sensitive`) next to its base class, or as the class when no base class is known | The flag follows the base class: a sensitive read may re-fetch, a sensitive write is block-and-gated. The bare class records no base class, so it is block-and-gated (§8.3): a key rotation, payment, or user deletion must not re-run blind. Both are rejected in sandbox mode (R06). Redaction (R08) scrubs by key name and secret shaped value, not by this flag |
 
 **Re fetch divergence rule (`READ_ONLY`):** a re fetch performed on resume may return a value different from the original run. This is written as a **new** `TOOL_RESULT` node; the original result, if one exists, is never overwritten. Steps that run after a resume see the new observation. This is intentional, honest divergence, it is recorded, not hidden, and it is not treated as an error.
 
@@ -241,7 +241,7 @@ Tools registered from MCP (or any other source) must be mapped into this table b
 | `readOnlyHint: false`, `destructiveHint: true`, or `idempotentHint: false` | `NON_IDEMPOTENT_WRITE` |
 | Missing, absent, or ambiguous annotations | `NON_IDEMPOTENT_WRITE` (fail closed) |
 | Any tool identified as invoking a peer agent | `AGENT_SPAWN`, regardless of its MCP annotations |
-| Any tool flagged (by operator config, not by MCP) as touching secrets or PII | `SENSITIVE`, layered on top of whichever class above applies |
+| Any tool flagged (by operator config, not by MCP) as touching secrets or PII | The `SENSITIVE` flag, layered on top of whichever class above applies |
 
 `AGENT_SPAWN` and `SENSITIVE` have no MCP equivalent, they are the two distinctions this project adds on top of MCP's four hints, driven by what the resume matrix (§8.2) and redaction (§9, R08) need that MCP has no reason to define. **If a tool's effect metadata is missing or ambiguous, it is classified as `NON_IDEMPOTENT_WRITE` by default.** This is a deliberate fail closed posture. An operator may explicitly override a tool to a safer class, but the default must never silently assume safety.
 
@@ -305,7 +305,7 @@ This table describes what the trajectory log should show at each state; the "act
 | `DECISION` sealed with `world_snapshot`, host observation diverges | Fail `WORLD_DRIFT`. Do not re-infer. Host aborts or starts a new step. | Trajectory IR (`CheckWorld`, opt-in) |
 | All tool results present, no `COMMIT_STEP` | Finish any remaining state/artifact writes, then commit | Trajectory IR |
 | Step already committed | Move on; never reopen a committed step | Trajectory IR |
-| Crash mid tool on a `NON_IDEMPOTENT_WRITE` or `AGENT_SPAWN` | Block and gate, see §8.3 | Trajectory IR (policy), backend (crash detection) |
+| Crash mid tool on a `NON_IDEMPOTENT_WRITE`, `AGENT_SPAWN`, or bare `SENSITIVE` | Block and gate, see §8.3 | Trajectory IR (policy), backend (crash detection) |
 
 A plan integer outside the RFC 8785 range (§6.2) seals no `DECISION`, so the "no `DECISION`" row applies. The local memo does not keep that plan, and the same workflow id calls the model again. DBOS records the raised error as the step result. The same DBOS workflow id replays that error and does not call the model. A new DBOS workflow id runs inference again. That is the backend rule in §8.0: a recorded step is not executed a second time.
 
@@ -317,6 +317,10 @@ For a crash mid execution of a non idempotent tool call, the default v0.1 behavi
 - Do not auto retry.
 - Do not re invoke the model.
 - A human or an explicit policy decision resolves it: confirm the side effect succeeded, confirm it failed (the packet never landed), run a compensation, or explicitly re run in a **new** step.
+
+**Re-entry must be the same call.** A gated call that finds its `TOOL_CALL` slot already claimed compares its tool name and args with the stored `TOOL_CALL`, by RFC 8785 hash. If they differ it fails with a slot conflict (`ToolCallConflict`). It does not return the stored result, does not write `ABORT`, and does not run the tool.
+
+**Optional status lookup.** A host may attach a resolve hook to a gated tool (`Tool.resolve` in Python, `Tool.Resolve` in Go). It runs only when the slot is claimed and no outcome is recorded. It gets the call's args and idempotency key and must not start the effect again. It is a status query, for example asking a durable backend whether a peer agent (`AGENT_SPAWN`) finished. A result it returns is recorded as the `TOOL_RESULT` and returned. If it cannot tell (`UNRESOLVED` in Python, `resolved=false` in Go), the call raises `BlockedNeedsGate` without writing `ABORT`, because the call may still finish, and the hook is asked again on the next re-entry. One slot holds one outcome: an `ABORT` already at that slot is final, the hook is not asked, no second `ABORT` is written, and the call blocks. If two workers record different outcomes for the same call, the first commit wins and the other gets that row back instead of a slot conflict.
 
 This is genuinely Trajectory IR's own contribution: a generic durable execution engine will happily retry or resume a step according to its configured policy, but it has no concept of "this step touched something irreversible from an *agent's* perspective and a human should look at it before an LLM gets another turn." That gating decision is what this project adds on top of the backend's mechanics.
 
@@ -772,6 +776,7 @@ Trajectory IR deliberately does not attempt to:
 | 1.8 | 2026-09-30 | Hashed §7.3 keys (`sha256` domain-separated, tenant included) exposed via CallMeta / contextvar / `Idempotency-Key` helper, still never injected into tool args. Optional `world_snapshot` on `DECISION` with fail-loud `CheckWorld` / `WORLD_DRIFT` (§8.4). `ExecTool` / `RunStep` refuse open-world primitives tagged safer than `NON_IDEMPOTENT_WRITE` unless `AllowOpenWorldOverride` (§7.2). |
 | 1.9 | 2026-10-23 | `TOOL_RESULT` may be `{"error": "integer_domain", "message", "result_digest"}` when the tool return has an integer outside the RFC 8785 range (§6.2). That row is a storage failure, not `{"result": ...}` and not `ABORT`. A plan with such an integer seals no `DECISION`. The local memo may infer again on the same workflow id. DBOS replays the recorded error until the host uses a new workflow id (§8.2). |
 | 1.10 | 2026-10-24 | `AGENT_SPAWN` is block-and-gated on resume like `NON_IDEMPOTENT_WRITE` (§7.1, §8.2). `SENSITIVE` is documented as a layered flag with no resume gate of its own. |
+| 1.11 | 2026-11-05 | `SENSITIVE` is a flag on the tool that follows its base class, and the bare class is block-and-gated (§7.1, §8.2). The 1.10 wording left sensitive writes ungated because a tool carried only one class. Gated re-entry with a different tool or args is a slot conflict, not a replay of the stored result (§8.3). Optional resolve hook for a claimed call with no outcome (§8.3). Go records and reads the `integer_domain` `TOOL_RESULT` (§6.2). |
 
 ---
 
