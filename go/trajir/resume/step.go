@@ -7,6 +7,7 @@ import (
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/durable"
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/effects"
 	nodelog "github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/log"
+	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/nodes"
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/sandbox"
 )
 
@@ -122,7 +123,14 @@ func RunStep(
 	}
 
 	planAny, err := durable.Infer(ctx, cfg.Backend, memoScope, fmt.Sprintf("step%d", stepN), func(context.Context) (any, error) {
-		return model(ctx, stepContext)
+		plan, err := model(ctx, stepContext)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := nodes.PayloadHash(DecisionPayload(plan, cfg.WorldSnapshot)); err != nil {
+			return nil, err
+		}
+		return plan, nil
 	})
 	if err != nil {
 		return nil, err
