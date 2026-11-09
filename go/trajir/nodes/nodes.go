@@ -258,6 +258,14 @@ func checkJSONNumber(n json.Number) error {
 	if !jsonIntegerLiteral(s) || !jsonIntegerOutOfRange(s) {
 		return nil
 	}
+	digits := s
+	if digits[0] == '-' {
+		digits = digits[1:]
+	}
+	const maxDigits = "9007199254740991"
+	if len(digits) == len(maxDigits) {
+		return &UnsafeIntegerError{Message: fmt.Sprintf("%s exceeds safe integer domain for JSON floats", s)}
+	}
 	if jsonIntegerExactFloat64(s) {
 		return nil
 	}

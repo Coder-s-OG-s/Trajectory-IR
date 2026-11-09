@@ -143,12 +143,13 @@ func TestStepKeepsUnsafeIntegerDigits(t *testing.T) {
 	const safe int64 = (1 << 53) - 1
 	fn := func(context.Context) (any, error) {
 		return map[string]any{
-			"n":    unsafe,
-			"neg":  -unsafe,
-			"ok":   safe,
-			"pow":  int64(1 << 53),
-			"x":    1.5,
-			"nest": []any{map[string]any{"id": unsafe}},
+			"n":        unsafe,
+			"neg":      -unsafe,
+			"ok":       safe,
+			"neg_safe": -safe,
+			"pow":      int64(1 << 53),
+			"x":        1.5,
+			"nest":     []any{map[string]any{"id": unsafe}},
 		}, nil
 	}
 
@@ -166,7 +167,11 @@ func TestStepKeepsUnsafeIntegerDigits(t *testing.T) {
 		if m["ok"] != float64(safe) {
 			t.Fatalf("ok=%#v (%T)", m["ok"], m["ok"])
 		}
-		if m["pow"] != float64(int64(1<<53)) {
+		if m["neg_safe"] != float64(-safe) {
+			t.Fatalf("neg_safe=%#v (%T)", m["neg_safe"], m["neg_safe"])
+		}
+		pow, ok := m["pow"].(json.Number)
+		if !ok || pow.String() != "9007199254740992" {
 			t.Fatalf("pow=%#v (%T)", m["pow"], m["pow"])
 		}
 		if m["x"] != 1.5 {

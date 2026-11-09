@@ -253,12 +253,15 @@ func TestPayloadHashRejectsIntegersOutsideSafeRange(t *testing.T) {
 		{"int64 at 2^60", int64(1 << 60)},
 		{"int64 just below negative bound", int64(-(1 << 53))},
 		{"uint64", uint64(1 << 53)},
+		{"json number at 2^53", json.Number("9007199254740992")},
+		{"json number at -2^53", json.Number("-9007199254740992")},
 		{"json number", json.Number("9007199254740993")},
 		{"wide json number", json.Number("1152921504606846977")},
 		{"nested", map[string]any{"k": []any{int64((1 << 53) + 1)}}},
 		{"int64 slice", []int64{1 << 53}},
 		{"pointer", ptrInt64(1 << 53)},
 		{"raw message", json.RawMessage(`{"n":9007199254740993}`)},
+		{"raw message at 2^53", json.RawMessage(`{"n":9007199254740992}`)},
 	}
 	for _, c := range cases {
 		c := c

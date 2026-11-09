@@ -665,38 +665,42 @@ func TestRunStepSafeIntegerStillCommits(t *testing.T) {
 }
 
 func TestRunStepStoredUnsafeIntegerIsNotSealed(t *testing.T) {
-	ctx := context.Background()
-	nl, backend := testEnv(t)
-	raw := []byte(`{"tool_calls":[{"name":"echo","args":{"id":9007199254740993}}]}`)
-	if err := backend.Save(ctx, "demo|t1", "infer:step1", raw); err != nil {
-		t.Fatal(err)
-	}
-	var ran atomic.Int32
-	cfg := resume.RunStepConfig{
-		Log:          nl,
-		Backend:      backend,
-		TenantID:     "demo",
-		TrajectoryID: "t1",
-		Tools: map[string]resume.Tool{
-			"echo": {
-				Name:   "echo",
-				Effect: effects.PURE,
-				Fn: func(map[string]any) (any, error) {
-					ran.Add(1)
-					return nil, nil
+	for _, idStr := range []string{"9007199254740992", "9007199254740993"} {
+		t.Run(idStr, func(t *testing.T) {
+			ctx := context.Background()
+			nl, backend := testEnv(t)
+			raw := []byte(`{"tool_calls":[{"name":"echo","args":{"id":` + idStr + `}}]}`)
+			if err := backend.Save(ctx, "demo|t1", "infer:step1", raw); err != nil {
+				t.Fatal(err)
+			}
+			var ran atomic.Int32
+			cfg := resume.RunStepConfig{
+				Log:          nl,
+				Backend:      backend,
+				TenantID:     "demo",
+				TrajectoryID: "t1",
+				Tools: map[string]resume.Tool{
+					"echo": {
+						Name:   "echo",
+						Effect: effects.PURE,
+						Fn: func(map[string]any) (any, error) {
+							ran.Add(1)
+							return nil, nil
+						},
+					},
 				},
-			},
-		},
-	}
-	model := func(context.Context, map[string]any) (map[string]any, error) {
-		t.Fatal("model was called for a stored plan")
-		return nil, nil
-	}
-	_, err := resume.RunStep(ctx, cfg, 1, model, nil)
-	if err == nil || !strings.Contains(err.Error(), "exceeds safe integer domain") {
-		t.Fatalf("err=%v", err)
-	}
-	if ran.Load() != 0 {
-		t.Fatalf("tool ran %d times", ran.Load())
+			}
+			model := func(context.Context, map[string]any) (map[string]any, error) {
+				t.Fatal("model was called for a stored plan")
+				return nil, nil
+			}
+			_, err := resume.RunStep(ctx, cfg, 1, model, nil)
+			if err == nil || !strings.Contains(err.Error(), "exceeds safe integer domain") {
+				t.Fatalf("id=%s: err=%v", idStr, err)
+			}
+			if ran.Load() != 0 {
+				t.Fatalf("id=%s: tool ran %d times", idStr, ran.Load())
+			}
+		})
 	}
 }

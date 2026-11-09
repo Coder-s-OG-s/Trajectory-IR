@@ -112,14 +112,35 @@ func coerceMemoValue(v any) any {
 
 func coerceMemoNumber(n json.Number) any {
 	s := string(n)
+	if memoIntegerText(s) {
+		if memoIntegerOutOfRange(s) {
+			return n
+		}
+		f, err := n.Float64()
+		if err != nil || math.IsInf(f, 0) || math.IsNaN(f) {
+			return n
+		}
+		if strconv.FormatFloat(f, 'f', 0, 64) != s {
+			return n
+		}
+		return f
+	}
 	f, err := n.Float64()
 	if err != nil || math.IsInf(f, 0) || math.IsNaN(f) {
 		return n
 	}
-	if memoIntegerText(s) && strconv.FormatFloat(f, 'f', 0, 64) != s {
-		return n
-	}
 	return f
+}
+
+func memoIntegerOutOfRange(s string) bool {
+	if s[0] == '-' {
+		s = s[1:]
+	}
+	const maxDigits = "9007199254740991"
+	if len(s) != len(maxDigits) {
+		return len(s) > len(maxDigits)
+	}
+	return s > maxDigits
 }
 
 func memoIntegerText(s string) bool {

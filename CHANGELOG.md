@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Go `durable.Step` and `nodes.PayloadHash` strictly reject integers with
+  magnitude 2^53 (9007199254740992), aligning with RFC 8785 safe integer
+  bounds and Python reference behavior across cold and replayed runs.
 - Go `durable.Step` reads the memo back after `Save` and returns that
   value, so a caller that lost the insert does not keep a different
   object. An integer that does not fit in a float64 keeps its digits.
