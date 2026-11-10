@@ -388,6 +388,113 @@ func TestPayloadHashFollowsStructMarshalJSON(t *testing.T) {
 	}
 }
 
+type jsonNumberString string
+
+func (jsonNumberString) MarshalJSON() ([]byte, error) {
+	return []byte(`9007199254740993`), nil
+}
+
+type jsonNumberInt int64
+
+func (jsonNumberInt) MarshalJSON() ([]byte, error) {
+	return []byte(`9007199254740993`), nil
+}
+
+type jsonNumberByte byte
+
+func (jsonNumberByte) MarshalJSON() ([]byte, error) {
+	return []byte(`9007199254740993`), nil
+}
+
+type jsonNumberArr [8]byte
+
+func (jsonNumberArr) MarshalJSON() ([]byte, error) {
+	return []byte(`9007199254740993`), nil
+}
+
+type pointerOnlyID int64
+
+func (p *pointerOnlyID) MarshalJSON() ([]byte, error) {
+	return []byte(`9007199254740993`), nil
+}
+
+func TestPayloadHashFollowsEncodingJSONNumbers(t *testing.T) {
+	type inner struct {
+		N int64
+	}
+	n := int64(1 << 53)
+	id := pointerOnlyID(1)
+	rowPtr := &struct {
+		N pointerOnlyID
+	}{N: 1}
+	cases := []struct {
+		name   string
+		v      any
+		reject bool
+	}{
+		{"dash comma", struct {
+			N int64 `json:"-,"`
+		}{N: n}, true},
+		{"dash omitempty", struct {
+			N int64 `json:"-,omitempty"`
+		}{N: n}, true},
+		{"dash string option", struct {
+			N int64 `json:"-,string"`
+		}{N: n}, false},
+		{"nested dash comma", struct {
+			Inner struct{ N int64 } `json:"-,"`
+		}{Inner: struct{ N int64 }{N: n}}, true},
+		{"named embed", struct {
+			inner `json:"inner"`
+		}{inner: inner{N: n}}, true},
+		{"invalid tag promotes", struct {
+			inner `json:"a\"b"`
+		}{inner: inner{N: n}}, true},
+		{"pointer embed", struct {
+			*inner `json:"inner"`
+		}{inner: &inner{N: n}}, true},
+		{"pointer embed invalid tag", struct {
+			*inner `json:"a\"b"`
+		}{inner: &inner{N: n}}, true},
+		{"nil pointer embed", struct {
+			*inner `json:"inner"`
+		}{}, false},
+		{"string option", struct {
+			N int64 `json:",string"`
+		}{N: n}, false},
+		{"unexported tag", struct {
+			N int64 `json:"n"`
+			n int64 `json:"hidden"`
+		}{N: 1, n: n}, false},
+		{"uintptr", uintptr(n), true},
+		{"uintptr field", struct{ N uintptr }{N: uintptr(n)}, true},
+		{"marshal string", jsonNumberString("x"), true},
+		{"marshal int", jsonNumberInt(1), true},
+		{"marshal byte", jsonNumberByte(1), true},
+		{"marshal array", jsonNumberArr{}, true},
+		{"pointer method on value", pointerOnlyID(1), false},
+		{"pointer method on pointer", &id, true},
+		{"pointer method on field", struct{ N pointerOnlyID }{N: 1}, false},
+		{"pointer method on addressable field", rowPtr, true},
+	}
+	for _, c := range cases {
+		c := c
+		t.Run(c.name, func(t *testing.T) {
+			raw, merr := json.Marshal(map[string]any{"n": c.v})
+			_, err := nodes.PayloadHash(map[string]any{"n": c.v})
+			if c.reject {
+				if err == nil || !strings.Contains(err.Error(), "safe integer") {
+					t.Fatalf("json %s marshal %v hash %v", raw, merr, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("json %s marshal %v hash %v", raw, merr, err)
+			}
+		})
+	}
+}
+
 func TestNodeIDRejectsInvalidComponents(t *testing.T) {
 	if _, err := nodes.NodeID("", "t1", nil, 0, "INPUT", "h"); err == nil {
 		t.Fatal("expected error for empty tenant_id")

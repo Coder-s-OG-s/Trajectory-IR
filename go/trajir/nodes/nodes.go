@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/gowebpki/jcs"
@@ -193,37 +194,44 @@ func walkUnsafe(rv reflect.Value, seen map[uintptr]struct{}) error {
 	if !rv.IsValid() {
 		return nil
 	}
-	for rv.Kind() == reflect.Interface || rv.Kind() == reflect.Pointer {
+	for rv.Kind() == reflect.Interface {
 		if rv.IsNil() {
 			return nil
 		}
-		if rv.Kind() == reflect.Pointer && rv.Elem().Kind() == reflect.Struct {
+		rv = rv.Elem()
+	}
+	if rv.Kind() == reflect.Pointer {
+		if rv.IsNil() {
+			return nil
+		}
+		if rv.Elem().Kind() == reflect.Struct {
 			ptr := rv.Pointer()
 			if _, ok := seen[ptr]; ok {
 				return nil
 			}
 			seen[ptr] = struct{}{}
 		}
-		rv = rv.Elem()
 	}
-	if !rv.IsValid() {
-		return nil
+	// encoding/json calls MarshalJSON before the kind encoding, for every type.
+	if raw, ok, err := callMarshalJSON(rv); ok {
+		if err != nil {
+			return err
+		}
+		return walkJSONBytes(raw, seen)
+	}
+	if rv.Kind() == reflect.Pointer {
+		return walkUnsafe(rv.Elem(), seen)
 	}
 
 	switch rv.Type() {
 	case jsonNumberType:
 		return checkJSONNumber(json.Number(rv.String()))
 	case rawMessageType:
-		// encoding/json emits null for a nil RawMessage. An empty non-nil
-		// value is invalid JSON and still fails below.
+		// A nil RawMessage is null. An empty non-nil value is invalid JSON.
 		if rv.IsNil() {
 			return nil
 		}
-		decoded, err := decodeJSON(rawMessageBytes(rv))
-		if err != nil {
-			return err
-		}
-		return walkUnsafe(reflect.ValueOf(decoded), seen)
+		return walkJSONBytes(rawMessageBytes(rv), seen)
 	}
 
 	switch rv.Kind() {
@@ -231,7 +239,7 @@ func walkUnsafe(rv reflect.Value, seen map[uintptr]struct{}) error {
 		return nil
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		return checkInt64(rv.Int())
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
 		u := rv.Uint()
 		if u > uint64(maxSafeInteger) {
 			return &UnsafeIntegerError{Message: fmt.Sprintf("%d exceeds safe integer domain for JSON floats", u)}
@@ -259,22 +267,23 @@ func walkUnsafe(rv reflect.Value, seen map[uintptr]struct{}) error {
 	}
 }
 
-// walkUnsafeStruct checks integers that encoding/json would emit from a struct.
-// A field tagged json:"-" and an unexported field stay out of the hash.
-func walkUnsafeStruct(rv reflect.Value, seen map[uintptr]struct{}) error {
-	if raw, ok, err := structMarshalJSON(rv); ok {
-		if err != nil {
-			return err
-		}
-		return walkUnsafe(reflect.ValueOf(json.RawMessage(raw)), seen)
+func walkJSONBytes(raw []byte, seen map[uintptr]struct{}) error {
+	decoded, err := decodeJSON(raw)
+	if err != nil {
+		return err
 	}
+	return walkUnsafe(reflect.ValueOf(decoded), seen)
+}
+
+// walkUnsafeStruct checks integers that encoding/json would emit from a struct.
+// Only the exact tag "-" is omitted. A tag of "-," is the field name "-".
+// An unexported field that is not an embedded struct is omitted. A basic
+// field with the string option is emitted as a JSON string.
+func walkUnsafeStruct(rv reflect.Value, seen map[uintptr]struct{}) error {
 	for i := 0; i < rv.NumField(); i++ {
 		sf := rv.Type().Field(i)
-		name, skip := jsonFieldName(sf)
-		if skip {
-			continue
-		}
-		if !sf.IsExported() && !(sf.Anonymous && name == "") {
+		skip, asString := jsonFieldOmit(sf)
+		if skip || asString {
 			continue
 		}
 		if err := walkUnsafe(rv.Field(i), seen); err != nil {
@@ -284,7 +293,7 @@ func walkUnsafeStruct(rv reflect.Value, seen map[uintptr]struct{}) error {
 	return nil
 }
 
-func structMarshalJSON(rv reflect.Value) ([]byte, bool, error) {
+func callMarshalJSON(rv reflect.Value) ([]byte, bool, error) {
 	if rv.CanInterface() {
 		if m, ok := rv.Interface().(json.Marshaler); ok {
 			raw, err := m.MarshalJSON()
@@ -300,16 +309,73 @@ func structMarshalJSON(rv reflect.Value) ([]byte, bool, error) {
 	return nil, false, nil
 }
 
-func jsonFieldName(sf reflect.StructField) (string, bool) {
+func jsonFieldOmit(sf reflect.StructField) (skip bool, asString bool) {
+	ft := sf.Type
+	if sf.Anonymous {
+		embed := ft
+		if embed.Kind() == reflect.Pointer {
+			embed = embed.Elem()
+		}
+		if !sf.IsExported() && embed.Kind() != reflect.Struct {
+			return true, false
+		}
+	} else if !sf.IsExported() {
+		return true, false
+	}
 	tag := sf.Tag.Get("json")
-	if tag == "" {
-		return "", false
+	if tag == "-" {
+		return true, false
 	}
-	name, _, _ := strings.Cut(tag, ",")
-	if name == "-" {
-		return "", true
+	name, opt, _ := strings.Cut(tag, ",")
+	if !isValidTag(name) {
+		name = ""
 	}
-	return name, false
+	kind := ft
+	if kind.Name() == "" && kind.Kind() == reflect.Pointer {
+		kind = kind.Elem()
+	}
+	if jsonOption(opt, "string") && jsonStringOptionKind(kind.Kind()) {
+		return false, true
+	}
+	return false, false
+}
+
+func jsonStringOptionKind(k reflect.Kind) bool {
+	switch k {
+	case reflect.Bool,
+		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr,
+		reflect.Float32, reflect.Float64,
+		reflect.String:
+		return true
+	default:
+		return false
+	}
+}
+
+func jsonOption(opt, name string) bool {
+	for opt != "" {
+		var next string
+		next, opt, _ = strings.Cut(opt, ",")
+		if next == name {
+			return true
+		}
+	}
+	return false
+}
+
+func isValidTag(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, c := range s {
+		switch {
+		case strings.ContainsRune("!#$%&()*+-./:;<=>?@[]^_{|}~ ", c):
+		case !unicode.IsLetter(c) && !unicode.IsDigit(c):
+			return false
+		}
+	}
+	return true
 }
 
 func rawMessageBytes(rv reflect.Value) []byte {
