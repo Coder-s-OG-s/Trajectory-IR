@@ -240,6 +240,7 @@ Same agent, two modes: **live** does the job; **sandbox** refuses dangerous *cla
 | [docs/MASTER_SPECIFICATION.md](docs/MASTER_SPECIFICATION.md) | **Normative** architecture, data model, protocols |
 | [go/QUICKSTART.md](go/QUICKSTART.md) | Fastest path to a working Go client |
 | [QUICKSTART.md](QUICKSTART.md) | Repo-wide quickstart (Go + Python) |
+| [USERS.md](USERS.md) | Setup and daily use: install, agents, MCP, console, storage |
 | [docs/SCOPE_AND_NON_GOALS.md](docs/SCOPE_AND_NON_GOALS.md) | In / out of scope |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Public roadmap |
 | [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) | Host and backend integration notes |
