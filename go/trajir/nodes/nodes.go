@@ -242,6 +242,22 @@ func rejectUnsafeValues(v any) error {
 			}
 		}
 		return nil
+	case reflect.Struct:
+		if _, ok := v.(json.Marshaler); ok {
+			return nil
+		}
+		if _, ok := v.(encoding.TextMarshaler); ok {
+			return nil
+		}
+		for _, f := range jsonStructFields(rv) {
+			if f.asString && isJSONStringTagValue(f.val) {
+				continue
+			}
+			if err := rejectUnsafeValues(f.val.Interface()); err != nil {
+				return err
+			}
+		}
+		return nil
 	default:
 		return nil
 	}
@@ -391,6 +407,8 @@ func preserveLargeFloats(v any) (any, bool) {
 		return preserveLargeFloatSlice(rv)
 	case reflect.Map:
 		return preserveLargeFloatMap(rv)
+	case reflect.Struct:
+		return preserveLargeFloatStruct(rv)
 	default:
 		return v, false
 	}
@@ -473,6 +491,166 @@ func largeFloatNumber(v any) (json.Number, bool) {
 		return "", false
 	}
 	return json.Number(s + ".0"), true
+}
+
+func preserveLargeFloatStruct(rv reflect.Value) (any, bool) {
+	var overrides map[string]any
+	for _, f := range jsonStructFields(rv) {
+		if f.asString && isJSONStringTagValue(f.val) {
+			continue
+		}
+		next, changed := preserveLargeFloats(f.val.Interface())
+		if !changed {
+			continue
+		}
+		if overrides == nil {
+			overrides = make(map[string]any)
+		}
+		overrides[f.name] = next
+	}
+	if overrides == nil {
+		return rv.Interface(), false
+	}
+	raw, err := json.Marshal(rv.Interface())
+	if err != nil {
+		return rv.Interface(), false
+	}
+	decoded, err := decodeJSON(raw)
+	if err != nil {
+		return rv.Interface(), false
+	}
+	obj, ok := decoded.(map[string]any)
+	if !ok {
+		return rv.Interface(), false
+	}
+	for name, next := range overrides {
+		if cur, exists := obj[name]; exists {
+			if _, isStr := cur.(string); !isStr {
+				obj[name] = next
+			}
+		}
+	}
+	return obj, true
+}
+
+type jsonStructField struct {
+	name     string
+	val      reflect.Value
+	depth    int
+	tagged   bool
+	asString bool
+}
+
+func jsonStructFields(rv reflect.Value) []jsonStructField {
+	type queueItem struct {
+		val   reflect.Value
+		depth int
+	}
+	queue := []queueItem{{val: rv, depth: 0}}
+	var candidates []jsonStructField
+	for len(queue) > 0 {
+		cur := queue[0]
+		queue = queue[1:]
+		rt := cur.val.Type()
+		for i := 0; i < rt.NumField(); i++ {
+			sf := rt.Field(i)
+			name, tagged, skip, asString := parseJSONFieldTag(sf)
+			if skip {
+				continue
+			}
+			ft := sf.Type
+			for ft.Kind() == reflect.Ptr {
+				ft = ft.Elem()
+			}
+			if !sf.IsExported() && (!sf.Anonymous || ft.Kind() != reflect.Struct) {
+				continue
+			}
+			fv := cur.val.Field(i)
+			if sf.Anonymous && name == "" && ft.Kind() == reflect.Struct {
+				for fv.Kind() == reflect.Ptr && !fv.IsNil() {
+					fv = fv.Elem()
+				}
+				if fv.Kind() == reflect.Struct {
+					queue = append(queue, queueItem{val: fv, depth: cur.depth + 1})
+				}
+				continue
+			}
+			if name == "" {
+				name = sf.Name
+			}
+			candidates = append(candidates, jsonStructField{
+				name:     name,
+				val:      fv,
+				depth:    cur.depth,
+				tagged:   tagged,
+				asString: asString,
+			})
+		}
+	}
+	return dominantStructFields(candidates)
+}
+
+func dominantStructFields(candidates []jsonStructField) []jsonStructField {
+	type rank struct {
+		depth  int
+		tagged bool
+		count  int
+	}
+	best := make(map[string]rank, len(candidates))
+	for _, c := range candidates {
+		r, ok := best[c.name]
+		if !ok || c.depth < r.depth || (c.depth == r.depth && c.tagged && !r.tagged) {
+			best[c.name] = rank{depth: c.depth, tagged: c.tagged, count: 1}
+		} else if c.depth == r.depth && c.tagged == r.tagged {
+			r.count++
+			best[c.name] = r
+		}
+	}
+	out := make([]jsonStructField, 0, len(best))
+	for _, c := range candidates {
+		r := best[c.name]
+		if r.count == 1 && c.depth == r.depth && c.tagged == r.tagged {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+func parseJSONFieldTag(sf reflect.StructField) (name string, tagged, skip, asString bool) {
+	tag, ok := sf.Tag.Lookup("json")
+	if !ok {
+		return "", false, false, false
+	}
+	if tag == "-" {
+		return "", false, true, false
+	}
+	parts := strings.Split(tag, ",")
+	name = parts[0]
+	tagged = name != ""
+	for _, opt := range parts[1:] {
+		if opt == "string" {
+			asString = true
+		}
+	}
+	return name, tagged, false, asString
+}
+
+func isJSONStringTagValue(v reflect.Value) bool {
+	for v.Kind() == reflect.Ptr {
+		if v.IsNil() {
+			return false
+		}
+		v = v.Elem()
+	}
+	switch v.Kind() {
+	case reflect.Bool, reflect.String,
+		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
+		reflect.Float32, reflect.Float64:
+		return true
+	default:
+		return false
+	}
 }
 
 // NodeID builds the content-addressed id string used by the Python reference.

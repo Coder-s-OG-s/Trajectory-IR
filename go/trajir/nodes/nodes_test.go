@@ -268,6 +268,7 @@ func TestPayloadHashRejectsIntegersOutsideSafeRange(t *testing.T) {
 		{"raw message", json.RawMessage(`{"n":9007199254740993}`)},
 		{"raw message at 2^53", json.RawMessage(`{"n":9007199254740992}`)},
 		{"raw message at 2^54", json.RawMessage(`{"n":18014398509481984}`)},
+		{"exported struct field at 2^53", struct{ N int64 }{N: 1 << 53}},
 	}
 	for _, c := range cases {
 		c := c
@@ -286,6 +287,13 @@ func TestPayloadHashRejectsIntegersOutsideSafeRange(t *testing.T) {
 	}
 
 	if _, err := nodes.PayloadHash(map[string]any{"row": safeWithHiddenBigInt()}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := nodes.PayloadHash(map[string]any{
+		"s": struct {
+			ID int64 `json:"id,string"`
+		}{ID: 1 << 60},
+	}); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -387,6 +395,18 @@ func TestDecodePayloadJSONRejectsMalformedAndTrailingData(t *testing.T) {
 
 func TestMarshalJSONPreservesLargeWholeFloats(t *testing.T) {
 	type namedMap map[string]any
+	type embeddedFloat struct {
+		Embedded float64 `json:"embedded"`
+	}
+	type floatStruct struct {
+		embeddedFloat
+		Amount   float64   `json:"amount"`
+		Pow53    float64   `json:"pow53"`
+		Empty    string    `json:"empty,omitempty"`
+		Hidden   float64   `json:"-"`
+		AsString float64   `json:"as_string,string"`
+		When     time.Time `json:"when"`
+	}
 	ptr := float64(1e18)
 	payload := map[string]any{
 		"f18":      float64(1e18),
@@ -401,6 +421,14 @@ func TestMarshalJSONPreservesLargeWholeFloats(t *testing.T) {
 		"typedMap": map[string]float64{"v": 1e18},
 		"namedMap": namedMap{"keep_nil": nil, "val": 1e18},
 		"nulls":    map[string]any{"nil": nil, "val": 1e18},
+		"struct": floatStruct{
+			embeddedFloat: embeddedFloat{Embedded: float64(1e18)},
+			Amount:        float64(1e18),
+			Pow53:         float64(int64(1 << 53)),
+			Hidden:        float64(1e18),
+			AsString:      float64(1e18),
+			When:          time.Unix(1700000000, 0).UTC(),
+		},
 	}
 	raw, err := nodes.MarshalJSON(payload)
 	if err != nil {
@@ -427,6 +455,19 @@ func TestMarshalJSONPreservesLargeWholeFloats(t *testing.T) {
 	nm := decoded["namedMap"].(map[string]any)
 	if v, ok := nm["keep_nil"]; !ok || v != nil {
 		t.Fatalf("namedMap lost nil entry: %#v", nm)
+	}
+	st := decoded["struct"].(map[string]any)
+	if _, hasEmpty := st["empty"]; hasEmpty {
+		t.Fatalf("omitempty field should remain omitted: %#v", st)
+	}
+	if _, hasHidden := st["Hidden"]; hasHidden {
+		t.Fatalf("json:\"-\" field should remain omitted: %#v", st)
+	}
+	if s, ok := st["as_string"].(string); !ok || s != "1000000000000000000" {
+		t.Fatalf("as_string=%#v", st["as_string"])
+	}
+	if _, ok := st["embedded"].(json.Number); !ok {
+		t.Fatalf("embedded=%#v", st["embedded"])
 	}
 	if _, err := nodes.MarshalJSON(map[string]any{"bad": math.NaN()}); err == nil {
 		t.Fatal("expected error marshaling NaN")
