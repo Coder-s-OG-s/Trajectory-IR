@@ -9,9 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Go `durable.Step` and `nodes.PayloadHash` strictly reject integers with
-  magnitude 2^53 (9007199254740992), aligning with RFC 8785 safe integer
-  bounds and Python reference behavior across cold and replayed runs.
+- Go `durable.Step` and `nodes.PayloadHash` strictly reject all JSON
+  integer literals outside `-(2^53-1) .. 2^53-1` (including exact floats
+  such as `2^53`, `2^54`, and `2^60`), matching Python RFC 8785 across cold
+  and replayed runs, while preserving `.0` when marshaling large whole
+  `float64`/`float32` values so valid floats (e.g. `1e18`) still round-trip.
 - Go `durable.Step` reads the memo back after `Save` and returns that
   value, so a caller that lost the insert does not keep a different
   object. An integer that does not fit in a float64 keeps its digits.

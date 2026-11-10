@@ -255,6 +255,11 @@ func TestPayloadHashRejectsIntegersOutsideSafeRange(t *testing.T) {
 		{"uint64", uint64(1 << 53)},
 		{"json number at 2^53", json.Number("9007199254740992")},
 		{"json number at -2^53", json.Number("-9007199254740992")},
+		{"json number at 2^54", json.Number("18014398509481984")},
+		{"json number at -2^54", json.Number("-18014398509481984")},
+		{"json number at 1e16", json.Number("10000000000000000")},
+		{"json number at 1e18", json.Number("1000000000000000000")},
+		{"json number at 2^60", json.Number("1152921504606846976")},
 		{"json number", json.Number("9007199254740993")},
 		{"wide json number", json.Number("1152921504606846977")},
 		{"nested", map[string]any{"k": []any{int64((1 << 53) + 1)}}},
@@ -262,6 +267,7 @@ func TestPayloadHashRejectsIntegersOutsideSafeRange(t *testing.T) {
 		{"pointer", ptrInt64(1 << 53)},
 		{"raw message", json.RawMessage(`{"n":9007199254740993}`)},
 		{"raw message at 2^53", json.RawMessage(`{"n":9007199254740992}`)},
+		{"raw message at 2^54", json.RawMessage(`{"n":18014398509481984}`)},
 	}
 	for _, c := range cases {
 		c := c
@@ -376,5 +382,72 @@ func TestDecodePayloadJSONRejectsMalformedAndTrailingData(t *testing.T) {
 	}
 	if p, err := nodes.DecodePayloadJSON(" {\"a\":1}\n"); err != nil || len(p) != 1 {
 		t.Fatalf("surrounding whitespace must be accepted: p=%v err=%v", p, err)
+	}
+}
+
+func TestMarshalJSONPreservesLargeWholeFloats(t *testing.T) {
+	type namedMap map[string]any
+	ptr := float64(1e18)
+	payload := map[string]any{
+		"f18":      float64(1e18),
+		"f32":      float32(1e18),
+		"neg":      -float64(1e18),
+		"pow53":    float64(int64(1 << 53)),
+		"pow54":    float64(int64(1 << 54)),
+		"f21":      1e21,
+		"safe":     float64((1 << 53) - 1),
+		"ptr":      &ptr,
+		"typed":    []float64{1e18},
+		"typedMap": map[string]float64{"v": 1e18},
+		"namedMap": namedMap{"keep_nil": nil, "val": 1e18},
+		"nulls":    map[string]any{"nil": nil, "val": 1e18},
+	}
+	raw, err := nodes.MarshalJSON(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := payload["f18"].(float64); !ok {
+		t.Fatalf("input map was mutated: %T", payload["f18"])
+	}
+	decoded, err := nodes.DecodeObject(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantHash, err := nodes.PayloadHash(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gotHash, err := nodes.PayloadHash(decoded)
+	if err != nil {
+		t.Fatalf("decoded PayloadHash failed (raw=%s): %v", raw, err)
+	}
+	if gotHash != wantHash {
+		t.Fatalf("hash mismatch: got %s want %s", gotHash, wantHash)
+	}
+	nm := decoded["namedMap"].(map[string]any)
+	if v, ok := nm["keep_nil"]; !ok || v != nil {
+		t.Fatalf("namedMap lost nil entry: %#v", nm)
+	}
+	if _, err := nodes.MarshalJSON(map[string]any{"bad": math.NaN()}); err == nil {
+		t.Fatal("expected error marshaling NaN")
+	}
+}
+
+func TestIsUnsafeIntegerLiteral(t *testing.T) {
+	for _, s := range []string{
+		"9007199254740992", "-9007199254740992", "9007199254740993",
+		"18014398509481984", "10000000000000000", "1000000000000000000", "1152921504606846976",
+	} {
+		if !nodes.IsUnsafeIntegerLiteral(s) {
+			t.Errorf("IsUnsafeIntegerLiteral(%q) = false, want true", s)
+		}
+	}
+	for _, s := range []string{
+		"0", "-0", "9007199254740991", "-9007199254740991",
+		"9007199254740992.0", "1000000000000000000.0", "1e18", "1e+18", "1.5",
+	} {
+		if nodes.IsUnsafeIntegerLiteral(s) {
+			t.Errorf("IsUnsafeIntegerLiteral(%q) = true, want false", s)
+		}
 	}
 }

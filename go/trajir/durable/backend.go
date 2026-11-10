@@ -7,7 +7,8 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"strconv"
+
+	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/nodes"
 )
 
 // Backend stores memoized step outputs for a workflow id.
@@ -49,7 +50,7 @@ func Step(ctx context.Context, b Backend, workflowID, stepKey string, fn func(co
 	if err != nil {
 		return nil, err
 	}
-	raw, err = json.Marshal(val)
+	raw, err = nodes.MarshalJSON(val)
 	if err != nil {
 		return nil, fmt.Errorf("durable: encode memo %s/%s: %w", workflowID, stepKey, err)
 	}
@@ -111,58 +112,14 @@ func coerceMemoValue(v any) any {
 }
 
 func coerceMemoNumber(n json.Number) any {
-	s := string(n)
-	if memoIntegerText(s) {
-		if memoIntegerOutOfRange(s) {
-			return n
-		}
-		f, err := n.Float64()
-		if err != nil || math.IsInf(f, 0) || math.IsNaN(f) {
-			return n
-		}
-		if strconv.FormatFloat(f, 'f', 0, 64) != s {
-			return n
-		}
-		return f
+	if nodes.IsUnsafeIntegerLiteral(string(n)) {
+		return n
 	}
 	f, err := n.Float64()
 	if err != nil || math.IsInf(f, 0) || math.IsNaN(f) {
 		return n
 	}
 	return f
-}
-
-func memoIntegerOutOfRange(s string) bool {
-	if s[0] == '-' {
-		s = s[1:]
-	}
-	const maxDigits = "9007199254740991"
-	if len(s) != len(maxDigits) {
-		return len(s) > len(maxDigits)
-	}
-	return s > maxDigits
-}
-
-func memoIntegerText(s string) bool {
-	if s == "" {
-		return false
-	}
-	i := 0
-	if s[0] == '-' {
-		if len(s) == 1 {
-			return false
-		}
-		i = 1
-	}
-	if s[i] == '0' {
-		return len(s) == i+1
-	}
-	for ; i < len(s); i++ {
-		if s[i] < '0' || s[i] > '9' {
-			return false
-		}
-	}
-	return true
 }
 
 // Infer is Step with a conventional step key prefix for model calls.

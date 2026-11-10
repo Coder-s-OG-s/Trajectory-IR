@@ -147,9 +147,11 @@ func TestStepKeepsUnsafeIntegerDigits(t *testing.T) {
 			"neg":      -unsafe,
 			"ok":       safe,
 			"neg_safe": -safe,
-			"pow":      int64(1 << 53),
-			"x":        1.5,
-			"nest":     []any{map[string]any{"id": unsafe}},
+			"pow":       int64(1 << 53),
+			"pow54":     int64(1 << 54),
+			"big_float": float64(1e18),
+			"x":         1.5,
+			"nest":      []any{map[string]any{"id": unsafe}},
 		}, nil
 	}
 
@@ -173,6 +175,13 @@ func TestStepKeepsUnsafeIntegerDigits(t *testing.T) {
 		pow, ok := m["pow"].(json.Number)
 		if !ok || pow.String() != "9007199254740992" {
 			t.Fatalf("pow=%#v (%T)", m["pow"], m["pow"])
+		}
+		pow54, ok := m["pow54"].(json.Number)
+		if !ok || pow54.String() != "18014398509481984" {
+			t.Fatalf("pow54=%#v (%T)", m["pow54"], m["pow54"])
+		}
+		if m["big_float"] != float64(1e18) {
+			t.Fatalf("big_float=%#v (%T)", m["big_float"], m["big_float"])
 		}
 		if m["x"] != 1.5 {
 			t.Fatalf("x=%#v (%T)", m["x"], m["x"])

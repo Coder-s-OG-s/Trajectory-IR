@@ -9,6 +9,7 @@ package nodes
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -253,31 +254,28 @@ func checkInt64(n int64) error {
 	return nil
 }
 
-func checkJSONNumber(n json.Number) error {
-	s := string(n)
-	if !jsonIntegerLiteral(s) || !jsonIntegerOutOfRange(s) {
-		return nil
-	}
-	digits := s
-	if digits[0] == '-' {
-		digits = digits[1:]
-	}
-	const maxDigits = "9007199254740991"
-	if len(digits) == len(maxDigits) {
-		return &UnsafeIntegerError{Message: fmt.Sprintf("%s exceeds safe integer domain for JSON floats", s)}
-	}
-	if jsonIntegerExactFloat64(s) {
-		return nil
-	}
-	return &UnsafeIntegerError{Message: fmt.Sprintf("%s exceeds safe integer domain for JSON floats", s)}
+// IsUnsafeIntegerLiteral reports whether s is a JSON integer literal (no decimal
+// point or exponent) outside the RFC 8785 range -(2^53-1)..2^53-1.
+func IsUnsafeIntegerLiteral(s string) bool {
+	return jsonIntegerLiteral(s) && jsonIntegerOutOfRange(s)
 }
 
-func jsonIntegerExactFloat64(s string) bool {
-	f, err := strconv.ParseFloat(s, 64)
-	if err != nil || math.IsInf(f, 0) || math.IsNaN(f) {
-		return false
+// MarshalJSON encodes v to JSON while preserving explicit float syntax (".0") on
+// finite floats whose magnitude exceeds 2^53-1 when Go's encoder would otherwise
+// emit an undecorated integer token (e.g. float64(1e18) -> 1000000000000000000.0).
+// Decoders using json.Decoder.UseNumber() or Python json.loads then reload them
+// as floats instead of out-of-range integer literals.
+func MarshalJSON(v any) ([]byte, error) {
+	rewritten, _ := preserveLargeFloats(v)
+	return json.Marshal(rewritten)
+}
+
+func checkJSONNumber(n json.Number) error {
+	s := string(n)
+	if IsUnsafeIntegerLiteral(s) {
+		return &UnsafeIntegerError{Message: fmt.Sprintf("%s exceeds safe integer domain for JSON floats", s)}
 	}
-	return strconv.FormatFloat(f, 'f', 0, 64) == s
+	return nil
 }
 
 func jsonIntegerLiteral(s string) bool {
@@ -311,6 +309,170 @@ func jsonIntegerOutOfRange(s string) bool {
 		return len(s) > len(maxDigits)
 	}
 	return s > maxDigits
+}
+
+var anyReflectType = reflect.TypeOf((*any)(nil)).Elem()
+
+func preserveLargeFloats(v any) (any, bool) {
+	if v == nil {
+		return nil, false
+	}
+	switch x := v.(type) {
+	case string, bool, int, int8, int16, int32, int64,
+		uint, uint8, uint16, uint32, uint64, json.Number, json.RawMessage:
+		return v, false
+	case float32, float64:
+		if num, ok := largeFloatNumber(x); ok {
+			return num, true
+		}
+		return v, false
+	case map[string]any:
+		var copied map[string]any
+		for k, child := range x {
+			next, changed := preserveLargeFloats(child)
+			if !changed {
+				continue
+			}
+			if copied == nil {
+				copied = make(map[string]any, len(x))
+				for ck, cv := range x {
+					copied[ck] = cv
+				}
+			}
+			copied[k] = next
+		}
+		if copied != nil {
+			return copied, true
+		}
+		return v, false
+	case []any:
+		var copied []any
+		for i, child := range x {
+			next, changed := preserveLargeFloats(child)
+			if !changed {
+				continue
+			}
+			if copied == nil {
+				copied = make([]any, len(x))
+				copy(copied, x)
+			}
+			copied[i] = next
+		}
+		if copied != nil {
+			return copied, true
+		}
+		return v, false
+	}
+
+	if _, ok := v.(json.Marshaler); ok {
+		return v, false
+	}
+	if _, ok := v.(encoding.TextMarshaler); ok {
+		return v, false
+	}
+
+	rv := reflect.ValueOf(v)
+	switch rv.Kind() {
+	case reflect.Ptr, reflect.Interface:
+		if rv.IsNil() {
+			return v, false
+		}
+		next, changed := preserveLargeFloats(rv.Elem().Interface())
+		if !changed {
+			return v, false
+		}
+		return next, true
+	case reflect.Float32, reflect.Float64:
+		if num, ok := largeFloatNumber(v); ok {
+			return num, true
+		}
+		return v, false
+	case reflect.Slice, reflect.Array:
+		return preserveLargeFloatSlice(rv)
+	case reflect.Map:
+		return preserveLargeFloatMap(rv)
+	default:
+		return v, false
+	}
+}
+
+func preserveLargeFloatSlice(rv reflect.Value) (any, bool) {
+	if rv.Kind() == reflect.Slice && rv.IsNil() {
+		return rv.Interface(), false
+	}
+	n := rv.Len()
+	var copied []any
+	for i := 0; i < n; i++ {
+		next, changed := preserveLargeFloats(rv.Index(i).Interface())
+		if !changed {
+			continue
+		}
+		if copied == nil {
+			copied = make([]any, n)
+			for j := 0; j < n; j++ {
+				copied[j] = rv.Index(j).Interface()
+			}
+		}
+		copied[i] = next
+	}
+	if copied != nil {
+		return copied, true
+	}
+	return rv.Interface(), false
+}
+
+func preserveLargeFloatMap(rv reflect.Value) (any, bool) {
+	if rv.IsNil() {
+		return rv.Interface(), false
+	}
+	keys := rv.MapKeys()
+	var copied reflect.Value
+	for i, k := range keys {
+		rawVal := rv.MapIndex(k).Interface()
+		next, changed := preserveLargeFloats(rawVal)
+		if !changed {
+			if copied.IsValid() {
+				setReflectAnyMap(copied, k, rawVal)
+			}
+			continue
+		}
+		if !copied.IsValid() {
+			mapType := reflect.MapOf(rv.Type().Key(), anyReflectType)
+			copied = reflect.MakeMapWithSize(mapType, len(keys))
+			for j := 0; j < i; j++ {
+				setReflectAnyMap(copied, keys[j], rv.MapIndex(keys[j]).Interface())
+			}
+		}
+		setReflectAnyMap(copied, k, next)
+	}
+	if copied.IsValid() {
+		return copied.Interface(), true
+	}
+	return rv.Interface(), false
+}
+
+func setReflectAnyMap(m, k reflect.Value, val any) {
+	if val == nil {
+		m.SetMapIndex(k, reflect.Zero(anyReflectType))
+		return
+	}
+	m.SetMapIndex(k, reflect.ValueOf(val))
+}
+
+func largeFloatNumber(v any) (json.Number, bool) {
+	f := reflect.ValueOf(v).Float()
+	if math.IsNaN(f) || math.IsInf(f, 0) || math.Abs(f) <= float64(maxSafeInteger) {
+		return "", false
+	}
+	b, err := json.Marshal(v)
+	if err != nil {
+		return "", false
+	}
+	s := string(b)
+	if strings.ContainsAny(s, ".eE") {
+		return "", false
+	}
+	return json.Number(s + ".0"), true
 }
 
 // NodeID builds the content-addressed id string used by the Python reference.

@@ -665,7 +665,13 @@ func TestRunStepSafeIntegerStillCommits(t *testing.T) {
 }
 
 func TestRunStepStoredUnsafeIntegerIsNotSealed(t *testing.T) {
-	for _, idStr := range []string{"9007199254740992", "9007199254740993"} {
+	for _, idStr := range []string{
+		"9007199254740992",
+		"9007199254740993",
+		"18014398509481984",
+		"1152921504606846976",
+		"1000000000000000000",
+	} {
 		t.Run(idStr, func(t *testing.T) {
 			ctx := context.Background()
 			nl, backend := testEnv(t)
@@ -702,5 +708,50 @@ func TestRunStepStoredUnsafeIntegerIsNotSealed(t *testing.T) {
 				t.Fatalf("id=%s: tool ran %d times", idStr, ran.Load())
 			}
 		})
+	}
+}
+
+func TestRunStepLargeFloatStillCommits(t *testing.T) {
+	ctx := context.Background()
+	nl, backend := testEnv(t)
+	var calls atomic.Int32
+	var saw any
+	cfg := resume.RunStepConfig{
+		Log:          nl,
+		Backend:      backend,
+		TenantID:     "demo",
+		TrajectoryID: "t1",
+		Tools: map[string]resume.Tool{
+			"echo": {
+				Name:   "echo",
+				Effect: effects.PURE,
+				Fn: func(args map[string]any) (any, error) {
+					saw = args["n"]
+					return args["n"], nil
+				},
+			},
+		},
+	}
+	model := func(context.Context, map[string]any) (map[string]any, error) {
+		calls.Add(1)
+		return map[string]any{
+			"tool_calls": []any{
+				map[string]any{"name": "echo", "args": map[string]any{"n": float64(1e18)}},
+			},
+		}, nil
+	}
+	results, err := resume.RunStep(ctx, cfg, 1, model, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saw != float64(1e18) || len(results) != 1 || results[0] != float64(1e18) {
+		t.Fatalf("saw=%#v (%T) results=%#v", saw, saw, results)
+	}
+	results2, err := resume.RunStep(ctx, cfg, 1, model, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if calls.Load() != 1 || len(results2) != 1 || results2[0] != float64(1e18) {
+		t.Fatalf("calls=%d results2=%#v", calls.Load(), results2)
 	}
 }

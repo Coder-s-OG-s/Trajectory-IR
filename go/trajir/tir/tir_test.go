@@ -33,10 +33,17 @@ func TestLoadIntegerAboveSafeRange(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	badPath := writeNodePackage(t, "abc", safeHash, "9007199254740993")
-	_, err = tir.Load(badPath)
-	if err == nil || !strings.Contains(err.Error(), "safe integer") {
-		t.Fatalf("err=%v", err)
+	for _, badNum := range []string{
+		"9007199254740992",
+		"9007199254740993",
+		"18014398509481984",
+		"1000000000000000000",
+	} {
+		badPath := writeNodePackage(t, "abc", safeHash, badNum)
+		_, err = tir.Load(badPath)
+		if err == nil || !strings.Contains(err.Error(), "safe integer") {
+			t.Fatalf("%s: err=%v", badNum, err)
+		}
 	}
 }
 
