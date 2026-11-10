@@ -162,6 +162,24 @@ func safeWithHiddenBigInt() hiddenBigInt {
 	return hiddenBigInt{N: 1, Hidden: 1 << 60}
 }
 
+type ptrBigMarshaler struct {
+	Big int64 `json:"big"`
+}
+
+func (p *ptrBigMarshaler) MarshalJSON() ([]byte, error) {
+	return []byte(`"safe-ptr-custom"`), nil
+}
+
+type ptrMarshalerParent struct {
+	Child ptrBigMarshaler `json:"child"`
+	Val   float64         `json:"val"`
+}
+
+type selfEmbedStruct struct {
+	*selfEmbedStruct
+	Val float64 `json:"val"`
+}
+
 func TestPayloadHashRejectsUnmarshalableValue(t *testing.T) {
 	_, err := nodes.PayloadHash(map[string]any{"bad": math.NaN()})
 	if err == nil {
@@ -244,6 +262,7 @@ func TestPayloadHashLargeFloatFollowsJCS(t *testing.T) {
 }
 
 func TestPayloadHashRejectsIntegersOutsideSafeRange(t *testing.T) {
+	rawPtr := json.RawMessage(`{"n":9007199254740992}`)
 	cases := []struct {
 		name string
 		n    any
@@ -266,6 +285,7 @@ func TestPayloadHashRejectsIntegersOutsideSafeRange(t *testing.T) {
 		{"int64 slice", []int64{1 << 53}},
 		{"pointer", ptrInt64(1 << 53)},
 		{"raw message", json.RawMessage(`{"n":9007199254740993}`)},
+		{"raw message ptr", &rawPtr},
 		{"raw message at 2^53", json.RawMessage(`{"n":9007199254740992}`)},
 		{"raw message at 2^54", json.RawMessage(`{"n":18014398509481984}`)},
 		{"exported struct field at 2^53", struct{ N int64 }{N: 1 << 53}},
@@ -490,5 +510,119 @@ func TestIsUnsafeIntegerLiteral(t *testing.T) {
 		if nodes.IsUnsafeIntegerLiteral(s) {
 			t.Errorf("IsUnsafeIntegerLiteral(%q) = true, want false", s)
 		}
+	}
+}
+
+func TestPayloadHashAndMarshalJSONPointerReceiverMarshaler(t *testing.T) {
+	p := map[string]any{
+		"direct": &ptrBigMarshaler{Big: 1 << 60},
+		"parent": &ptrMarshalerParent{
+			Child: ptrBigMarshaler{Big: 1 << 60},
+			Val:   float64(1e18),
+		},
+	}
+	wantHash, err := nodes.PayloadHash(p)
+	if err != nil {
+		t.Fatalf("PayloadHash failed on pointer-receiver Marshaler: %v", err)
+	}
+	raw, err := nodes.MarshalJSON(p)
+	if err != nil {
+		t.Fatalf("MarshalJSON failed on pointer-receiver Marshaler: %v", err)
+	}
+	decoded, err := nodes.DecodeObject(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gotHash, err := nodes.PayloadHash(decoded)
+	if err != nil {
+		t.Fatalf("decoded PayloadHash failed (raw=%s): %v", raw, err)
+	}
+	if gotHash != wantHash {
+		t.Fatalf("hash mismatch: got %s want %s", gotHash, wantHash)
+	}
+}
+
+func TestPayloadHashAndMarshalJSONRejectCyclesWithoutPanic(t *testing.T) {
+	cycMap := map[string]any{}
+	cycMap["self"] = cycMap
+
+	cycSlice := make([]any, 1)
+	cycSlice[0] = cycSlice
+
+	type cycNode struct {
+		Next *cycNode `json:"next"`
+	}
+	cycPtr := &cycNode{}
+	cycPtr.Next = cycPtr
+
+	for _, tc := range []struct {
+		name string
+		val  any
+	}{
+		{"map", cycMap},
+		{"slice", cycSlice},
+		{"struct_ptr", cycPtr},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := nodes.PayloadHash(map[string]any{"x": tc.val}); err == nil {
+				t.Fatalf("PayloadHash(%s) = nil error, want cycle error", tc.name)
+			}
+			if _, err := nodes.MarshalJSON(map[string]any{"x": tc.val}); err == nil {
+				t.Fatalf("MarshalJSON(%s) = nil error, want cycle error", tc.name)
+			}
+		})
+	}
+}
+
+func TestPayloadHashAndMarshalJSONSelfEmbeddedStructNoHang(t *testing.T) {
+	selfEmb := &selfEmbedStruct{Val: float64(1e18)}
+	selfEmb.selfEmbedStruct = selfEmb
+	p := map[string]any{"x": selfEmb}
+
+	wantHash, err := nodes.PayloadHash(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := nodes.MarshalJSON(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := nodes.DecodeObject(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gotHash, err := nodes.PayloadHash(decoded)
+	if err != nil {
+		t.Fatalf("decoded PayloadHash failed (raw=%s): %v", raw, err)
+	}
+	if gotHash != wantHash {
+		t.Fatalf("hash mismatch: got %s want %s", gotHash, wantHash)
+	}
+}
+
+func TestMarshalJSONPreservesSharedDAGPointers(t *testing.T) {
+	shared := float64(1e18)
+	dag := map[string]any{
+		"a": &shared,
+		"b": &shared,
+	}
+	wantHash, err := nodes.PayloadHash(dag)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := nodes.MarshalJSON(dag)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := nodes.DecodeObject(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gotHash, err := nodes.PayloadHash(decoded)
+	if err != nil {
+		t.Fatalf("decoded PayloadHash failed (raw=%s): %v", raw, err)
+	}
+	if gotHash != wantHash {
+		t.Fatalf("hash mismatch: got %s want %s", gotHash, wantHash)
 	}
 }
