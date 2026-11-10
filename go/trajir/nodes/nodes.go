@@ -180,42 +180,53 @@ func (e *UnsafeIntegerError) Error() string {
 
 const defaultUnsafeIntegerMessage = "integer exceeds safe integer domain for JSON floats"
 
-func rejectUnsafeValues(v any) error {
-	if v == nil {
-		return nil
-	}
-	switch n := v.(type) {
-	case json.Number:
-		return checkJSONNumber(n)
-	case json.RawMessage:
-		decoded, err := decodeJSON(n)
-		if err != nil {
-			return err
-		}
-		return rejectUnsafeValues(decoded)
-	case map[string]any:
-		for _, child := range n {
-			if err := rejectUnsafeValues(child); err != nil {
-				return err
-			}
-		}
-		return nil
-	case []any:
-		for _, child := range n {
-			if err := rejectUnsafeValues(child); err != nil {
-				return err
-			}
-		}
-		return nil
-	}
+var (
+	jsonNumberType = reflect.TypeOf(json.Number(""))
+	rawMessageType = reflect.TypeOf(json.RawMessage(nil))
+)
 
-	rv := reflect.ValueOf(v)
-	switch rv.Kind() {
-	case reflect.Ptr, reflect.Interface:
+func rejectUnsafeValues(v any) error {
+	return walkUnsafe(reflect.ValueOf(v), map[uintptr]struct{}{})
+}
+
+func walkUnsafe(rv reflect.Value, seen map[uintptr]struct{}) error {
+	if !rv.IsValid() {
+		return nil
+	}
+	for rv.Kind() == reflect.Interface || rv.Kind() == reflect.Pointer {
 		if rv.IsNil() {
 			return nil
 		}
-		return rejectUnsafeValues(rv.Elem().Interface())
+		if rv.Kind() == reflect.Pointer && rv.Elem().Kind() == reflect.Struct {
+			ptr := rv.Pointer()
+			if _, ok := seen[ptr]; ok {
+				return nil
+			}
+			seen[ptr] = struct{}{}
+		}
+		rv = rv.Elem()
+	}
+	if !rv.IsValid() {
+		return nil
+	}
+
+	switch rv.Type() {
+	case jsonNumberType:
+		return checkJSONNumber(json.Number(rv.String()))
+	case rawMessageType:
+		// encoding/json emits null for a nil RawMessage. An empty non-nil
+		// value is invalid JSON and still fails below.
+		if rv.IsNil() {
+			return nil
+		}
+		decoded, err := decodeJSON(rawMessageBytes(rv))
+		if err != nil {
+			return err
+		}
+		return walkUnsafe(reflect.ValueOf(decoded), seen)
+	}
+
+	switch rv.Kind() {
 	case reflect.Float32, reflect.Float64:
 		return nil
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
@@ -228,7 +239,7 @@ func rejectUnsafeValues(v any) error {
 		return nil
 	case reflect.Slice, reflect.Array:
 		for i := 0; i < rv.Len(); i++ {
-			if err := rejectUnsafeValues(rv.Index(i).Interface()); err != nil {
+			if err := walkUnsafe(rv.Index(i), seen); err != nil {
 				return err
 			}
 		}
@@ -236,14 +247,83 @@ func rejectUnsafeValues(v any) error {
 	case reflect.Map:
 		iter := rv.MapRange()
 		for iter.Next() {
-			if err := rejectUnsafeValues(iter.Value().Interface()); err != nil {
+			if err := walkUnsafe(iter.Value(), seen); err != nil {
 				return err
 			}
 		}
 		return nil
+	case reflect.Struct:
+		return walkUnsafeStruct(rv, seen)
 	default:
 		return nil
 	}
+}
+
+// walkUnsafeStruct checks integers that encoding/json would emit from a struct.
+// A field tagged json:"-" and an unexported field stay out of the hash.
+func walkUnsafeStruct(rv reflect.Value, seen map[uintptr]struct{}) error {
+	if raw, ok, err := structMarshalJSON(rv); ok {
+		if err != nil {
+			return err
+		}
+		return walkUnsafe(reflect.ValueOf(json.RawMessage(raw)), seen)
+	}
+	for i := 0; i < rv.NumField(); i++ {
+		sf := rv.Type().Field(i)
+		name, skip := jsonFieldName(sf)
+		if skip {
+			continue
+		}
+		if !sf.IsExported() && !(sf.Anonymous && name == "") {
+			continue
+		}
+		if err := walkUnsafe(rv.Field(i), seen); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func structMarshalJSON(rv reflect.Value) ([]byte, bool, error) {
+	if rv.CanInterface() {
+		if m, ok := rv.Interface().(json.Marshaler); ok {
+			raw, err := m.MarshalJSON()
+			return raw, true, err
+		}
+	}
+	if rv.CanAddr() && rv.Addr().CanInterface() {
+		if m, ok := rv.Addr().Interface().(json.Marshaler); ok {
+			raw, err := m.MarshalJSON()
+			return raw, true, err
+		}
+	}
+	return nil, false, nil
+}
+
+func jsonFieldName(sf reflect.StructField) (string, bool) {
+	tag := sf.Tag.Get("json")
+	if tag == "" {
+		return "", false
+	}
+	name, _, _ := strings.Cut(tag, ",")
+	if name == "-" {
+		return "", true
+	}
+	return name, false
+}
+
+func rawMessageBytes(rv reflect.Value) []byte {
+	if !rv.IsValid() || rv.IsNil() {
+		return nil
+	}
+	if rv.CanInterface() {
+		return append([]byte(nil), rv.Interface().(json.RawMessage)...)
+	}
+	b := make([]byte, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		b[i] = byte(rv.Index(i).Uint())
+	}
+	return b
 }
 
 func checkInt64(n int64) error {

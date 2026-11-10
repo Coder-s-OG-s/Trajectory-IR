@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Go `PayloadHash` rejects an integer outside the safe JSON range when it
+  sits on a struct field, including a nested, embedded, or pointer field.
+  A field tagged `json:"-"` and an unexported field stay out of the hash.
+  A struct that implements `MarshalJSON` is checked from the JSON it
+  emits. A tool result with one of those fields stores an `integer_domain`
+  row instead of sealing the number (#511).
 - Go `durable.Step` reads the memo back after `Save` and returns that
   value, so a caller that lost the insert does not keep a different
   object. An integer that does not fit in a float64 keeps its digits.
