@@ -18,7 +18,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode"
 	"unicode/utf8"
 
 	"github.com/gowebpki/jcs"
@@ -278,7 +277,8 @@ func walkJSONBytes(raw []byte, seen map[uintptr]struct{}) error {
 // walkUnsafeStruct checks integers that encoding/json would emit from a struct.
 // Only the exact tag "-" is omitted. A tag of "-," is the field name "-".
 // An unexported field that is not an embedded struct is omitted. A basic
-// field with the string option is emitted as a JSON string.
+// field with the string option is a JSON string, unless that type implements
+// MarshalJSON.
 func walkUnsafeStruct(rv reflect.Value, seen map[uintptr]struct{}) error {
 	for i := 0; i < rv.NumField(); i++ {
 		sf := rv.Type().Field(i)
@@ -326,18 +326,28 @@ func jsonFieldOmit(sf reflect.StructField) (skip bool, asString bool) {
 	if tag == "-" {
 		return true, false
 	}
-	name, opt, _ := strings.Cut(tag, ",")
-	if !isValidTag(name) {
-		name = ""
-	}
+	_, opt, _ := strings.Cut(tag, ",")
 	kind := ft
 	if kind.Name() == "" && kind.Kind() == reflect.Pointer {
 		kind = kind.Elem()
 	}
-	if jsonOption(opt, "string") && jsonStringOptionKind(kind.Kind()) {
+	// encoding/json ignores the string option when MarshalJSON exists, and
+	// writes that method's bytes instead.
+	if jsonOption(opt, "string") && jsonStringOptionKind(kind.Kind()) && !typeOrPointerMarshals(ft) {
 		return false, true
 	}
 	return false, false
+}
+
+func typeOrPointerMarshals(t reflect.Type) bool {
+	m := reflect.TypeFor[json.Marshaler]()
+	if t.Implements(m) {
+		return true
+	}
+	if t.Kind() != reflect.Pointer && reflect.PointerTo(t).Implements(m) {
+		return true
+	}
+	return false
 }
 
 func jsonStringOptionKind(k reflect.Kind) bool {
@@ -362,20 +372,6 @@ func jsonOption(opt, name string) bool {
 		}
 	}
 	return false
-}
-
-func isValidTag(s string) bool {
-	if s == "" {
-		return false
-	}
-	for _, c := range s {
-		switch {
-		case strings.ContainsRune("!#$%&()*+-./:;<=>?@[]^_{|}~ ", c):
-		case !unicode.IsLetter(c) && !unicode.IsDigit(c):
-			return false
-		}
-	}
-	return true
 }
 
 func rawMessageBytes(rv reflect.Value) []byte {

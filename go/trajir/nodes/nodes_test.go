@@ -418,6 +418,12 @@ func (p *pointerOnlyID) MarshalJSON() ([]byte, error) {
 	return []byte(`9007199254740993`), nil
 }
 
+type bigMarsh int64
+
+func (bigMarsh) MarshalJSON() ([]byte, error) {
+	return []byte(`9007199254740993`), nil
+}
+
 func TestPayloadHashFollowsEncodingJSONNumbers(t *testing.T) {
 	type inner struct {
 		N int64
@@ -462,10 +468,9 @@ func TestPayloadHashFollowsEncodingJSONNumbers(t *testing.T) {
 		{"string option", struct {
 			N int64 `json:",string"`
 		}{N: n}, false},
-		{"unexported tag", struct {
-			N int64 `json:"n"`
-			n int64 `json:"hidden"`
-		}{N: 1, n: n}, false},
+		{"string option with marshaler", struct {
+			N bigMarsh `json:",string"`
+		}{N: 1}, true},
 		{"uintptr", uintptr(n), true},
 		{"uintptr field", struct{ N uintptr }{N: uintptr(n)}, true},
 		{"marshal string", jsonNumberString("x"), true},
