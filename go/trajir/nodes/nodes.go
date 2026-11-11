@@ -306,6 +306,9 @@ func rejectUnsafeReflectValue(rv reflect.Value, active map[cycleKey]bool) error 
 				return err
 			}
 			raw = out
+		} else if raw == nil {
+			// encoding/json writes a nil json.RawMessage as null.
+			return nil
 		}
 		decoded, err := decodeJSON(raw)
 		if err != nil {
@@ -329,7 +332,7 @@ func rejectUnsafeReflectValue(rv reflect.Value, active map[cycleKey]bool) error 
 		return nil
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		return checkInt64(rv.Int())
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
 		u := rv.Uint()
 		if u > uint64(maxSafeInteger) {
 			return &UnsafeIntegerError{Message: fmt.Sprintf("%d exceeds safe integer domain for JSON floats", u)}
@@ -771,6 +774,11 @@ func parseJSONFieldTag(sf reflect.StructField) (name string, tagged, skip, asStr
 }
 
 func isJSONStringTagValue(v reflect.Value) bool {
+	// encoding/json ignores the string option when MarshalJSON runs, and
+	// writes that method's bytes instead.
+	if handled, _, _ := checkCustomMarshaler(v); handled {
+		return false
+	}
 	for v.Kind() == reflect.Ptr {
 		if v.IsNil() {
 			return false

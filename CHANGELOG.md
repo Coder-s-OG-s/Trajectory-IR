@@ -18,6 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `json.RawMessage`. An existing `.tir` or log row that stored a whole
   float above `2^53-1` as an integer token, with no `.0`, now fails
   verification.
+- Go `PayloadHash` also rejects a `uintptr` outside the safe range, and a
+  `json:",string"` field whose type has `MarshalJSON`, since `encoding/json`
+  writes the method's bytes there instead of a string. A nil
+  `json.RawMessage` hashes as `null`. A gated tool that returns a struct
+  with an unsafe integer field stores an `integer_domain` row (#511).
 - Go `durable.Step` reads the memo back after `Save` and returns that
   value, so a caller that lost the insert does not keep a different
   object. An integer that does not fit in a float64 keeps its digits.

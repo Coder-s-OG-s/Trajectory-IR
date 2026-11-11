@@ -322,6 +322,14 @@ func TestPayloadHashRejectsIntegersOutsideSafeRange(t *testing.T) {
 		{"raw message at 2^53", json.RawMessage(`{"n":9007199254740992}`)},
 		{"raw message at 2^54", json.RawMessage(`{"n":18014398509481984}`)},
 		{"exported struct field at 2^53", struct{ N int64 }{N: 1 << 53}},
+		{"struct field", struct{ N int64 }{N: 1 << 53}},
+		{"nested struct", struct{ Inner struct{ N int64 } }{Inner: struct{ N int64 }{N: 1 << 53}}},
+		{"struct pointer", &struct{ N int64 }{N: 1 << 53}},
+		{"struct slice", []struct{ N int64 }{{N: 1 << 53}}},
+		{"struct raw", struct{ R json.RawMessage }{R: json.RawMessage(`{"n":9007199254740993}`)}},
+		{"json name", struct {
+			N int64 `json:"count"`
+		}{N: 1 << 53}},
 	}
 	for _, c := range cases {
 		c := c
@@ -348,6 +356,229 @@ func TestPayloadHashRejectsIntegersOutsideSafeRange(t *testing.T) {
 		}{ID: 1 << 60},
 	}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestPayloadHashIgnoresUnexportedStructInteger(t *testing.T) {
+	row := struct {
+		N int64
+		n int64
+	}{N: 1, n: 1 << 53}
+	if _, err := nodes.PayloadHash(map[string]any{"row": row}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestPayloadHashRejectsPromotedStructInteger(t *testing.T) {
+	type inner struct {
+		N int64
+	}
+	row := struct{ inner }{inner: inner{N: 1 << 53}}
+	_, err := nodes.PayloadHash(map[string]any{"row": row})
+	if err == nil || !strings.Contains(err.Error(), "safe integer") {
+		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestPayloadHashNilRawMessageIsNull(t *testing.T) {
+	if _, err := nodes.PayloadHash(map[string]any{"raw": json.RawMessage(nil)}); err != nil {
+		t.Fatal(err)
+	}
+	type row struct {
+		Raw json.RawMessage `json:"raw"`
+	}
+	if _, err := nodes.PayloadHash(map[string]any{"row": row{}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := nodes.PayloadHash(map[string]any{"raw": json.RawMessage{}}); err == nil {
+		t.Fatal("expected empty raw message to fail")
+	}
+}
+
+func TestPayloadHashSafeStructMatchesMap(t *testing.T) {
+	type row struct {
+		N int64 `json:"n"`
+	}
+	fromStruct, err := nodes.PayloadHash(map[string]any{"row": row{N: 1}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fromMap, err := nodes.PayloadHash(map[string]any{"row": map[string]any{"n": int64(1)}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fromStruct != fromMap {
+		t.Fatalf("struct %s map %s", fromStruct, fromMap)
+	}
+}
+
+type cycleNode struct {
+	Next *cycleNode
+	N    int64
+}
+
+func TestPayloadHashCyclicStructDoesNotHang(t *testing.T) {
+	for _, n := range []int64{1, 1 << 53} {
+		row := &cycleNode{N: n}
+		row.Next = row
+		_, err := nodes.PayloadHash(map[string]any{"row": row})
+		if err == nil || !strings.Contains(err.Error(), "cyclic") {
+			t.Fatalf("n=%d err=%v", n, err)
+		}
+	}
+}
+
+type marshaledBig struct {
+	N int64
+}
+
+func (m marshaledBig) MarshalJSON() ([]byte, error) {
+	return []byte(`{"n":1}`), nil
+}
+
+type marshaledUnsafe struct{}
+
+func (m marshaledUnsafe) MarshalJSON() ([]byte, error) {
+	return []byte(`{"n":9007199254740993}`), nil
+}
+
+func TestPayloadHashFollowsStructMarshalJSON(t *testing.T) {
+	if _, err := nodes.PayloadHash(map[string]any{"row": marshaledBig{N: 1 << 53}}); err != nil {
+		t.Fatal(err)
+	}
+	_, err := nodes.PayloadHash(map[string]any{"row": marshaledUnsafe{}})
+	if err == nil || !strings.Contains(err.Error(), "safe integer") {
+		t.Fatalf("err=%v", err)
+	}
+}
+
+type jsonNumberString string
+
+func (jsonNumberString) MarshalJSON() ([]byte, error) {
+	return []byte(`9007199254740993`), nil
+}
+
+type jsonNumberInt int64
+
+func (jsonNumberInt) MarshalJSON() ([]byte, error) {
+	return []byte(`9007199254740993`), nil
+}
+
+type jsonNumberByte byte
+
+func (jsonNumberByte) MarshalJSON() ([]byte, error) {
+	return []byte(`9007199254740993`), nil
+}
+
+type jsonNumberArr [8]byte
+
+func (jsonNumberArr) MarshalJSON() ([]byte, error) {
+	return []byte(`9007199254740993`), nil
+}
+
+type pointerOnlyID int64
+
+func (p *pointerOnlyID) MarshalJSON() ([]byte, error) {
+	return []byte(`9007199254740993`), nil
+}
+
+type bigMarsh int64
+
+func (bigMarsh) MarshalJSON() ([]byte, error) {
+	return []byte(`9007199254740993`), nil
+}
+
+type embedA struct{ N int64 }
+
+type embedB struct{ N int64 }
+
+func TestPayloadHashFollowsEncodingJSONNumbers(t *testing.T) {
+	type inner struct {
+		N int64
+	}
+	n := int64(1 << 53)
+	id := pointerOnlyID(1)
+	rowPtr := &struct {
+		N pointerOnlyID
+	}{N: 1}
+	cases := []struct {
+		name   string
+		v      any
+		reject bool
+	}{
+		{"dash comma", struct {
+			N int64 `json:"-,"`
+		}{N: n}, true},
+		{"dash omitempty", struct {
+			N int64 `json:"-,omitempty"`
+		}{N: n}, true},
+		{"dash string option", struct {
+			N int64 `json:"-,string"`
+		}{N: n}, false},
+		{"nested dash comma", struct {
+			Inner struct{ N int64 } `json:"-,"`
+		}{Inner: struct{ N int64 }{N: n}}, true},
+		{"named embed", struct {
+			inner `json:"inner"`
+		}{inner: inner{N: n}}, true},
+		{"invalid tag promotes", struct {
+			inner `json:"a\"b"`
+		}{inner: inner{N: n}}, true},
+		{"pointer embed", struct {
+			*inner `json:"inner"`
+		}{inner: &inner{N: n}}, true},
+		{"pointer embed invalid tag", struct {
+			*inner `json:"a\"b"`
+		}{inner: &inner{N: n}}, true},
+		{"nil pointer embed", struct {
+			*inner `json:"inner"`
+		}{}, false},
+		{"string option", struct {
+			N int64 `json:",string"`
+		}{N: n}, false},
+		{"string option with marshaler", struct {
+			N bigMarsh `json:",string"`
+		}{N: 1}, true},
+		{"uintptr", uintptr(n), true},
+		{"uintptr field", struct{ N uintptr }{N: uintptr(n)}, true},
+		{"marshal string", jsonNumberString("x"), true},
+		{"marshal int", jsonNumberInt(1), true},
+		{"marshal byte", jsonNumberByte(1), true},
+		{"marshal array", jsonNumberArr{}, true},
+		{"pointer method on value", pointerOnlyID(1), false},
+		{"pointer method on pointer", &id, true},
+		{"pointer method on field", struct{ N pointerOnlyID }{N: 1}, false},
+		{"pointer method on addressable field", rowPtr, true},
+		{"conflicting embeds drop the field", struct {
+			embedA
+			embedB
+		}{embedA{N: n}, embedB{N: 1}}, false},
+		{"outer field hides embedded field", struct {
+			N int64
+			embedA
+		}{1, embedA{N: n}}, false},
+		{"string option with pointer marshaler, value", struct {
+			N pointerOnlyID `json:",string"`
+		}{N: pointerOnlyID(n)}, false},
+		{"string option with pointer marshaler, addressable", &struct {
+			N pointerOnlyID `json:",string"`
+		}{N: 1}, true},
+	}
+	for _, c := range cases {
+		c := c
+		t.Run(c.name, func(t *testing.T) {
+			raw, merr := json.Marshal(map[string]any{"n": c.v})
+			_, err := nodes.PayloadHash(map[string]any{"n": c.v})
+			if c.reject {
+				if err == nil || !strings.Contains(err.Error(), "safe integer") {
+					t.Fatalf("json %s marshal %v hash %v", raw, merr, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("json %s marshal %v hash %v", raw, merr, err)
+			}
+		})
 	}
 }
 
