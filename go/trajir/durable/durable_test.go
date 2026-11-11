@@ -134,21 +134,45 @@ func TestFirstSaveWins(t *testing.T) {
 	}
 }
 
+func runForBackends(t *testing.T, fn func(*testing.T, durable.Backend)) {
+	t.Helper()
+	t.Run("memory", func(t *testing.T) {
+		b := durable.NewMemory()
+		t.Cleanup(func() { _ = b.Close() })
+		fn(t, b)
+	})
+	t.Run("sqlite", func(t *testing.T) {
+		b, err := durable.OpenLocal(filepath.Join(t.TempDir(), "memo.sqlite"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = b.Close() })
+		fn(t, b)
+	})
+}
+
 func TestStepKeepsUnsafeIntegerDigits(t *testing.T) {
+	runForBackends(t, assertStepKeepsUnsafeIntegerDigits)
+}
+
+func assertStepKeepsUnsafeIntegerDigits(t *testing.T, b durable.Backend) {
+	t.Helper()
 	ctx := context.Background()
-	b := durable.NewMemory()
-	t.Cleanup(func() { _ = b.Close() })
 
 	const unsafe int64 = (1 << 53) + 1
 	const safe int64 = (1 << 53) - 1
 	fn := func(context.Context) (any, error) {
 		return map[string]any{
-			"n":    unsafe,
-			"neg":  -unsafe,
-			"ok":   safe,
-			"pow":  int64(1 << 53),
-			"x":    1.5,
-			"nest": []any{map[string]any{"id": unsafe}},
+			"n":         unsafe,
+			"neg":       -unsafe,
+			"ok":        safe,
+			"neg_safe":  -safe,
+			"pow":       int64(1 << 53),
+			"pow54":     int64(1 << 54),
+			"float53":   float64(int64(1 << 53)),
+			"big_float": float64(1e18),
+			"x":         1.5,
+			"nest":      []any{map[string]any{"id": unsafe}},
 		}, nil
 	}
 
@@ -166,8 +190,22 @@ func TestStepKeepsUnsafeIntegerDigits(t *testing.T) {
 		if m["ok"] != float64(safe) {
 			t.Fatalf("ok=%#v (%T)", m["ok"], m["ok"])
 		}
-		if m["pow"] != float64(int64(1<<53)) {
+		if m["neg_safe"] != float64(-safe) {
+			t.Fatalf("neg_safe=%#v (%T)", m["neg_safe"], m["neg_safe"])
+		}
+		pow, ok := m["pow"].(json.Number)
+		if !ok || pow.String() != "9007199254740992" {
 			t.Fatalf("pow=%#v (%T)", m["pow"], m["pow"])
+		}
+		pow54, ok := m["pow54"].(json.Number)
+		if !ok || pow54.String() != "18014398509481984" {
+			t.Fatalf("pow54=%#v (%T)", m["pow54"], m["pow54"])
+		}
+		if m["float53"] != float64(int64(1<<53)) {
+			t.Fatalf("float53=%#v (%T)", m["float53"], m["float53"])
+		}
+		if m["big_float"] != float64(1e18) {
+			t.Fatalf("big_float=%#v (%T)", m["big_float"], m["big_float"])
 		}
 		if m["x"] != 1.5 {
 			t.Fatalf("x=%#v (%T)", m["x"], m["x"])
@@ -203,19 +241,7 @@ func TestStepKeepsUnsafeIntegerDigits(t *testing.T) {
 }
 
 func TestStepLostSaveReturnsStored(t *testing.T) {
-	t.Run("memory", func(t *testing.T) {
-		b := durable.NewMemory()
-		t.Cleanup(func() { _ = b.Close() })
-		assertLostSaveReturnsStored(t, b)
-	})
-	t.Run("sqlite", func(t *testing.T) {
-		b, err := durable.OpenLocal(filepath.Join(t.TempDir(), "memo.sqlite"))
-		if err != nil {
-			t.Fatal(err)
-		}
-		t.Cleanup(func() { _ = b.Close() })
-		assertLostSaveReturnsStored(t, b)
-	})
+	runForBackends(t, assertLostSaveReturnsStored)
 }
 
 func assertLostSaveReturnsStored(t *testing.T, b durable.Backend) {
