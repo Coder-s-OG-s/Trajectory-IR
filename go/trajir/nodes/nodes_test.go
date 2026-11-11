@@ -2,6 +2,7 @@ package nodes_test
 
 import (
 	"encoding/json"
+	"errors"
 	"math"
 	"os"
 	"path/filepath"
@@ -162,6 +163,56 @@ func safeWithHiddenBigInt() hiddenBigInt {
 	return hiddenBigInt{N: 1, Hidden: 1 << 60}
 }
 
+type ptrBigMarshaler struct {
+	Big int64 `json:"big"`
+}
+
+func (p *ptrBigMarshaler) MarshalJSON() ([]byte, error) {
+	return []byte(`"safe-ptr-custom"`), nil
+}
+
+// wholeFloatAsInt is what encoding/json writes for float64(1e18): a whole
+// number with no decimal point and no exponent.
+type wholeFloatAsInt struct{}
+
+func (wholeFloatAsInt) MarshalJSON() ([]byte, error) {
+	return json.Marshal(float64(1e18))
+}
+
+type wholeFloatDotted struct{}
+
+func (wholeFloatDotted) MarshalJSON() ([]byte, error) {
+	return []byte(`1000000000000000000.0`), nil
+}
+
+type wholeFloatExp struct{}
+
+func (wholeFloatExp) MarshalJSON() ([]byte, error) {
+	return []byte(`1e18`), nil
+}
+
+type ptrWholeFloat struct{}
+
+func (*ptrWholeFloat) MarshalJSON() ([]byte, error) {
+	return []byte(`1000000000000000000`), nil
+}
+
+type brokenMarshal struct{}
+
+func (brokenMarshal) MarshalJSON() ([]byte, error) {
+	return nil, errors.New("marshal failed")
+}
+
+type ptrMarshalerParent struct {
+	Child ptrBigMarshaler `json:"child"`
+	Val   float64         `json:"val"`
+}
+
+type selfEmbedStruct struct {
+	*selfEmbedStruct
+	Val float64 `json:"val"`
+}
+
 func TestPayloadHashRejectsUnmarshalableValue(t *testing.T) {
 	_, err := nodes.PayloadHash(map[string]any{"bad": math.NaN()})
 	if err == nil {
@@ -244,6 +295,7 @@ func TestPayloadHashLargeFloatFollowsJCS(t *testing.T) {
 }
 
 func TestPayloadHashRejectsIntegersOutsideSafeRange(t *testing.T) {
+	rawPtr := json.RawMessage(`{"n":9007199254740992}`)
 	cases := []struct {
 		name string
 		n    any
@@ -253,12 +305,23 @@ func TestPayloadHashRejectsIntegersOutsideSafeRange(t *testing.T) {
 		{"int64 at 2^60", int64(1 << 60)},
 		{"int64 just below negative bound", int64(-(1 << 53))},
 		{"uint64", uint64(1 << 53)},
+		{"json number at 2^53", json.Number("9007199254740992")},
+		{"json number at -2^53", json.Number("-9007199254740992")},
+		{"json number at 2^54", json.Number("18014398509481984")},
+		{"json number at -2^54", json.Number("-18014398509481984")},
+		{"json number at 1e16", json.Number("10000000000000000")},
+		{"json number at 1e18", json.Number("1000000000000000000")},
+		{"json number at 2^60", json.Number("1152921504606846976")},
 		{"json number", json.Number("9007199254740993")},
 		{"wide json number", json.Number("1152921504606846977")},
 		{"nested", map[string]any{"k": []any{int64((1 << 53) + 1)}}},
 		{"int64 slice", []int64{1 << 53}},
 		{"pointer", ptrInt64(1 << 53)},
 		{"raw message", json.RawMessage(`{"n":9007199254740993}`)},
+		{"raw message ptr", &rawPtr},
+		{"raw message at 2^53", json.RawMessage(`{"n":9007199254740992}`)},
+		{"raw message at 2^54", json.RawMessage(`{"n":18014398509481984}`)},
+		{"exported struct field at 2^53", struct{ N int64 }{N: 1 << 53}},
 		{"struct field", struct{ N int64 }{N: 1 << 53}},
 		{"nested struct", struct{ Inner struct{ N int64 } }{Inner: struct{ N int64 }{N: 1 << 53}}},
 		{"struct pointer", &struct{ N int64 }{N: 1 << 53}},
@@ -285,6 +348,13 @@ func TestPayloadHashRejectsIntegersOutsideSafeRange(t *testing.T) {
 	}
 
 	if _, err := nodes.PayloadHash(map[string]any{"row": safeWithHiddenBigInt()}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := nodes.PayloadHash(map[string]any{
+		"s": struct {
+			ID int64 `json:"id,string"`
+		}{ID: 1 << 60},
+	}); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -348,19 +418,13 @@ type cycleNode struct {
 }
 
 func TestPayloadHashCyclicStructDoesNotHang(t *testing.T) {
-	safe := &cycleNode{N: 1}
-	safe.Next = safe
-	if _, err := nodes.PayloadHash(map[string]any{"row": safe}); err == nil {
-		t.Fatal("expected cycle to fail marshal")
-	} else if strings.Contains(err.Error(), "safe integer") {
-		t.Fatal(err)
-	}
-
-	unsafe := &cycleNode{N: 1 << 53}
-	unsafe.Next = unsafe
-	_, err := nodes.PayloadHash(map[string]any{"row": unsafe})
-	if err == nil || !strings.Contains(err.Error(), "safe integer") {
-		t.Fatalf("err=%v", err)
+	for _, n := range []int64{1, 1 << 53} {
+		row := &cycleNode{N: n}
+		row.Next = row
+		_, err := nodes.PayloadHash(map[string]any{"row": row})
+		if err == nil || !strings.Contains(err.Error(), "cyclic") {
+			t.Fatalf("n=%d err=%v", n, err)
+		}
 	}
 }
 
@@ -424,6 +488,10 @@ func (bigMarsh) MarshalJSON() ([]byte, error) {
 	return []byte(`9007199254740993`), nil
 }
 
+type embedA struct{ N int64 }
+
+type embedB struct{ N int64 }
+
 func TestPayloadHashFollowsEncodingJSONNumbers(t *testing.T) {
 	type inner struct {
 		N int64
@@ -481,6 +549,20 @@ func TestPayloadHashFollowsEncodingJSONNumbers(t *testing.T) {
 		{"pointer method on pointer", &id, true},
 		{"pointer method on field", struct{ N pointerOnlyID }{N: 1}, false},
 		{"pointer method on addressable field", rowPtr, true},
+		{"conflicting embeds drop the field", struct {
+			embedA
+			embedB
+		}{embedA{N: n}, embedB{N: 1}}, false},
+		{"outer field hides embedded field", struct {
+			N int64
+			embedA
+		}{1, embedA{N: n}}, false},
+		{"string option with pointer marshaler, value", struct {
+			N pointerOnlyID `json:",string"`
+		}{N: pointerOnlyID(n)}, false},
+		{"string option with pointer marshaler, addressable", &struct {
+			N pointerOnlyID `json:",string"`
+		}{N: 1}, true},
 	}
 	for _, c := range cases {
 		c := c
@@ -592,5 +674,243 @@ func TestDecodePayloadJSONRejectsMalformedAndTrailingData(t *testing.T) {
 	}
 	if p, err := nodes.DecodePayloadJSON(" {\"a\":1}\n"); err != nil || len(p) != 1 {
 		t.Fatalf("surrounding whitespace must be accepted: p=%v err=%v", p, err)
+	}
+}
+
+func TestMarshalJSONPreservesLargeWholeFloats(t *testing.T) {
+	type namedMap map[string]any
+	type embeddedFloat struct {
+		Embedded float64 `json:"embedded"`
+	}
+	type floatStruct struct {
+		embeddedFloat
+		Amount   float64   `json:"amount"`
+		Pow53    float64   `json:"pow53"`
+		Empty    string    `json:"empty,omitempty"`
+		Hidden   float64   `json:"-"`
+		AsString float64   `json:"as_string,string"`
+		When     time.Time `json:"when"`
+	}
+	ptr := float64(1e18)
+	payload := map[string]any{
+		"f18":      float64(1e18),
+		"f32":      float32(1e18),
+		"neg":      -float64(1e18),
+		"pow53":    float64(int64(1 << 53)),
+		"pow54":    float64(int64(1 << 54)),
+		"f21":      1e21,
+		"safe":     float64((1 << 53) - 1),
+		"ptr":      &ptr,
+		"typed":    []float64{1e18},
+		"typedMap": map[string]float64{"v": 1e18},
+		"namedMap": namedMap{"keep_nil": nil, "val": 1e18},
+		"nulls":    map[string]any{"nil": nil, "val": 1e18},
+		"struct": floatStruct{
+			embeddedFloat: embeddedFloat{Embedded: float64(1e18)},
+			Amount:        float64(1e18),
+			Pow53:         float64(int64(1 << 53)),
+			Hidden:        float64(1e18),
+			AsString:      float64(1e18),
+			When:          time.Unix(1700000000, 0).UTC(),
+		},
+	}
+	raw, err := nodes.MarshalJSON(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := payload["f18"].(float64); !ok {
+		t.Fatalf("input map was mutated: %T", payload["f18"])
+	}
+	decoded, err := nodes.DecodeObject(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantHash, err := nodes.PayloadHash(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gotHash, err := nodes.PayloadHash(decoded)
+	if err != nil {
+		t.Fatalf("decoded PayloadHash failed (raw=%s): %v", raw, err)
+	}
+	if gotHash != wantHash {
+		t.Fatalf("hash mismatch: got %s want %s", gotHash, wantHash)
+	}
+	nm := decoded["namedMap"].(map[string]any)
+	if v, ok := nm["keep_nil"]; !ok || v != nil {
+		t.Fatalf("namedMap lost nil entry: %#v", nm)
+	}
+	st := decoded["struct"].(map[string]any)
+	if _, hasEmpty := st["empty"]; hasEmpty {
+		t.Fatalf("omitempty field should remain omitted: %#v", st)
+	}
+	if _, hasHidden := st["Hidden"]; hasHidden {
+		t.Fatalf("json:\"-\" field should remain omitted: %#v", st)
+	}
+	if s, ok := st["as_string"].(string); !ok || s != "1000000000000000000" {
+		t.Fatalf("as_string=%#v", st["as_string"])
+	}
+	if _, ok := st["embedded"].(json.Number); !ok {
+		t.Fatalf("embedded=%#v", st["embedded"])
+	}
+	if _, err := nodes.MarshalJSON(map[string]any{"bad": math.NaN()}); err == nil {
+		t.Fatal("expected error marshaling NaN")
+	}
+}
+
+func TestIsUnsafeIntegerLiteral(t *testing.T) {
+	for _, s := range []string{
+		"9007199254740992", "-9007199254740992", "9007199254740993",
+		"18014398509481984", "10000000000000000", "1000000000000000000", "1152921504606846976",
+	} {
+		if !nodes.IsUnsafeIntegerLiteral(s) {
+			t.Errorf("IsUnsafeIntegerLiteral(%q) = false, want true", s)
+		}
+	}
+	for _, s := range []string{
+		"0", "-0", "9007199254740991", "-9007199254740991",
+		"9007199254740992.0", "1000000000000000000.0", "1e18", "1e+18", "1.5",
+	} {
+		if nodes.IsUnsafeIntegerLiteral(s) {
+			t.Errorf("IsUnsafeIntegerLiteral(%q) = true, want false", s)
+		}
+	}
+}
+
+func TestPayloadHashChecksMarshalJSONOutput(t *testing.T) {
+	for _, n := range []any{
+		wholeFloatAsInt{},
+		struct {
+			N wholeFloatAsInt `json:"n"`
+		}{},
+		&ptrWholeFloat{},
+	} {
+		_, err := nodes.PayloadHash(map[string]any{"n": n})
+		if err == nil || !strings.Contains(err.Error(), "safe integer") {
+			t.Fatalf("%T err=%v", n, err)
+		}
+	}
+	for _, n := range []any{wholeFloatDotted{}, wholeFloatExp{}} {
+		if _, err := nodes.PayloadHash(map[string]any{"n": n}); err != nil {
+			t.Fatalf("%T err=%v", n, err)
+		}
+	}
+	_, err := nodes.PayloadHash(map[string]any{"n": brokenMarshal{}})
+	if err == nil || !strings.Contains(err.Error(), "marshal failed") {
+		t.Fatalf("broken marshaler err=%v", err)
+	}
+}
+
+func TestPayloadHashAndMarshalJSONPointerReceiverMarshaler(t *testing.T) {
+	p := map[string]any{
+		"direct": &ptrBigMarshaler{Big: 1 << 60},
+		"parent": &ptrMarshalerParent{
+			Child: ptrBigMarshaler{Big: 1 << 60},
+			Val:   float64(1e18),
+		},
+	}
+	wantHash, err := nodes.PayloadHash(p)
+	if err != nil {
+		t.Fatalf("PayloadHash failed on pointer-receiver Marshaler: %v", err)
+	}
+	raw, err := nodes.MarshalJSON(p)
+	if err != nil {
+		t.Fatalf("MarshalJSON failed on pointer-receiver Marshaler: %v", err)
+	}
+	decoded, err := nodes.DecodeObject(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gotHash, err := nodes.PayloadHash(decoded)
+	if err != nil {
+		t.Fatalf("decoded PayloadHash failed (raw=%s): %v", raw, err)
+	}
+	if gotHash != wantHash {
+		t.Fatalf("hash mismatch: got %s want %s", gotHash, wantHash)
+	}
+}
+
+func TestPayloadHashAndMarshalJSONRejectCyclesWithoutPanic(t *testing.T) {
+	cycMap := map[string]any{}
+	cycMap["self"] = cycMap
+
+	cycSlice := make([]any, 1)
+	cycSlice[0] = cycSlice
+
+	type cycNode struct {
+		Next *cycNode `json:"next"`
+	}
+	cycPtr := &cycNode{}
+	cycPtr.Next = cycPtr
+
+	for _, tc := range []struct {
+		name string
+		val  any
+	}{
+		{"map", cycMap},
+		{"slice", cycSlice},
+		{"struct_ptr", cycPtr},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := nodes.PayloadHash(map[string]any{"x": tc.val}); err == nil {
+				t.Fatalf("PayloadHash(%s) = nil error, want cycle error", tc.name)
+			}
+			if _, err := nodes.MarshalJSON(map[string]any{"x": tc.val}); err == nil {
+				t.Fatalf("MarshalJSON(%s) = nil error, want cycle error", tc.name)
+			}
+		})
+	}
+}
+
+func TestPayloadHashAndMarshalJSONSelfEmbeddedStructNoHang(t *testing.T) {
+	selfEmb := &selfEmbedStruct{Val: float64(1e18)}
+	selfEmb.selfEmbedStruct = selfEmb
+	p := map[string]any{"x": selfEmb}
+
+	wantHash, err := nodes.PayloadHash(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := nodes.MarshalJSON(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := nodes.DecodeObject(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gotHash, err := nodes.PayloadHash(decoded)
+	if err != nil {
+		t.Fatalf("decoded PayloadHash failed (raw=%s): %v", raw, err)
+	}
+	if gotHash != wantHash {
+		t.Fatalf("hash mismatch: got %s want %s", gotHash, wantHash)
+	}
+}
+
+func TestMarshalJSONPreservesSharedDAGPointers(t *testing.T) {
+	shared := float64(1e18)
+	dag := map[string]any{
+		"a": &shared,
+		"b": &shared,
+	}
+	wantHash, err := nodes.PayloadHash(dag)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := nodes.MarshalJSON(dag)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := nodes.DecodeObject(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gotHash, err := nodes.PayloadHash(decoded)
+	if err != nil {
+		t.Fatalf("decoded PayloadHash failed (raw=%s): %v", raw, err)
+	}
+	if gotHash != wantHash {
+		t.Fatalf("hash mismatch: got %s want %s", gotHash, wantHash)
 	}
 }

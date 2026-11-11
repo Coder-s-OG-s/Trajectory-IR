@@ -9,6 +9,7 @@ package nodes
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -180,60 +181,153 @@ func (e *UnsafeIntegerError) Error() string {
 
 const defaultUnsafeIntegerMessage = "integer exceeds safe integer domain for JSON floats"
 
-var (
-	jsonNumberType = reflect.TypeOf(json.Number(""))
-	rawMessageType = reflect.TypeOf(json.RawMessage(nil))
-)
-
-func rejectUnsafeValues(v any) error {
-	return walkUnsafe(reflect.ValueOf(v), map[uintptr]struct{}{})
+type cycleKey struct {
+	ptr uintptr
+	typ reflect.Type
 }
 
-func walkUnsafe(rv reflect.Value, seen map[uintptr]struct{}) error {
+var (
+	anyReflectType = reflect.TypeOf((*any)(nil)).Elem()
+	jsonNumberType = reflect.TypeOf(json.Number(""))
+)
+
+func pushCycle(active *map[cycleKey]bool, rv reflect.Value) (func(), error) {
+	key := cycleKey{ptr: rv.Pointer(), typ: rv.Type()}
+	if *active != nil && (*active)[key] {
+		return nil, fmt.Errorf("unsupported cyclic value via %s", rv.Type())
+	}
+	if *active == nil {
+		*active = make(map[cycleKey]bool)
+	}
+	(*active)[key] = true
+	return func() {
+		delete(*active, key)
+	}, nil
+}
+
+func checkCustomMarshaler(rv reflect.Value) (handled bool, raw json.RawMessage, isRaw bool) {
+	if !rv.IsValid() {
+		return false, nil, false
+	}
+	if rv.CanInterface() {
+		v := rv.Interface()
+		if rm, ok := v.(json.RawMessage); ok {
+			return true, rm, true
+		}
+		if rm, ok := v.(*json.RawMessage); ok {
+			if rm == nil {
+				return true, nil, false
+			}
+			return true, *rm, true
+		}
+		if _, ok := v.(json.Marshaler); ok {
+			return true, nil, false
+		}
+		if _, ok := v.(encoding.TextMarshaler); ok {
+			return true, nil, false
+		}
+	}
+	if rv.CanAddr() && rv.Addr().CanInterface() {
+		v := rv.Addr().Interface()
+		if _, ok := v.(json.Marshaler); ok {
+			return true, nil, false
+		}
+		if _, ok := v.(encoding.TextMarshaler); ok {
+			return true, nil, false
+		}
+	}
+	return false, nil, false
+}
+
+func callMarshalJSON(rv reflect.Value) ([]byte, bool, error) {
+	if !rv.IsValid() || (rv.Kind() == reflect.Pointer && rv.IsNil()) {
+		return nil, false, nil
+	}
+	if rv.CanInterface() {
+		if _, ok := rv.Interface().(json.RawMessage); ok {
+			return nil, false, nil
+		}
+		if m, ok := rv.Interface().(json.Marshaler); ok {
+			b, err := m.MarshalJSON()
+			return b, true, err
+		}
+	}
+	if !rv.CanAddr() {
+		return nil, false, nil
+	}
+	addr := rv.Addr()
+	if !addr.CanInterface() {
+		return nil, false, nil
+	}
+	if m, ok := addr.Interface().(json.Marshaler); ok {
+		b, err := m.MarshalJSON()
+		return b, true, err
+	}
+	return nil, false, nil
+}
+
+func rejectUnsafeValues(v any) error {
+	switch n := v.(type) {
+	case nil, string, bool, float32, float64:
+		return nil
+	case json.Number:
+		return checkJSONNumber(n)
+	case int:
+		return checkInt64(int64(n))
+	case int64:
+		return checkInt64(n)
+	}
+	return rejectUnsafeReflectValue(reflect.ValueOf(v), nil)
+}
+
+func rejectUnsafeReflectValue(rv reflect.Value, active map[cycleKey]bool) error {
 	if !rv.IsValid() {
 		return nil
 	}
-	for rv.Kind() == reflect.Interface {
+	if rv.Kind() == reflect.Interface {
 		if rv.IsNil() {
 			return nil
 		}
-		rv = rv.Elem()
+		return rejectUnsafeReflectValue(rv.Elem(), active)
 	}
-	if rv.Kind() == reflect.Pointer {
-		if rv.IsNil() {
-			return nil
-		}
-		if rv.Elem().Kind() == reflect.Struct {
-			ptr := rv.Pointer()
-			if _, ok := seen[ptr]; ok {
+	if rv.Type() == jsonNumberType && rv.CanInterface() {
+		return checkJSONNumber(rv.Interface().(json.Number))
+	}
+	if handled, raw, isRaw := checkCustomMarshaler(rv); handled {
+		if !isRaw {
+			// encoding/json stores MarshalJSON bytes as the value. Walk those
+			// bytes the same way as json.RawMessage. A nil pointer is left
+			// alone: calling a value receiver on it panics.
+			out, ok, err := callMarshalJSON(rv)
+			if !ok {
 				return nil
 			}
-			seen[ptr] = struct{}{}
+			if err != nil {
+				return err
+			}
+			raw = out
+		} else if raw == nil {
+			// encoding/json writes a nil json.RawMessage as null.
+			return nil
 		}
-	}
-	// encoding/json calls MarshalJSON before the kind encoding, for every type.
-	if raw, ok, err := callMarshalJSON(rv); ok {
+		decoded, err := decodeJSON(raw)
 		if err != nil {
 			return err
 		}
-		return walkJSONBytes(raw, seen)
-	}
-	if rv.Kind() == reflect.Pointer {
-		return walkUnsafe(rv.Elem(), seen)
-	}
-
-	switch rv.Type() {
-	case jsonNumberType:
-		return checkJSONNumber(json.Number(rv.String()))
-	case rawMessageType:
-		// A nil RawMessage is null. An empty non-nil value is invalid JSON.
-		if rv.IsNil() {
-			return nil
-		}
-		return walkJSONBytes(rawMessageBytes(rv), seen)
+		return rejectUnsafeReflectValue(reflect.ValueOf(decoded), active)
 	}
 
 	switch rv.Kind() {
+	case reflect.Ptr:
+		if rv.IsNil() {
+			return nil
+		}
+		pop, err := pushCycle(&active, rv)
+		if err != nil {
+			return err
+		}
+		defer pop()
+		return rejectUnsafeReflectValue(rv.Elem(), active)
 	case reflect.Float32, reflect.Float64:
 		return nil
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
@@ -245,147 +339,53 @@ func walkUnsafe(rv reflect.Value, seen map[uintptr]struct{}) error {
 		}
 		return nil
 	case reflect.Slice, reflect.Array:
+		if rv.Kind() == reflect.Slice {
+			if rv.IsNil() {
+				return nil
+			}
+			if rv.Len() > 0 {
+				pop, err := pushCycle(&active, rv)
+				if err != nil {
+					return err
+				}
+				defer pop()
+			}
+		}
 		for i := 0; i < rv.Len(); i++ {
-			if err := walkUnsafe(rv.Index(i), seen); err != nil {
+			if err := rejectUnsafeReflectValue(rv.Index(i), active); err != nil {
 				return err
 			}
 		}
 		return nil
 	case reflect.Map:
+		if rv.IsNil() {
+			return nil
+		}
+		pop, err := pushCycle(&active, rv)
+		if err != nil {
+			return err
+		}
+		defer pop()
 		iter := rv.MapRange()
 		for iter.Next() {
-			if err := walkUnsafe(iter.Value(), seen); err != nil {
+			if err := rejectUnsafeReflectValue(iter.Value(), active); err != nil {
 				return err
 			}
 		}
 		return nil
 	case reflect.Struct:
-		return walkUnsafeStruct(rv, seen)
+		for _, f := range jsonStructFields(rv) {
+			if f.asString && isJSONStringTagValue(f.val) {
+				continue
+			}
+			if err := rejectUnsafeReflectValue(f.val, active); err != nil {
+				return err
+			}
+		}
+		return nil
 	default:
 		return nil
 	}
-}
-
-func walkJSONBytes(raw []byte, seen map[uintptr]struct{}) error {
-	decoded, err := decodeJSON(raw)
-	if err != nil {
-		return err
-	}
-	return walkUnsafe(reflect.ValueOf(decoded), seen)
-}
-
-// walkUnsafeStruct checks integers that encoding/json would emit from a struct.
-// Only the exact tag "-" is omitted. A tag of "-," is the field name "-".
-// An unexported field that is not an embedded struct is omitted. A basic
-// field with the string option is a JSON string, unless that type implements
-// MarshalJSON.
-func walkUnsafeStruct(rv reflect.Value, seen map[uintptr]struct{}) error {
-	for i := 0; i < rv.NumField(); i++ {
-		sf := rv.Type().Field(i)
-		skip, asString := jsonFieldOmit(sf)
-		if skip || asString {
-			continue
-		}
-		if err := walkUnsafe(rv.Field(i), seen); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func callMarshalJSON(rv reflect.Value) ([]byte, bool, error) {
-	if rv.CanInterface() {
-		if m, ok := rv.Interface().(json.Marshaler); ok {
-			raw, err := m.MarshalJSON()
-			return raw, true, err
-		}
-	}
-	if rv.CanAddr() && rv.Addr().CanInterface() {
-		if m, ok := rv.Addr().Interface().(json.Marshaler); ok {
-			raw, err := m.MarshalJSON()
-			return raw, true, err
-		}
-	}
-	return nil, false, nil
-}
-
-func jsonFieldOmit(sf reflect.StructField) (skip bool, asString bool) {
-	ft := sf.Type
-	if sf.Anonymous {
-		embed := ft
-		if embed.Kind() == reflect.Pointer {
-			embed = embed.Elem()
-		}
-		if !sf.IsExported() && embed.Kind() != reflect.Struct {
-			return true, false
-		}
-	} else if !sf.IsExported() {
-		return true, false
-	}
-	tag := sf.Tag.Get("json")
-	if tag == "-" {
-		return true, false
-	}
-	_, opt, _ := strings.Cut(tag, ",")
-	kind := ft
-	if kind.Name() == "" && kind.Kind() == reflect.Pointer {
-		kind = kind.Elem()
-	}
-	// encoding/json ignores the string option when MarshalJSON exists, and
-	// writes that method's bytes instead.
-	if jsonOption(opt, "string") && jsonStringOptionKind(kind.Kind()) && !typeOrPointerMarshals(ft) {
-		return false, true
-	}
-	return false, false
-}
-
-func typeOrPointerMarshals(t reflect.Type) bool {
-	m := reflect.TypeFor[json.Marshaler]()
-	if t.Implements(m) {
-		return true
-	}
-	if t.Kind() != reflect.Pointer && reflect.PointerTo(t).Implements(m) {
-		return true
-	}
-	return false
-}
-
-func jsonStringOptionKind(k reflect.Kind) bool {
-	switch k {
-	case reflect.Bool,
-		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
-		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr,
-		reflect.Float32, reflect.Float64,
-		reflect.String:
-		return true
-	default:
-		return false
-	}
-}
-
-func jsonOption(opt, name string) bool {
-	for opt != "" {
-		var next string
-		next, opt, _ = strings.Cut(opt, ",")
-		if next == name {
-			return true
-		}
-	}
-	return false
-}
-
-func rawMessageBytes(rv reflect.Value) []byte {
-	if !rv.IsValid() || rv.IsNil() {
-		return nil
-	}
-	if rv.CanInterface() {
-		return append([]byte(nil), rv.Interface().(json.RawMessage)...)
-	}
-	b := make([]byte, rv.Len())
-	for i := 0; i < rv.Len(); i++ {
-		b[i] = byte(rv.Index(i).Uint())
-	}
-	return b
 }
 
 func checkInt64(n int64) error {
@@ -395,23 +395,37 @@ func checkInt64(n int64) error {
 	return nil
 }
 
-func checkJSONNumber(n json.Number) error {
-	s := string(n)
-	if !jsonIntegerLiteral(s) || !jsonIntegerOutOfRange(s) {
-		return nil
-	}
-	if jsonIntegerExactFloat64(s) {
-		return nil
-	}
-	return &UnsafeIntegerError{Message: fmt.Sprintf("%s exceeds safe integer domain for JSON floats", s)}
+// IsUnsafeIntegerLiteral reports whether s is a JSON integer literal (no decimal
+// point or exponent) outside the RFC 8785 range -(2^53-1)..2^53-1.
+func IsUnsafeIntegerLiteral(s string) bool {
+	return jsonIntegerLiteral(s) && jsonIntegerOutOfRange(s)
 }
 
-func jsonIntegerExactFloat64(s string) bool {
-	f, err := strconv.ParseFloat(s, 64)
-	if err != nil || math.IsInf(f, 0) || math.IsNaN(f) {
-		return false
+// MarshalJSON encodes v to JSON while preserving explicit float syntax (".0") on
+// finite floats whose magnitude exceeds 2^53-1 when Go's encoder would otherwise
+// emit an undecorated integer token (e.g. float64(1e18) -> 1000000000000000000.0).
+// Decoders using json.Decoder.UseNumber() or Python json.loads then reload them
+// as floats instead of out-of-range integer literals.
+func MarshalJSON(v any) ([]byte, error) {
+	if v == nil {
+		return json.Marshal(nil)
 	}
-	return strconv.FormatFloat(f, 'f', 0, 64) == s
+	rewritten, changed, err := preserveLargeFloatVal(reflect.ValueOf(v), nil)
+	if err != nil {
+		return nil, err
+	}
+	if !changed {
+		return json.Marshal(v)
+	}
+	return json.Marshal(rewritten)
+}
+
+func checkJSONNumber(n json.Number) error {
+	s := string(n)
+	if IsUnsafeIntegerLiteral(s) {
+		return &UnsafeIntegerError{Message: fmt.Sprintf("%s exceeds safe integer domain for JSON floats", s)}
+	}
+	return nil
 }
 
 func jsonIntegerLiteral(s string) bool {
@@ -445,6 +459,341 @@ func jsonIntegerOutOfRange(s string) bool {
 		return len(s) > len(maxDigits)
 	}
 	return s > maxDigits
+}
+
+func preserveLargeFloatVal(rv reflect.Value, active map[cycleKey]bool) (any, bool, error) {
+	if !rv.IsValid() {
+		return nil, false, nil
+	}
+	if rv.Kind() == reflect.Interface {
+		if rv.IsNil() {
+			return nil, false, nil
+		}
+		next, changed, err := preserveLargeFloatVal(rv.Elem(), active)
+		if err != nil || !changed {
+			return rv.Interface(), false, err
+		}
+		return next, true, nil
+	}
+	if rv.Type() == jsonNumberType && rv.CanInterface() {
+		return rv.Interface(), false, nil
+	}
+	if handled, _, _ := checkCustomMarshaler(rv); handled {
+		return rv.Interface(), false, nil
+	}
+
+	switch rv.Kind() {
+	case reflect.Ptr:
+		if rv.IsNil() {
+			return rv.Interface(), false, nil
+		}
+		pop, err := pushCycle(&active, rv)
+		if err != nil {
+			return nil, false, err
+		}
+		defer pop()
+		next, changed, err := preserveLargeFloatVal(rv.Elem(), active)
+		if err != nil || !changed {
+			return rv.Interface(), false, err
+		}
+		return next, true, nil
+	case reflect.Float32, reflect.Float64:
+		if num, ok := largeFloatNumber(rv.Interface()); ok {
+			return num, true, nil
+		}
+		return rv.Interface(), false, nil
+	case reflect.Slice, reflect.Array:
+		return preserveLargeFloatSlice(rv, active)
+	case reflect.Map:
+		return preserveLargeFloatMap(rv, active)
+	case reflect.Struct:
+		return preserveLargeFloatStruct(rv, active)
+	default:
+		return rv.Interface(), false, nil
+	}
+}
+
+func preserveLargeFloatSlice(rv reflect.Value, active map[cycleKey]bool) (any, bool, error) {
+	if rv.Kind() == reflect.Slice {
+		if rv.IsNil() {
+			return rv.Interface(), false, nil
+		}
+		if rv.Len() > 0 {
+			pop, err := pushCycle(&active, rv)
+			if err != nil {
+				return nil, false, err
+			}
+			defer pop()
+		}
+	}
+	n := rv.Len()
+	var copied []any
+	for i := 0; i < n; i++ {
+		next, changed, err := preserveLargeFloatVal(rv.Index(i), active)
+		if err != nil {
+			return nil, false, err
+		}
+		if !changed {
+			continue
+		}
+		if copied == nil {
+			copied = make([]any, n)
+			for j := 0; j < n; j++ {
+				copied[j] = rv.Index(j).Interface()
+			}
+		}
+		copied[i] = next
+	}
+	if copied != nil {
+		return copied, true, nil
+	}
+	return rv.Interface(), false, nil
+}
+
+func preserveLargeFloatMap(rv reflect.Value, active map[cycleKey]bool) (any, bool, error) {
+	if rv.IsNil() {
+		return rv.Interface(), false, nil
+	}
+	pop, err := pushCycle(&active, rv)
+	if err != nil {
+		return nil, false, err
+	}
+	defer pop()
+	keys := rv.MapKeys()
+	var copied reflect.Value
+	for i, k := range keys {
+		elem := rv.MapIndex(k)
+		next, changed, err := preserveLargeFloatVal(elem, active)
+		if err != nil {
+			return nil, false, err
+		}
+		if !changed {
+			if copied.IsValid() {
+				setReflectAnyMap(copied, k, elem.Interface())
+			}
+			continue
+		}
+		if !copied.IsValid() {
+			mapType := reflect.MapOf(rv.Type().Key(), anyReflectType)
+			copied = reflect.MakeMapWithSize(mapType, len(keys))
+			for j := 0; j < i; j++ {
+				setReflectAnyMap(copied, keys[j], rv.MapIndex(keys[j]).Interface())
+			}
+		}
+		setReflectAnyMap(copied, k, next)
+	}
+	if copied.IsValid() {
+		return copied.Interface(), true, nil
+	}
+	return rv.Interface(), false, nil
+}
+
+func setReflectAnyMap(m, k reflect.Value, val any) {
+	if val == nil {
+		m.SetMapIndex(k, reflect.Zero(anyReflectType))
+		return
+	}
+	m.SetMapIndex(k, reflect.ValueOf(val))
+}
+
+func largeFloatNumber(v any) (json.Number, bool) {
+	f := reflect.ValueOf(v).Float()
+	if math.IsNaN(f) || math.IsInf(f, 0) || math.Abs(f) <= float64(maxSafeInteger) {
+		return "", false
+	}
+	b, err := json.Marshal(v)
+	if err != nil {
+		return "", false
+	}
+	s := string(b)
+	if strings.ContainsAny(s, ".eE") {
+		return "", false
+	}
+	return json.Number(s + ".0"), true
+}
+
+func preserveLargeFloatStruct(rv reflect.Value, active map[cycleKey]bool) (any, bool, error) {
+	var overrides map[string]any
+	for _, f := range jsonStructFields(rv) {
+		if f.asString && isJSONStringTagValue(f.val) {
+			continue
+		}
+		next, changed, err := preserveLargeFloatVal(f.val, active)
+		if err != nil {
+			return nil, false, err
+		}
+		if !changed {
+			continue
+		}
+		if overrides == nil {
+			overrides = make(map[string]any)
+		}
+		overrides[f.name] = next
+	}
+	if overrides == nil {
+		return rv.Interface(), false, nil
+	}
+	marshalTarget := rv.Interface()
+	if rv.CanAddr() && rv.Addr().CanInterface() {
+		marshalTarget = rv.Addr().Interface()
+	}
+	raw, err := json.Marshal(marshalTarget)
+	if err != nil {
+		return rv.Interface(), false, nil
+	}
+	decoded, err := decodeJSON(raw)
+	if err != nil {
+		return rv.Interface(), false, nil
+	}
+	obj, ok := decoded.(map[string]any)
+	if !ok {
+		return rv.Interface(), false, nil
+	}
+	for name, next := range overrides {
+		if cur, exists := obj[name]; exists {
+			if _, isStr := cur.(string); !isStr {
+				obj[name] = next
+			}
+		}
+	}
+	return obj, true, nil
+}
+
+type jsonStructField struct {
+	name     string
+	val      reflect.Value
+	depth    int
+	tagged   bool
+	asString bool
+}
+
+func jsonStructFields(rv reflect.Value) []jsonStructField {
+	type queueItem struct {
+		val   reflect.Value
+		depth int
+	}
+	queue := []queueItem{{val: rv, depth: 0}}
+	var seenEmbed map[cycleKey]bool
+	var candidates []jsonStructField
+	for len(queue) > 0 {
+		cur := queue[0]
+		queue = queue[1:]
+		rt := cur.val.Type()
+		for i := 0; i < rt.NumField(); i++ {
+			sf := rt.Field(i)
+			name, tagged, skip, asString := parseJSONFieldTag(sf)
+			if skip {
+				continue
+			}
+			ft := sf.Type
+			for ft.Kind() == reflect.Ptr {
+				ft = ft.Elem()
+			}
+			if !sf.IsExported() && (!sf.Anonymous || ft.Kind() != reflect.Struct) {
+				continue
+			}
+			fv := cur.val.Field(i)
+			if sf.Anonymous && name == "" && ft.Kind() == reflect.Struct {
+				for fv.Kind() == reflect.Ptr && !fv.IsNil() {
+					key := cycleKey{ptr: fv.Pointer(), typ: fv.Type()}
+					if seenEmbed == nil {
+						seenEmbed = make(map[cycleKey]bool)
+					}
+					if seenEmbed[key] {
+						fv = reflect.Value{}
+						break
+					}
+					seenEmbed[key] = true
+					fv = fv.Elem()
+				}
+				if fv.IsValid() && fv.Kind() == reflect.Struct {
+					if handled, _, _ := checkCustomMarshaler(fv); !handled {
+						queue = append(queue, queueItem{val: fv, depth: cur.depth + 1})
+					}
+				}
+				continue
+			}
+			if name == "" {
+				name = sf.Name
+			}
+			candidates = append(candidates, jsonStructField{
+				name:     name,
+				val:      fv,
+				depth:    cur.depth,
+				tagged:   tagged,
+				asString: asString,
+			})
+		}
+	}
+	return dominantStructFields(candidates)
+}
+
+func dominantStructFields(candidates []jsonStructField) []jsonStructField {
+	type rank struct {
+		depth  int
+		tagged bool
+		count  int
+	}
+	best := make(map[string]rank, len(candidates))
+	for _, c := range candidates {
+		r, ok := best[c.name]
+		if !ok || c.depth < r.depth || (c.depth == r.depth && c.tagged && !r.tagged) {
+			best[c.name] = rank{depth: c.depth, tagged: c.tagged, count: 1}
+		} else if c.depth == r.depth && c.tagged == r.tagged {
+			r.count++
+			best[c.name] = r
+		}
+	}
+	out := make([]jsonStructField, 0, len(best))
+	for _, c := range candidates {
+		r := best[c.name]
+		if r.count == 1 && c.depth == r.depth && c.tagged == r.tagged {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+func parseJSONFieldTag(sf reflect.StructField) (name string, tagged, skip, asString bool) {
+	tag, ok := sf.Tag.Lookup("json")
+	if !ok {
+		return "", false, false, false
+	}
+	if tag == "-" {
+		return "", false, true, false
+	}
+	parts := strings.Split(tag, ",")
+	name = parts[0]
+	tagged = name != ""
+	for _, opt := range parts[1:] {
+		if opt == "string" {
+			asString = true
+		}
+	}
+	return name, tagged, false, asString
+}
+
+func isJSONStringTagValue(v reflect.Value) bool {
+	// encoding/json ignores the string option when MarshalJSON runs, and
+	// writes that method's bytes instead.
+	if handled, _, _ := checkCustomMarshaler(v); handled {
+		return false
+	}
+	for v.Kind() == reflect.Ptr {
+		if v.IsNil() {
+			return false
+		}
+		v = v.Elem()
+	}
+	switch v.Kind() {
+	case reflect.Bool, reflect.String,
+		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
+		reflect.Float32, reflect.Float64:
+		return true
+	default:
+		return false
+	}
 }
 
 // NodeID builds the content-addressed id string used by the Python reference.
