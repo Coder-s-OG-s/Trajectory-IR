@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   such as `2^53`, `2^54`, and `2^60`), matching Python RFC 8785 across cold
   and replayed runs, while preserving `.0` when marshaling large whole
   `float64`/`float32` values so valid floats (e.g. `1e18`) still round-trip.
+  A `MarshalJSON` method is checked from the bytes it returns, same as
+  `json.RawMessage`. An existing `.tir` or log row that stored a whole
+  float above `2^53-1` as an integer token, with no `.0`, now fails
+  verification.
 - Go `durable.Step` reads the memo back after `Save` and returns that
   value, so a caller that lost the insert does not keep a different
   object. An integer that does not fit in a float64 keeps its digits.

@@ -239,6 +239,33 @@ func checkCustomMarshaler(rv reflect.Value) (handled bool, raw json.RawMessage, 
 	return false, nil, false
 }
 
+func callMarshalJSON(rv reflect.Value) ([]byte, bool, error) {
+	if !rv.IsValid() || (rv.Kind() == reflect.Pointer && rv.IsNil()) {
+		return nil, false, nil
+	}
+	if rv.CanInterface() {
+		if _, ok := rv.Interface().(json.RawMessage); ok {
+			return nil, false, nil
+		}
+		if m, ok := rv.Interface().(json.Marshaler); ok {
+			b, err := m.MarshalJSON()
+			return b, true, err
+		}
+	}
+	if !rv.CanAddr() {
+		return nil, false, nil
+	}
+	addr := rv.Addr()
+	if !addr.CanInterface() {
+		return nil, false, nil
+	}
+	if m, ok := addr.Interface().(json.Marshaler); ok {
+		b, err := m.MarshalJSON()
+		return b, true, err
+	}
+	return nil, false, nil
+}
+
 func rejectUnsafeValues(v any) error {
 	switch n := v.(type) {
 	case nil, string, bool, float32, float64:
@@ -268,7 +295,17 @@ func rejectUnsafeReflectValue(rv reflect.Value, active map[cycleKey]bool) error 
 	}
 	if handled, raw, isRaw := checkCustomMarshaler(rv); handled {
 		if !isRaw {
-			return nil
+			// encoding/json stores MarshalJSON bytes as the value. Walk those
+			// bytes the same way as json.RawMessage. A nil pointer is left
+			// alone: calling a value receiver on it panics.
+			out, ok, err := callMarshalJSON(rv)
+			if !ok {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+			raw = out
 		}
 		decoded, err := decodeJSON(raw)
 		if err != nil {

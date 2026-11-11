@@ -2,6 +2,7 @@ package nodes_test
 
 import (
 	"encoding/json"
+	"errors"
 	"math"
 	"os"
 	"path/filepath"
@@ -168,6 +169,38 @@ type ptrBigMarshaler struct {
 
 func (p *ptrBigMarshaler) MarshalJSON() ([]byte, error) {
 	return []byte(`"safe-ptr-custom"`), nil
+}
+
+// wholeFloatAsInt is what encoding/json writes for float64(1e18): a whole
+// number with no decimal point and no exponent.
+type wholeFloatAsInt struct{}
+
+func (wholeFloatAsInt) MarshalJSON() ([]byte, error) {
+	return json.Marshal(float64(1e18))
+}
+
+type wholeFloatDotted struct{}
+
+func (wholeFloatDotted) MarshalJSON() ([]byte, error) {
+	return []byte(`1000000000000000000.0`), nil
+}
+
+type wholeFloatExp struct{}
+
+func (wholeFloatExp) MarshalJSON() ([]byte, error) {
+	return []byte(`1e18`), nil
+}
+
+type ptrWholeFloat struct{}
+
+func (*ptrWholeFloat) MarshalJSON() ([]byte, error) {
+	return []byte(`1000000000000000000`), nil
+}
+
+type brokenMarshal struct{}
+
+func (brokenMarshal) MarshalJSON() ([]byte, error) {
+	return nil, errors.New("marshal failed")
 }
 
 type ptrMarshalerParent struct {
@@ -510,6 +543,30 @@ func TestIsUnsafeIntegerLiteral(t *testing.T) {
 		if nodes.IsUnsafeIntegerLiteral(s) {
 			t.Errorf("IsUnsafeIntegerLiteral(%q) = true, want false", s)
 		}
+	}
+}
+
+func TestPayloadHashChecksMarshalJSONOutput(t *testing.T) {
+	for _, n := range []any{
+		wholeFloatAsInt{},
+		struct {
+			N wholeFloatAsInt `json:"n"`
+		}{},
+		&ptrWholeFloat{},
+	} {
+		_, err := nodes.PayloadHash(map[string]any{"n": n})
+		if err == nil || !strings.Contains(err.Error(), "safe integer") {
+			t.Fatalf("%T err=%v", n, err)
+		}
+	}
+	for _, n := range []any{wholeFloatDotted{}, wholeFloatExp{}} {
+		if _, err := nodes.PayloadHash(map[string]any{"n": n}); err != nil {
+			t.Fatalf("%T err=%v", n, err)
+		}
+	}
+	_, err := nodes.PayloadHash(map[string]any{"n": brokenMarshal{}})
+	if err == nil || !strings.Contains(err.Error(), "marshal failed") {
+		t.Fatalf("broken marshaler err=%v", err)
 	}
 }
 
