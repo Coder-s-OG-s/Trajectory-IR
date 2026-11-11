@@ -1,6 +1,7 @@
 # Trajectory IR
 
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/14075/badge)](https://www.bestpractices.dev/projects/14075)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/Coder-s-OG-s/Trajectory-IR/badge)](https://scorecard.dev/viewer/?uri=github.com/Coder-s-OG-s/Trajectory-IR)
 [![CI](https://github.com/Coder-s-OG-s/Trajectory-IR/actions/workflows/ci.yml/badge.svg)](https://github.com/Coder-s-OG-s/Trajectory-IR/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Go](https://img.shields.io/badge/Go-primary_SDK-00ADD8?logo=go&logoColor=white)](go/QUICKSTART.md)
@@ -66,7 +67,7 @@ This is a **runtime trajectory IR**, not LLVM. You do not compile a prompt into 
 
 ## Quick start (Go — recommended)
 
-**Prerequisites:** Go 1.26.10, Git
+**Prerequisites:** Go 1.26.11, Git
 
 ```bash
 git clone https://github.com/Coder-s-OG-s/Trajectory-IR.git
@@ -226,6 +227,7 @@ Same agent, two modes: **live** does the job; **sandbox** refuses dangerous *cla
 | Phase | **1C harden and adopt** (Go primary; Python parity) — see [docs/ROADMAP.md](docs/ROADMAP.md) |
 | Library | Latest tag is **v0.3.0**. `pyproject.toml` is **0.3.0**. The one-step Claude attach ships in that tag, not as its own release |
 | OpenSSF Best Practices | [Project 14075](https://www.bestpractices.dev/projects/14075) |
+| OpenSSF Scorecard | [Live report](https://scorecard.dev/viewer/?uri=github.com/Coder-s-OG-s/Trajectory-IR) |
 | CNCF Sandbox | Preparing — [outline](docs/CNCF_SANDBOX_APPLICATION_OUTLINE.md). **Not** claiming CNCF membership until TOC approval |
 | Adopters | Honest empty list — [ADOPTERS.md](ADOPTERS.md) (add yourself via PR when you consent) |
 
