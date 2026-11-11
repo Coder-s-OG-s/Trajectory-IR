@@ -339,7 +339,17 @@ Derived events must not claim stronger provenance than the package itself.
 | `open_world_tools` | Sorted unique open-world primitive names |
 | `audit_ok`, `audit_findings`, `last_audit_ts`, `last_audit_path` | Latest `audit.completed` |
 
-If a panel needs a number that is not in §3–§4 or §6.1, extend **this document** first.
+### 6.2 Reader object (`summary.seals`)
+
+The Locked decisions panel copies this object. It does not hash the plan in the browser.
+
+| Field | Definition |
+|-------|------------|
+| `rows` | `seal.created` and `seal.verified` in log order. Empty array when the trajectory has none |
+| `rows[].status` | `created` for `seal.created`. `verified` when `seal.verified` has `ok` true. `failed` when `ok` is false or missing |
+| `rows[].node_id`, `step_n`, `content_hash`, `tool_names`, `error` | Copied from that event. `error` is the reason string when the payload has one |
+
+If a panel needs a number that is not in §3, §4, §6.1, or §6.2, extend **this document** first.
 
 ---
 
