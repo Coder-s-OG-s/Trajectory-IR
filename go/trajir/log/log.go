@@ -7,7 +7,6 @@ package nodelog
 
 import (
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -85,7 +84,7 @@ func (l *NodeLog) Append(
 		return nil, err
 	}
 
-	payloadJSON, err := json.Marshal(n.Payload)
+	payloadJSON, err := nodes.MarshalJSON(n.Payload)
 	if err != nil {
 		return nil, fmt.Errorf("marshal payload: %w", err)
 	}
@@ -166,7 +165,7 @@ func (l *NodeLog) ClaimToolCall(
 	if err != nil {
 		return false, err
 	}
-	payloadJSON, err := json.Marshal(n.Payload)
+	payloadJSON, err := nodes.MarshalJSON(n.Payload)
 	if err != nil {
 		return false, fmt.Errorf("marshal payload: %w", err)
 	}

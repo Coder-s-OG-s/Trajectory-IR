@@ -67,7 +67,7 @@ This is a **runtime trajectory IR**, not LLVM. You do not compile a prompt into 
 
 ## Quick start (Go — recommended)
 
-**Prerequisites:** Go 1.26.10, Git
+**Prerequisites:** Go 1.26.11, Git
 
 ```bash
 git clone https://github.com/Coder-s-OG-s/Trajectory-IR.git
