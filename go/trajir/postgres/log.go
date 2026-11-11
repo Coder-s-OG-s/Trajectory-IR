@@ -7,7 +7,6 @@ package postgres
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -265,7 +264,7 @@ func (l *NodeLog) Append(
 	if err != nil {
 		return nil, err
 	}
-	payloadJSON, err := json.Marshal(n.Payload)
+	payloadJSON, err := nodes.MarshalJSON(n.Payload)
 	if err != nil {
 		return nil, err
 	}
@@ -362,7 +361,7 @@ func (l *NodeLog) ClaimToolCall(
 	if err != nil {
 		return false, err
 	}
-	payloadJSON, err := json.Marshal(n.Payload)
+	payloadJSON, err := nodes.MarshalJSON(n.Payload)
 	if err != nil {
 		return false, err
 	}

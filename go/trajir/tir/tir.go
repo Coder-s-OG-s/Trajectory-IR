@@ -173,8 +173,8 @@ func marshalPretty(v any) ([]byte, error) {
 }
 
 func marshalLine(v any) ([]byte, error) {
-	// Compact JSON with sorted map keys (encoding/json default for maps).
-	b, err := json.Marshal(v)
+	// Compact JSON with sorted map keys while keeping large whole floats as ".0".
+	b, err := nodes.MarshalJSON(v)
 	if err != nil {
 		return nil, err
 	}
