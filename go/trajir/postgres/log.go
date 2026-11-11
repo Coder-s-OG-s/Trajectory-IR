@@ -498,17 +498,113 @@ func (l *NodeLog) GetNodePayload(trajectoryID, tenantID string, stepN *int, seq 
 	return payload, true, nil
 }
 
+// HasTrajectory reports whether this tenant has any node on the trajectory.
+func (l *NodeLog) HasTrajectory(trajectoryID, tenantID string) (bool, error) {
+	if tenantID == "" {
+		return false, fmt.Errorf("tenantID must be a non-empty string")
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	var one int
+	err := l.db.QueryRow(
+		`SELECT 1 FROM nodes WHERE trajectory_id = $1 AND tenant_id = $2 LIMIT 1`,
+		trajectoryID, tenantID,
+	).Scan(&one)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// GetKindPayload returns the payload of the lowest-seq node of kind at stepN.
+func (l *NodeLog) GetKindPayload(trajectoryID, tenantID string, stepN int, kind string) (map[string]any, bool, error) {
+	if tenantID == "" {
+		return nil, false, fmt.Errorf("tenantID must be a non-empty string")
+	}
+	if kind == "" {
+		return nil, false, fmt.Errorf("kind must be a non-empty string")
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	var payloadJSON string
+	err := l.db.QueryRow(
+		`SELECT payload_json FROM nodes
+		 WHERE trajectory_id = $1 AND tenant_id = $2 AND step_n = $3 AND kind = $4
+		 ORDER BY seq LIMIT 1`,
+		trajectoryID, tenantID, stepN, kind,
+	).Scan(&payloadJSON)
+	if err == sql.ErrNoRows {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	payload, err := nodes.DecodePayloadJSON(payloadJSON)
+	if err != nil {
+		return nil, false, err
+	}
+	return payload, true, nil
+}
+
+// CountByKind returns how many nodes of each kind this tenant has on the trajectory.
+func (l *NodeLog) CountByKind(trajectoryID, tenantID string) (map[string]int, error) {
+	if tenantID == "" {
+		return nil, fmt.Errorf("tenantID must be a non-empty string")
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	rows, err := l.db.Query(
+		`SELECT kind, COUNT(*) FROM nodes WHERE trajectory_id = $1 AND tenant_id = $2 GROUP BY kind`,
+		trajectoryID, tenantID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := map[string]int{}
+	for rows.Next() {
+		var kind string
+		var n int
+		if err := rows.Scan(&kind, &n); err != nil {
+			return nil, err
+		}
+		out[kind] = n
+	}
+	return out, rows.Err()
+}
+
 // ListNodes returns nodes for a trajectory scoped to tenantID.
 func (l *NodeLog) ListNodes(trajectoryID, tenantID string) ([]map[string]any, error) {
-	return l.listNodes(trajectoryID, &tenantID)
+	return l.listNodes(trajectoryID, &tenantID, nil, 0)
+}
+
+// ListNodesPage returns one page of ListNodes in step-then-seq order.
+func (l *NodeLog) ListNodesPage(trajectoryID, tenantID string, limit, offset int) ([]map[string]any, error) {
+	if tenantID == "" {
+		return nil, fmt.Errorf("tenantID must be a non-empty string")
+	}
+	if limit < 0 {
+		return nil, fmt.Errorf("limit must be a non-negative integer")
+	}
+	if offset < 0 {
+		return nil, fmt.Errorf("offset must be a non-negative integer")
+	}
+	return l.listNodes(trajectoryID, &tenantID, &limit, offset)
 }
 
 // ListNodesAllTenants returns nodes for a trajectory across all tenants.
 func (l *NodeLog) ListNodesAllTenants(trajectoryID string) ([]map[string]any, error) {
-	return l.listNodes(trajectoryID, nil)
+	return l.listNodes(trajectoryID, nil, nil, 0)
 }
 
-func (l *NodeLog) listNodes(trajectoryID string, tenantID *string) ([]map[string]any, error) {
+func (l *NodeLog) listNodes(trajectoryID string, tenantID *string, limit *int, offset int) ([]map[string]any, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -516,10 +612,19 @@ func (l *NodeLog) listNodes(trajectoryID string, tenantID *string) ([]map[string
 	      FROM nodes WHERE trajectory_id = $1`
 	args := []any{trajectoryID}
 	if tenantID != nil {
-		q += ` AND tenant_id = $2`
 		args = append(args, *tenantID)
+		q += fmt.Sprintf(` AND tenant_id = $%d`, len(args))
 	}
 	q += ` ORDER BY COALESCE(step_n, -1), seq`
+	if limit != nil {
+		args = append(args, *limit)
+		limitN := len(args)
+		args = append(args, offset)
+		q += fmt.Sprintf(` LIMIT $%d OFFSET $%d`, limitN, len(args))
+	} else if offset > 0 {
+		args = append(args, offset)
+		q += fmt.Sprintf(` OFFSET $%d`, len(args))
+	}
 
 	rows, err := l.db.Query(q, args...)
 	if err != nil {

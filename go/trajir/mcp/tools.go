@@ -56,18 +56,13 @@ func toolStatus(ctx context.Context, _ *mcp.CallToolRequest, in workdirArgs) (*m
 	}
 	defer nl.Close()
 
-	rows, err := nl.ListNodes(in.TrajectoryID, in.TenantID)
+	byKind, err := nl.CountByKind(in.TrajectoryID, in.TenantID)
 	if err != nil {
 		return nil, zero, err
 	}
-	byKind := map[string]int{}
-	seals := 0
-	for _, r := range rows {
-		kind, _ := r["kind"].(string)
-		byKind[kind]++
-		if kind == "DECISION" {
-			seals++
-		}
+	nodeCount := 0
+	for _, n := range byKind {
+		nodeCount += n
 	}
 	kinds := make([]string, 0, len(byKind))
 	for k := range byKind {
@@ -79,8 +74,8 @@ func toolStatus(ctx context.Context, _ *mcp.CallToolRequest, in workdirArgs) (*m
 		NodesPath:    nodesPath,
 		TenantID:     in.TenantID,
 		TrajectoryID: in.TrajectoryID,
-		NodeCount:    len(rows),
-		SealCount:    seals,
+		NodeCount:    nodeCount,
+		SealCount:    byKind["DECISION"],
 		CountsByKind: byKind,
 		Kinds:        kinds,
 	}, nil

@@ -385,8 +385,10 @@ def export_tir(
                     "artifacts-manifest.json",
                     json.dumps(artifacts_manifest, indent=2, sort_keys=True) + "\n",
                 )
-                ndjson = "".join(json.dumps(n, sort_keys=True) + "\n" for n in nodes)
-                zf.writestr("nodes.ndjson", ndjson)
+                with zf.open("nodes.ndjson", "w") as member:
+                    for n in nodes:
+                        member.write(json.dumps(n, sort_keys=True).encode("utf-8"))
+                        member.write(b"\n")
                 if mode == "fat":
                     for h, data in artifact_bytes.items():
                         shard = h[:2]

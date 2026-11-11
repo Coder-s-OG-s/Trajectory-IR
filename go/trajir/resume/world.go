@@ -90,32 +90,22 @@ func CheckWorld(log *nodelog.NodeLog, trajectoryID, tenantID string, stepN int, 
 }
 
 func sealedWorldSnapshot(log *nodelog.NodeLog, trajectoryID, tenantID string, stepN int) (map[string]string, bool, error) {
-	rows, err := log.ListNodes(trajectoryID, tenantID)
+	payload, found, err := log.GetKindPayload(trajectoryID, tenantID, stepN, "DECISION")
+	if err != nil || !found {
+		return nil, found, err
+	}
+	if payload == nil {
+		return nil, true, nil
+	}
+	raw, exists := payload["world_snapshot"]
+	if !exists || raw == nil {
+		return nil, true, nil
+	}
+	snap, err := snapshotFromAny(raw)
 	if err != nil {
-		return nil, false, err
+		return nil, true, err
 	}
-	for _, row := range rows {
-		if row["kind"] != "DECISION" {
-			continue
-		}
-		if row["step_n"] != stepN {
-			continue
-		}
-		payload, _ := row["payload"].(map[string]any)
-		if payload == nil {
-			return nil, true, nil
-		}
-		raw, exists := payload["world_snapshot"]
-		if !exists || raw == nil {
-			return nil, true, nil
-		}
-		snap, err := snapshotFromAny(raw)
-		if err != nil {
-			return nil, true, err
-		}
-		return snap, true, nil
-	}
-	return nil, false, nil
+	return snap, true, nil
 }
 
 func snapshotFromAny(v any) (map[string]string, error) {

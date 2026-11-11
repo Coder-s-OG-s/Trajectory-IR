@@ -254,6 +254,140 @@ func TestClaimToolCallUniqueConstraintRaceLostReturnsFalse(t *testing.T) {
 	}
 }
 
+func TestListNodesPage(t *testing.T) {
+	nl := openTemp(t)
+	step := 1
+	for seq := 0; seq < 5; seq++ {
+		if _, err := nl.Append("THOUGHT", &step, map[string]any{"i": seq}, "t1", "demo", seq); err != nil {
+			t.Fatal(err)
+		}
+	}
+	page, err := nl.ListNodesPage("t1", "demo", 2, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page) != 2 || page[0]["seq"] != 1 || page[1]["seq"] != 2 {
+		t.Fatalf("page=%v", page)
+	}
+	empty, err := nl.ListNodesPage("t1", "demo", 2, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(empty) != 0 {
+		t.Fatalf("empty=%v", empty)
+	}
+	none, err := nl.ListNodesPage("t1", "demo", 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(none) != 0 {
+		t.Fatalf("none=%v", none)
+	}
+	if _, err := nl.ListNodesPage("t1", "demo", -1, 0); err == nil {
+		t.Fatal("expected error on negative limit")
+	}
+	if _, err := nl.ListNodesPage("t1", "demo", 1, -1); err == nil {
+		t.Fatal("expected error on negative offset")
+	}
+	allRows, err := nl.ListNodes("t1", "demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(allRows) != 5 {
+		t.Fatalf("all=%d", len(allRows))
+	}
+}
+
+func TestHasTrajectory(t *testing.T) {
+	nl := openTemp(t)
+	ok, err := nl.HasTrajectory("t1", "demo")
+	if err != nil || ok {
+		t.Fatalf("ok=%v err=%v", ok, err)
+	}
+	step := 1
+	if _, err := nl.Append("THOUGHT", &step, map[string]any{"i": 1}, "t1", "demo", 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := nl.Append("THOUGHT", &step, map[string]any{"i": 2}, "t1", "other", 1); err != nil {
+		t.Fatal(err)
+	}
+	ok, err = nl.HasTrajectory("t1", "demo")
+	if err != nil || !ok {
+		t.Fatalf("demo ok=%v err=%v", ok, err)
+	}
+	ok, err = nl.HasTrajectory("t1", "missing")
+	if err != nil || ok {
+		t.Fatalf("missing ok=%v err=%v", ok, err)
+	}
+	if _, err := nl.HasTrajectory("t1", ""); err == nil {
+		t.Fatal("expected error on empty tenant")
+	}
+}
+
+func TestGetKindPayloadReadsLowestSeq(t *testing.T) {
+	nl := openTemp(t)
+	step := 1
+	for seq := 0; seq < 4; seq++ {
+		if _, err := nl.Append("THOUGHT", &step, map[string]any{"i": seq}, "t1", "demo", seq); err != nil {
+			t.Fatal(err)
+		}
+	}
+	decisionStep := 2
+	if _, err := nl.Append("DECISION", &decisionStep, map[string]any{
+		"plan": map[string]any{"n": 9}, "world_snapshot": map[string]any{"k": "later"},
+	}, "t1", "demo", 4); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := nl.Append("DECISION", &decisionStep, map[string]any{
+		"plan": map[string]any{"n": 1}, "world_snapshot": map[string]any{"k": "v"},
+	}, "t1", "demo", 1); err != nil {
+		t.Fatal(err)
+	}
+	got, found, err := nl.GetKindPayload("t1", "demo", 2, "DECISION")
+	if err != nil || !found {
+		t.Fatalf("found=%v err=%v", found, err)
+	}
+	snap, _ := got["world_snapshot"].(map[string]any)
+	if snap["k"] != "v" {
+		t.Fatalf("payload=%v", got)
+	}
+	_, found, err = nl.GetKindPayload("t1", "demo", 1, "DECISION")
+	if err != nil || found {
+		t.Fatalf("found=%v err=%v", found, err)
+	}
+}
+
+func TestCountByKind(t *testing.T) {
+	nl := openTemp(t)
+	step := 1
+	if _, err := nl.Append("THOUGHT", &step, map[string]any{"i": 1}, "t1", "demo", 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := nl.Append("THOUGHT", &step, map[string]any{"i": 2}, "t1", "demo", 1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := nl.Append("DECISION", &step, map[string]any{"plan": "a"}, "t1", "demo", 2); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := nl.Append("DECISION", &step, map[string]any{"plan": "b"}, "t1", "other", 3); err != nil {
+		t.Fatal(err)
+	}
+	counts, err := nl.CountByKind("t1", "demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if counts["THOUGHT"] != 2 || counts["DECISION"] != 1 || len(counts) != 2 {
+		t.Fatalf("counts=%v", counts)
+	}
+	empty, err := nl.CountByKind("missing", "demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(empty) != 0 {
+		t.Fatalf("empty=%v", empty)
+	}
+}
+
 func TestListNodesTenantFilter(t *testing.T) {
 	nl := openTemp(t)
 	step := 1

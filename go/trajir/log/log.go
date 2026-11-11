@@ -333,12 +333,110 @@ func (l *NodeLog) Count(nodeID string) (int, error) {
 	return n, err
 }
 
+// HasTrajectory reports whether this tenant has any node on the trajectory.
+func (l *NodeLog) HasTrajectory(trajectoryID, tenantID string) (bool, error) {
+	if tenantID == "" {
+		return false, fmt.Errorf("tenantID must be a non-empty string")
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	var one int
+	err := l.db.QueryRow(
+		`SELECT 1 FROM nodes WHERE trajectory_id = ? AND tenant_id = ? LIMIT 1`,
+		trajectoryID, tenantID,
+	).Scan(&one)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// GetKindPayload returns the payload of the lowest-seq node of kind at stepN.
+// found is false when that step has no such node.
+func (l *NodeLog) GetKindPayload(trajectoryID, tenantID string, stepN int, kind string) (map[string]any, bool, error) {
+	if tenantID == "" {
+		return nil, false, fmt.Errorf("tenantID must be a non-empty string")
+	}
+	if kind == "" {
+		return nil, false, fmt.Errorf("kind must be a non-empty string")
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	var payloadJSON string
+	err := l.db.QueryRow(
+		`SELECT payload_json FROM nodes
+		 WHERE trajectory_id = ? AND tenant_id = ? AND step_n = ? AND kind = ?
+		 ORDER BY seq LIMIT 1`,
+		trajectoryID, tenantID, stepN, kind,
+	).Scan(&payloadJSON)
+	if err == sql.ErrNoRows {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	payload, err := nodes.DecodePayloadJSON(payloadJSON)
+	if err != nil {
+		return nil, false, err
+	}
+	return payload, true, nil
+}
+
+// CountByKind returns how many nodes of each kind this tenant has on the trajectory.
+func (l *NodeLog) CountByKind(trajectoryID, tenantID string) (map[string]int, error) {
+	if tenantID == "" {
+		return nil, fmt.Errorf("tenantID must be a non-empty string")
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	rows, err := l.db.Query(
+		`SELECT kind, COUNT(*) FROM nodes WHERE trajectory_id = ? AND tenant_id = ? GROUP BY kind`,
+		trajectoryID, tenantID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := map[string]int{}
+	for rows.Next() {
+		var kind string
+		var n int
+		if err := rows.Scan(&kind, &n); err != nil {
+			return nil, err
+		}
+		out[kind] = n
+	}
+	return out, rows.Err()
+}
+
 // ListNodes returns nodes for a trajectory scoped to tenantID. tenantID is
 // required so this method always enforces tenant isolation at the read path.
 // Callers that genuinely need rows across tenants (e.g. tir.Export's own
 // mixed-tenant check) must use ListNodesAllTenants explicitly instead.
 func (l *NodeLog) ListNodes(trajectoryID, tenantID string) ([]map[string]any, error) {
-	return l.listNodes(trajectoryID, &tenantID)
+	return l.listNodes(trajectoryID, &tenantID, nil, 0)
+}
+
+// ListNodesPage returns one page of ListNodes. limit and offset follow the
+// same step-then-seq order. limit 0 is an empty page.
+func (l *NodeLog) ListNodesPage(trajectoryID, tenantID string, limit, offset int) ([]map[string]any, error) {
+	if tenantID == "" {
+		return nil, fmt.Errorf("tenantID must be a non-empty string")
+	}
+	if limit < 0 {
+		return nil, fmt.Errorf("limit must be a non-negative integer")
+	}
+	if offset < 0 {
+		return nil, fmt.Errorf("offset must be a non-negative integer")
+	}
+	return l.listNodes(trajectoryID, &tenantID, &limit, offset)
 }
 
 // ListNodesAllTenants returns nodes for a trajectory across all tenants.
@@ -346,10 +444,10 @@ func (l *NodeLog) ListNodes(trajectoryID, tenantID string) ([]map[string]any, er
 // performs its own tenant-scoping check on the result, such as tir.Export
 // detecting a trajectory with mixed tenant_id values.
 func (l *NodeLog) ListNodesAllTenants(trajectoryID string) ([]map[string]any, error) {
-	return l.listNodes(trajectoryID, nil)
+	return l.listNodes(trajectoryID, nil, nil, 0)
 }
 
-func (l *NodeLog) listNodes(trajectoryID string, tenantID *string) ([]map[string]any, error) {
+func (l *NodeLog) listNodes(trajectoryID string, tenantID *string, limit *int, offset int) ([]map[string]any, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -361,6 +459,13 @@ func (l *NodeLog) listNodes(trajectoryID string, tenantID *string) ([]map[string
 		args = append(args, *tenantID)
 	}
 	q += ` ORDER BY COALESCE(step_n, -1), seq`
+	if limit != nil {
+		q += ` LIMIT ? OFFSET ?`
+		args = append(args, *limit, offset)
+	} else if offset > 0 {
+		q += ` LIMIT -1 OFFSET ?`
+		args = append(args, offset)
+	}
 
 	rows, err := l.db.Query(q, args...)
 	if err != nil {

@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `list_nodes` takes `limit` and `offset`. Go `ListNodesPage` does the same.
+  Export writes `nodes.ndjson` one line at a time. Projection remembers
+  `rfc8785_bytes` for a sha256 node id. Resume checks that a trajectory
+  has a row, world snapshot reads that step's `DECISION`, and MCP status
+  counts kinds in SQL (#517).
+
 - Go `durable.Step` reads the memo back after `Save` and returns that
   value, so a caller that lost the insert does not keep a different
   object. An integer that does not fit in a float64 keeps its digits.
