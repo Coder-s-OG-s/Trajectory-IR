@@ -17,7 +17,6 @@ package tir
 
 import (
 	"archive/zip"
-	"bytes"
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
@@ -635,18 +634,21 @@ func Export(nodeLog *nodelog.NodeLog, trajectoryID, dest string, opts ExportOpti
 		return "", err
 	}
 
-	var ndjson bytes.Buffer
+	member, err := zw.Create("nodes.ndjson")
+	if err != nil {
+		_ = zw.Close()
+		return "", err
+	}
 	for _, n := range nodeList {
 		line, err := marshalLine(n)
 		if err != nil {
 			_ = zw.Close()
 			return "", err
 		}
-		ndjson.Write(line)
-	}
-	if err := writeFile("nodes.ndjson", ndjson.Bytes()); err != nil {
-		_ = zw.Close()
-		return "", err
+		if _, err := member.Write(line); err != nil {
+			_ = zw.Close()
+			return "", err
+		}
 	}
 
 	if mode == ModeFat {

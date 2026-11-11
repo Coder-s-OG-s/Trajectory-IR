@@ -18,6 +18,8 @@ Optional file/env policy: see ``trajectory_ir.runtime.policy``.
 
 from __future__ import annotations
 
+import threading
+from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Any
 
@@ -27,6 +29,18 @@ except ImportError:
     rfc8785 = None  # type: ignore[assignment]
 
 SIZE_METRIC = "rfc8785_bytes"
+_SIZE_CACHE_MAX = 100_000
+_size_cache: OrderedDict[str, int] = OrderedDict()
+_size_cache_lock = threading.Lock()
+
+
+def _sha256_node_id(node_id: object) -> str | None:
+    if not isinstance(node_id, str) or len(node_id) != 64:
+        return None
+    for ch in node_id:
+        if ch not in "0123456789abcdef":
+            return None
+    return node_id
 
 
 class BudgetImpossible(Exception):
@@ -60,9 +74,23 @@ def node_size_units(node: dict[str, Any]) -> int:
         raise TypeError("payload must be an object for size measurement")
     if rfc8785 is None:
         raise RuntimeError("rfc8785 is required for size measurement but is not installed")
+    cached_id = _sha256_node_id(node.get("id"))
+    if cached_id is not None:
+        with _size_cache_lock:
+            hit = _size_cache.get(cached_id)
+            if hit is not None:
+                _size_cache.move_to_end(cached_id)
+                return hit
     # RFC 8785 JCS — same stack as runtime.nodes.payload_hash (byte-stable vs Go jcs).
     canon = rfc8785.dumps({"kind": kind, "payload": payload})
-    return len(canon)
+    size = len(canon)
+    if cached_id is not None:
+        with _size_cache_lock:
+            _size_cache[cached_id] = size
+            _size_cache.move_to_end(cached_id)
+            while len(_size_cache) > _SIZE_CACHE_MAX:
+                _size_cache.popitem(last=False)
+    return size
 
 
 def _sort_key(node: dict[str, Any]) -> tuple[int, int, str]:
