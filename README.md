@@ -268,6 +268,8 @@ Governance: [GOVERNANCE.md](GOVERNANCE.md) · Maintainers: [MAINTAINERS.md](MAIN
 
 ### Good first directions
 
+Start with an open [`good first issue`](https://github.com/Coder-s-OG-s/Trajectory-IR/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) and comment that you are taking it. Larger project ideas are in [docs/MENTORSHIP.md](docs/MENTORSHIP.md).
+
 - Improve docs and quickstarts for newcomers
 - Add or harden conformance / unit tests
 - Fix sandbox, redaction, or packaging edge cases
