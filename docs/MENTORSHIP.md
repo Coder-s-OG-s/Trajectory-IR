@@ -30,18 +30,7 @@ Python already has a Restate adapter. Add the Go one behind the same
 - Tracking issue: to be filed
 - Rule: adapter only. No custom retry, lease or crash logic.
 
-### 2. Console seal timeline and integrity view
-
-Operators check seals from logs or by unpacking `.tir` files today. Build the
-Seals view described in
-[#395](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/395), part of the
-console epic [#391](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/391).
-
-- Outcome: timeline of seal events per trajectory, failed verify shown with its reason
-- Skills: Go, frontend basics, reading an event spec ([CONSOLE_EVENTS.md](CONSOLE_EVENTS.md))
-- Tracking issue: #395
-
-### 3. Cross-runtime `.tir` interop demo
+### 2. Cross-runtime `.tir` interop demo
 
 The roadmap lists a documented path for producing a `.tir` in one runtime and
 consuming it in another. Build that as a runnable example: export from a Go
