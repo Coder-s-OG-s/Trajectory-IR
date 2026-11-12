@@ -8,9 +8,11 @@ Trajectory IR is a **semantic layer** for agent runs: content addressed nodes, e
 
 ## Prerequisites
 
-- **Go 1.26.11** (primary for Phase 1B)
+- **Go 1.26.0+** language level with the **1.26.11 toolchain** (primary for Phase 1B; `go/go.mod` declares `go 1.26.0` + `toolchain go1.26.11`)
 - Git
 - Optional: Python **3.11+** (reference port, parity, DBOS local profile)
+
+**Go toolchain troubleshooting:** run `go env GOTOOLCHAIN` before the first build. With `GOTOOLCHAIN` pinned to your local (older) version, the 1.26.11 toolchain from `go/go.mod` is never fetched and `go test ./...` can fail with a confusing error such as `go: no such tool "vet"`. Set `GOTOOLCHAIN=auto` or install Go 1.26.11 directly. The first run downloads the toolchain once; later runs reuse it.
 
 ---
 

@@ -5,8 +5,22 @@ First success path without Python. Matches APIs under `go/trajir` on `main`
 
 ## Prerequisites
 
-- Go **1.26.11** (see `go/go.mod`)
+- Go **1.26.0** minimum (language level, `go 1.26.0` in `go/go.mod`); the module pins `toolchain go1.26.11`
 - Git
+
+### Go toolchain troubleshooting
+
+If `go test ./...` fails before compiling anything with a confusing error such as
+`go: no such tool "vet"`, check your toolchain setting:
+
+```bash
+go env GOTOOLCHAIN
+```
+
+With `GOTOOLCHAIN` pinned to your local version (e.g. `local` or `go1.26.0`),
+the `toolchain go1.26.11` directive in `go/go.mod` is never applied. Either set
+`GOTOOLCHAIN=auto` or install Go 1.26.11. The first command run with `auto`
+downloads the 1.26.11 toolchain once; later runs reuse the cached copy.
 
 Optional later: Docker Postgres/MinIO/Temporal for live drivers
 ([docs/LIVE_INTEGRATION_DOCKER.md](../docs/LIVE_INTEGRATION_DOCKER.md)).
