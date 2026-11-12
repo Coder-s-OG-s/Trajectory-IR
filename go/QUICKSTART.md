@@ -76,11 +76,31 @@ func main() {
 }
 ```
 
-Run from `go/`:
+Run from `go/`. The snippet is a `package main`, so it runs as its own
+package inside the module: save it as `qs/main.go` (keep the `package main`
+line) and run that package.
 
 ```bash
-# save as /tmp/qs.go or a small main under examples, then:
-go test ./trajir/client/... -count=1
+# from go/, after saving the snippet above as go/qs/main.go
+go run ./qs
+```
+
+To run the same snippet from a module of your own, see
+[Use it in your own project](#use-it-in-your-own-project) below.
+
+### Use it in your own project
+
+`go get` alone is not enough: it leaves `go.sum` without entries for this
+module's dependencies, and `go run .` fails with `missing go.sum entry`
+(sqlite, jcs, pgx) until you run `go mod tidy`.
+
+```bash
+mkdir trajir-qs && cd trajir-qs
+go mod init example.com/trajir-qs
+go get github.com/Coder-s-OG-s/Trajectory-IR/go@latest
+# save the snippet from section 2 as main.go in this directory
+go mod tidy
+go run .
 ```
 
 ## 3. Demos
