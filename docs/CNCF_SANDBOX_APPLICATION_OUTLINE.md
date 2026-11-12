@@ -34,22 +34,22 @@ honesty checklist. Fill drafts here before filing on
 | Cloud native fit | Agents on K8s/cloud; portable audit/export across runtimes |
 | Novel gap | Runtime-independent, effect-safe unit of “what the agent did” |
 | Non-overlap | Durable engines own crash/retry; we own semantics + portability |
-| Spec-shaped | Conformance R01–R08, dual SDK (Go primary / Python reference) |
+| Spec-shaped | Conformance R01–R11, dual SDK (Go primary / Python reference) |
 
 ---
 
-## 2. Honest readiness snapshot (as of v0.2.1 era)
+## 2. Honest readiness snapshot (as of v0.3.0, November 2026)
 
 Update this table monthly.
 
 | Area | Status | Notes |
 |------|--------|--------|
 | Apache-2.0 project license | **Ready** | `LICENSE` |
-| Public code, works | **Ready** | Go + Python, releases `v0.2.0` / `v0.2.1` |
+| Public code, works | **Ready** | Go + Python, releases through `v0.3.0` |
 | DCO on contributions | **Ready** | CI DCO job + CONTRIBUTING |
 | Code of Conduct file | **Ready** | `CODE_OF_CONDUCT.md` + README links |
 | Contributing guide | **Ready** | `CONTRIBUTING.md` |
-| Security policy | **Ready** | `SECURITY.md` (0.2.x supported versions) |
+| Security policy | **Ready** | `SECURITY.md` |
 | MAINTAINERS.md (Name / GitHub ID / **Company**) | **Ready** | `MAINTAINERS.md` |
 | GOVERNANCE.md | **Ready** | `GOVERNANCE.md` |
 | ROADMAP (public URL) | **Ready** | `docs/ROADMAP.md` |
@@ -57,10 +57,11 @@ Update this table monthly.
 | Scope / non-goals / product separation | **Ready** | `docs/SCOPE_AND_NON_GOALS.md` + roadmap |
 | Org diversity of maintainers | **Partial** | Documented; more multi-employer diversity still helps |
 | Neutral GitHub org transfer-ready | **Plan** | Onboarding requires neutral org |
-| OpenSSF Best Practices badge | **Start** | Not Sandbox-hard-required; expected for maturity |
-| Scorecard / CI harden | **In progress** | Phase CI/CD harden (#169 / #167 / #168) |
+| OpenSSF Best Practices badge | **Ready** | Passing, [project 14075](https://www.bestpractices.dev/projects/14075) |
+| Scorecard / CI harden | **Ready** | Scorecard 8.0 (Nov 2026); CodeQL, fuzzing, SBOM, release provenance (#515). Open items in #380 |
+| Dependency licenses | **Ready** | `docs/THIRD_PARTY_LICENSES.md` + CI license scan; `psycopg` LGPL exception documented |
 | Landscape listing | **No** | After acceptance typically |
-| Repo age 6+ months | **Not yet** | Created 2026-07-26; wait before apply |
+| Repo age 6+ months | **Not yet** | Created 2026-07-26; eligible from 2027-01-26 |
 | Contribution Agreement signatory | **Open** | Org/legal decision |
 
 ---
@@ -78,7 +79,7 @@ Copied and adapted from the official form “Pre-Submission Checklist.”
 - [ ] Primary repository is **≥ 6 months old** with active development
 - [x] Project is a **reusable tool/library**, not a reference architecture or company platform demo
 - [x] If splitting from a parent org/project: N/A (standalone repo)
-- [ ] Dependency licenses are on the [CNCF third-party allowlist](https://github.com/cncf/foundation/blob/main/policies-guidance/allowed-third-party-license-policy.md) (or documented plan with FOSSA/Snyk)
+- [x] Dependency licenses are on the [CNCF third-party allowlist](https://github.com/cncf/foundation/blob/main/policies-guidance/allowed-third-party-license-policy.md) (or documented plan with FOSSA/Snyk). See `docs/THIRD_PARTY_LICENSES.md`
 
 ### Strongly recommended before review
 
@@ -130,7 +131,7 @@ Fill the right column offline; paste into the GitHub form when ready.
 | **Adopters** | Optional URL; better non-empty than silent. |
 | **Maintainers file** | **Required** `.../blob/main/MAINTAINERS.md` with company column. |
 | **Security policy** | `.../blob/main/SECURITY.md` |
-| **Standard or specification?** | Yes, partially: normative IR / package semantics in `docs/MASTER_SPECIFICATION.md` (spec-v0.2-draft); Python + Go ports; conformance R01–R08. Not an ISO standard. |
+| **Standard or specification?** | Yes, partially: normative IR / package semantics in `docs/MASTER_SPECIFICATION.md` (spec-v0.2-draft); Python + Go ports; conformance R01–R11. Not an ISO standard. |
 | **Business product separation** | State honestly. If unrelated to a commercial product: *“This project is unrelated to any product or service.”* If related: describe upstream OSS vs product boundary (org, branding, governance). |
 
 ### 4.3 Cloud native context
@@ -192,7 +193,7 @@ the runtime that produced it—for audit, handoff, or another implementer.
 
 The cloud native gap is the lack of a runtime-independent unit of “what the agent
 actually did” across frameworks and engines. Trajectory IR targets that unit with
-a dual SDK (Go primary, Python reference), conformance tests R01–R08, and local
+a dual SDK (Go primary, Python reference), conformance tests R01–R11, and local
 integration paths for Postgres NodeLog and S3-compatible CAS.
 
 ---
@@ -248,18 +249,18 @@ Optional but strong:
 ### Month 1 — Eligibility and packaging
 
 - [ ] Confirm repo age ≥ 6 months  
-- [ ] Write **MAINTAINERS.md** (real employers)  
-- [ ] Write **GOVERNANCE.md** (even v0.1)  
-- [ ] Publish **docs/ROADMAP.md**  
-- [ ] Tighten **SECURITY.md** + vulnerability contact  
-- [ ] License scan dependencies vs CNCF allowlist  
-- [ ] Agree product separation paragraph  
-- [ ] Start OpenSSF Best Practices badge (do not finish in one week)  
-- [ ] Finish CI/Scorecard wave (in flight)  
+- [x] Write **MAINTAINERS.md** (real employers)  
+- [x] Write **GOVERNANCE.md** (even v0.1)  
+- [x] Publish **docs/ROADMAP.md**  
+- [x] Tighten **SECURITY.md** + vulnerability contact  
+- [x] License scan dependencies vs CNCF allowlist  
+- [x] Agree product separation paragraph  
+- [x] Start OpenSSF Best Practices badge (do not finish in one week)  
+- [x] Finish CI/Scorecard wave  
 
 ### Month 2 — Narrative and TAG touch
 
-- [ ] Freeze one-line + 200-word description  
+- [x] Freeze one-line + 200-word description  
 - [ ] Complete similar/overlap tables with maintainers  
 - [ ] Optional: present to a relevant TAG / Project Reviews voluntary GTR Day 0  
 - [ ] Collect 1–2 adopter or design-partner quotes  
