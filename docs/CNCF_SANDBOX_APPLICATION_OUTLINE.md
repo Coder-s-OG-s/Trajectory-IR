@@ -58,7 +58,7 @@ Update this table monthly.
 | Org diversity of maintainers | **Partial** | Documented; more multi-employer diversity still helps |
 | Neutral GitHub org transfer-ready | **Plan** | Onboarding requires neutral org |
 | OpenSSF Best Practices badge | **Ready** | Passing, [project 14075](https://www.bestpractices.dev/projects/14075) |
-| Scorecard / CI harden | **Ready** | Scorecard 8.0 (Nov 2026); CodeQL, fuzzing, SBOM, release provenance (#515). Open items in #380 |
+| Scorecard / CI harden | **Ready** | Scorecard 8.0 (Nov 2026); CodeQL, fuzzing, SBOM. Release provenance starts with the next release (#515); v0.3.0 artifacts are unsigned. Open items in #380 |
 | Dependency licenses | **Ready** | `docs/THIRD_PARTY_LICENSES.md` + CI license scan; `psycopg` LGPL exception documented |
 | Landscape listing | **No** | After acceptance typically |
 | Repo age 6+ months | **Not yet** | Created 2026-07-26; eligible from 2027-01-26 |
