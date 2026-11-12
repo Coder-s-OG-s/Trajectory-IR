@@ -14,7 +14,7 @@ require (
 	github.com/gowebpki/jcs v1.0.2
 	github.com/jackc/pgx/v5 v5.12.0
 	github.com/modelcontextprotocol/go-sdk v1.8.0
-	go.temporal.io/api v1.64.0
+	go.temporal.io/api v1.64.2
 	go.temporal.io/sdk v1.50.0
 	modernc.org/sqlite v1.62.0
 )
