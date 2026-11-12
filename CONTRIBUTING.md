@@ -217,6 +217,10 @@ pytest conformance/ -q
 
 Use the issue forms when you can: bug report, feature, or spec question.
 
+For questions that are not a bug or a feature, use
+[Discussions](https://github.com/Coder-s-OG-s/Trajectory-IR/discussions). Community call
+agendas and notes are listed in [docs/community/](docs/community/README.md).
+
 Community issues (opened by non-maintainers) are automatically labeled with `needs triage` for review.
 
 Security issues go through private vulnerability reporting (`SECURITY.md`),
