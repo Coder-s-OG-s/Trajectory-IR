@@ -375,3 +375,46 @@ func intFromAny(v any) int {
 		return 0
 	}
 }
+
+// A relative dest whose parent directory does not exist yet must be created
+// under work_dir instead of failing with a confusing temp-file open error.
+func TestExportCreatesDestParentUnderWorkDir(t *testing.T) {
+	work := t.TempDir()
+	t.Setenv("TRAJIR_MCP_ROOT", work)
+	seedTrajectory(t, work)
+
+	ctx := context.Background()
+	server := trajirmcp.NewServer()
+	t1, t2 := mcp.NewInMemoryTransports()
+	serverSession, err := server.Connect(ctx, t1, nil)
+	if err != nil {
+		t.Fatalf("server connect: %v", err)
+	}
+	defer serverSession.Close()
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "v0.0.1"}, nil)
+	clientSession, err := client.Connect(ctx, t2, nil)
+	if err != nil {
+		t.Fatalf("client connect: %v", err)
+	}
+	defer clientSession.Close()
+
+	ex, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
+		Name: "trajectory_export_tir",
+		Arguments: map[string]any{
+			"work_dir":      work,
+			"tenant_id":     "demo",
+			"trajectory_id": "mcp-traj",
+			"dest":          "evidence/out/pkg.tir",
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ex.IsError {
+		t.Fatalf("export error: %+v", ex)
+	}
+	if _, err := os.Stat(filepath.Join(work, "evidence", "out", "pkg.tir")); err != nil {
+		t.Fatalf("exported file missing: %v", err)
+	}
+}
