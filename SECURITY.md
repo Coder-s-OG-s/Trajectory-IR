@@ -11,12 +11,13 @@ sync when this policy changes.
 
 ## 1. Supported Versions
 
-Trajectory IR ships **0.2.x** (Phase 1B Go primary + Phase 1C harden). Older
-0.1.x tags remain available but are not the active development line.
+Trajectory IR ships **0.3.x** (Go primary, Python reference). Older 0.2.x
+and 0.1.x tags remain available but are not the active development line.
 
 | Version | Supported          | Notes |
 | ------- | ------------------ | ----- |
-| v0.2.x  | :white_check_mark: | Current (Go primary, Python reference) |
+| v0.3.x  | :white_check_mark: | Current (Go primary, Python reference) |
+| v0.2.x  | :warning:          | Security fixes only if maintainers agree; prefer upgrade |
 | v0.1.x  | :warning:          | Security fixes only if maintainers agree; prefer upgrade |
 | < v0.1  | :x:                | Historical prototypes |
 

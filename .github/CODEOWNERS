@@ -3,10 +3,10 @@
 # Adjust handles if the maintainer set changes.
 
 # Workflows and automation
-.github/ @Siddhartha-singh01
+.github/ @Siddhartha-singh01 @Ayush-Patel-56 @jakharmonika364
 
 # Release and security-sensitive policy docs
-docs/RELEASE.md @Siddhartha-singh01
-docs/maintainer-branch-protection.md @Siddhartha-singh01
-docs/CI_HARDENING.md @Siddhartha-singh01
-SECURITY.md @Siddhartha-singh01
+docs/RELEASE.md @Siddhartha-singh01 @Ayush-Patel-56 @jakharmonika364
+docs/maintainer-branch-protection.md @Siddhartha-singh01 @Ayush-Patel-56 @jakharmonika364
+docs/CI_HARDENING.md @Siddhartha-singh01 @Ayush-Patel-56 @jakharmonika364
+SECURITY.md @Siddhartha-singh01 @Ayush-Patel-56 @jakharmonika364
