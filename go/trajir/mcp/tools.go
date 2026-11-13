@@ -90,7 +90,7 @@ type exportIn struct {
 	WorkDir      string `json:"work_dir" jsonschema:"directory under workspace root containing nodes.sqlite"`
 	TenantID     string `json:"tenant_id" jsonschema:"tenant id"`
 	TrajectoryID string `json:"trajectory_id" jsonschema:"trajectory id"`
-	Dest         string `json:"dest" jsonschema:"output .tir path, relative to work_dir (e.g. \"out/pkg.tir\" writes work_dir/out/pkg.tir); an absolute path under the workspace root is also accepted; missing parent directories inside work_dir are created"`
+	Dest         string `json:"dest" jsonschema:"output .tir path, relative to work_dir (e.g. \"out/pkg.tir\" writes work_dir/out/pkg.tir); missing parent directories inside work_dir are created"`
 	Mode         string `json:"mode,omitempty" jsonschema:"package mode: thin (default) or fat"`
 }
 
@@ -138,7 +138,11 @@ func toolExportTIR(ctx context.Context, _ *mcp.CallToolRequest, in exportIn) (*m
 			prefix := filepath.ToSlash(rel) + "/"
 			clean := filepath.ToSlash(filepath.Clean(in.Dest))
 			if strings.HasPrefix(clean+"/", prefix) {
-				return nil, zero, fmt.Errorf("mcp: dest %q already starts with work_dir; pass dest relative to work_dir, e.g. %q", in.Dest, strings.TrimPrefix(clean, prefix))
+				hint := strings.TrimSuffix(strings.TrimPrefix(clean+"/", prefix), "/")
+				if hint == "" {
+					hint = "out.tir"
+				}
+				return nil, zero, fmt.Errorf("mcp: dest %q already starts with work_dir; pass dest relative to work_dir, e.g. %q", in.Dest, hint)
 			}
 		}
 	}
