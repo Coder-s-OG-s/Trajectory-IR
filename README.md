@@ -276,6 +276,14 @@ Governance: [GOVERNANCE.md](GOVERNANCE.md) · Maintainers: [MAINTAINERS.md](MAIN
 
 ---
 
+## Community
+
+- **Questions and ideas:** [GitHub Discussions](https://github.com/Coder-s-OG-s/Trajectory-IR/discussions)
+- **Bugs and feature requests:** [issues](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/new/choose)
+- **Community calls:** open to everyone. Agenda and date are posted in Discussions before each call, see [meeting 1](https://github.com/Coder-s-OG-s/Trajectory-IR/discussions/257). Notes from past calls are under [docs/community/](docs/community/README.md).
+
+---
+
 ## Security
 
 Please report vulnerabilities privately per **[SECURITY.md](SECURITY.md)**.  

@@ -26,4 +26,5 @@ participation. Employer diversity is encouraged for long-term project health.
 ## Contact
 
 - Security: see [SECURITY.md](SECURITY.md)
-- General: open a GitHub issue or discussion on this repository
+- General: [GitHub Discussions](https://github.com/Coder-s-OG-s/Trajectory-IR/discussions) or an issue on this repository
+- Community calls: see [docs/community/](docs/community/README.md)
