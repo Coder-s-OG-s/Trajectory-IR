@@ -87,42 +87,70 @@ class NodeLog:
             payload=payload,
         )
         with self._lock:
-            self._conn.execute(
-                "INSERT OR IGNORE INTO nodes "
-                "(id, trajectory_id, tenant_id, step_n, seq, kind, payload_json, ts) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (
-                    node.id,
-                    node.trajectory_id,
-                    node.tenant_id,
-                    node.step_n,
-                    node.seq,
-                    node.kind,
-                    json.dumps(node.payload),
-                    node.ts,
-                ),
-            )
-            # INSERT OR IGNORE also swallows unique-slot conflicts. Detect a
-            # different payload occupying this logical slot and fail closed.
-            cur = self._conn.execute(
-                "SELECT id FROM nodes WHERE tenant_id = ? AND trajectory_id = ? "
-                "AND IFNULL(step_n, -1) = IFNULL(?, -1) AND seq = ? AND kind = ?",
-                (tenant_id, trajectory_id, step_n, seq, kind),
-            )
-            row = cur.fetchone()
-            if row is None or row[0] != node.id:
+            try:
+                self._insert_open(node)
+                self._conn.commit()
+            except Exception:
                 self._conn.rollback()
-                if row is not None:
-                    raise SlotConflictError(
-                        f"slot conflict trajectory={trajectory_id!r} step={step_n} "
-                        f"seq={seq} kind={kind!r}: different payload already stored"
-                    )
-                raise NodeNotStoredError(
-                    f"node not stored trajectory={trajectory_id!r} step={step_n} "
-                    f"seq={seq} kind={kind!r}"
-                )
-            self._conn.commit()
+                raise
         return node
+
+    def append_many(
+        self,
+        rows: list[tuple[str, int | None, dict, str, str, int]],
+    ) -> None:
+        """Store every row in one transaction. A failure rolls the batch back."""
+        with self._lock:
+            try:
+                for kind, step_n, payload, trajectory_id, tenant_id, seq in rows:
+                    node = Node(
+                        kind=kind,
+                        trajectory_id=trajectory_id,
+                        tenant_id=tenant_id,
+                        step_n=step_n,
+                        seq=seq,
+                        payload=payload,
+                    )
+                    self._insert_open(node)
+                self._conn.commit()
+            except Exception:
+                self._conn.rollback()
+                raise
+
+    def _insert_open(self, node: Node) -> None:
+        self._conn.execute(
+            "INSERT OR IGNORE INTO nodes "
+            "(id, trajectory_id, tenant_id, step_n, seq, kind, payload_json, ts) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                node.id,
+                node.trajectory_id,
+                node.tenant_id,
+                node.step_n,
+                node.seq,
+                node.kind,
+                json.dumps(node.payload),
+                node.ts,
+            ),
+        )
+        # INSERT OR IGNORE also swallows unique-slot conflicts. Detect a
+        # different payload occupying this logical slot and fail closed.
+        cur = self._conn.execute(
+            "SELECT id FROM nodes WHERE tenant_id = ? AND trajectory_id = ? "
+            "AND IFNULL(step_n, -1) = IFNULL(?, -1) AND seq = ? AND kind = ?",
+            (node.tenant_id, node.trajectory_id, node.step_n, node.seq, node.kind),
+        )
+        row = cur.fetchone()
+        if row is None or row[0] != node.id:
+            if row is not None:
+                raise SlotConflictError(
+                    f"slot conflict trajectory={node.trajectory_id!r} step={node.step_n} "
+                    f"seq={node.seq} kind={node.kind!r}: different payload already stored"
+                )
+            raise NodeNotStoredError(
+                f"node not stored trajectory={node.trajectory_id!r} step={node.step_n} "
+                f"seq={node.seq} kind={node.kind!r}"
+            )
 
     def claim_tool_call(
         self,

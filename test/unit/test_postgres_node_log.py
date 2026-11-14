@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 import threading
@@ -41,6 +42,17 @@ class _FakeStore:
     def __init__(self) -> None:
         self.rows: dict[str, dict[str, Any]] = {}
         self.committed = True
+        self._saved: dict[str, dict[str, Any]] = {}
+        self._dirty = False
+
+    def commit(self) -> None:
+        self._saved = copy.deepcopy(self.rows)
+        self._dirty = False
+
+    def rollback(self) -> None:
+        if self._dirty:
+            self.rows = copy.deepcopy(self._saved)
+            self._dirty = False
 
     def execute(self, sql: str, params: tuple | list) -> list[tuple]:
         s = " ".join(sql.split()).lower()
@@ -58,6 +70,7 @@ class _FakeStore:
                 ts,
             ) = params
             if node_id not in self.rows:
+                self._dirty = True
                 self.rows[node_id] = {
                     "id": node_id,
                     "trajectory_id": trajectory_id,
@@ -90,6 +103,7 @@ class _FakeStore:
                     and row["kind"] == kind
                 ):
                     raise RuntimeError("unique_violation")
+            self._dirty = True
             self.rows[node_id] = {
                 "id": node_id,
                 "trajectory_id": trajectory_id,
@@ -197,10 +211,10 @@ class FakePgConnection:
         return _FakeCursor(self._store)
 
     def commit(self) -> None:
-        return None
+        self._store.commit()
 
     def rollback(self) -> None:
-        return None
+        self._store.rollback()
 
     def close(self) -> None:
         return None
@@ -303,6 +317,20 @@ def test_unique_violation_without_owner_is_not_success():
         node_log.append("DECISION", 1, {"plan": "x"}, "t1", "demo", 1)
     assert conn.commits == 0
     assert conn.rollbacks == 1
+
+
+def test_append_many_rolls_back(log: PostgresNodeLog):
+    log.append("DECISION", 1, {"plan": "old"}, "t1", "demo", 1)
+    log.append("THOUGHT", 1, {"text": "keep"}, "t1", "demo", 9)
+    with pytest.raises(SlotConflictError):
+        log.append_many(
+            [
+                ("PROJECT_CONTEXT", 1, {"goal": "new"}, "t1", "demo", 0),
+                ("DECISION", 1, {"plan": "other"}, "t1", "demo", 1),
+            ]
+        )
+    kinds = [n["kind"] for n in log.list_nodes("t1", tenant_id="demo")]
+    assert kinds == ["DECISION", "THOUGHT"]
 
 
 def test_slot_conflict(log: PostgresNodeLog):

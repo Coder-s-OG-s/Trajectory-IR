@@ -144,44 +144,7 @@ class PostgresNodeLog:
         )
         with self._lock:
             try:
-                with self._conn.cursor() as cur:
-                    cur.execute(
-                        """
-                        INSERT INTO nodes
-                        (id, trajectory_id, tenant_id, step_n, seq, kind, payload_json, ts)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                        ON CONFLICT (id) DO NOTHING
-                        """,
-                        (
-                            node.id,
-                            node.trajectory_id,
-                            node.tenant_id,
-                            node.step_n,
-                            node.seq,
-                            node.kind,
-                            json.dumps(node.payload),
-                            node.ts,
-                        ),
-                    )
-                    owner = self._slot_owner_id(
-                        cur,
-                        tenant_id=tenant_id,
-                        trajectory_id=trajectory_id,
-                        step_n=step_n,
-                        seq=seq,
-                        kind=kind,
-                    )
-                    if owner != node.id:
-                        self._conn.rollback()
-                        if owner is not None:
-                            raise SlotConflictError(
-                                f"slot conflict trajectory={trajectory_id!r} step={step_n} "
-                                f"seq={seq} kind={kind!r}: different payload already stored"
-                            )
-                        raise NodeNotStoredError(
-                            f"node not stored trajectory={trajectory_id!r} step={step_n} "
-                            f"seq={seq} kind={kind!r}"
-                        )
+                self._insert_open(node)
                 self._conn.commit()
             except UniqueViolation:
                 self._conn.rollback()
@@ -201,7 +164,97 @@ class PostgresNodeLog:
                         f"slot conflict trajectory={trajectory_id!r} step={step_n} "
                         f"seq={seq} kind={kind!r}: different payload already stored"
                     ) from None
+            except Exception:
+                self._conn.rollback()
+                raise
         return node
+
+    def append_many(
+        self,
+        rows: list[tuple[str, int | None, dict, str, str, int]],
+    ) -> None:
+        """Store every row in one transaction. A failure rolls the batch back."""
+        from psycopg.errors import UniqueViolation
+
+        with self._lock:
+            failed: Node | None = None
+            try:
+                for kind, step_n, payload, trajectory_id, tenant_id, seq in rows:
+                    node = Node(
+                        kind=kind,
+                        trajectory_id=trajectory_id,
+                        tenant_id=tenant_id,
+                        step_n=step_n,
+                        seq=seq,
+                        payload=payload,
+                    )
+                    try:
+                        self._insert_open(node)
+                    except UniqueViolation:
+                        failed = node
+                        raise
+                self._conn.commit()
+            except UniqueViolation:
+                self._conn.rollback()
+                if failed is None:
+                    raise
+                with self._conn.cursor() as cur:
+                    owner = self._slot_owner_id(
+                        cur,
+                        tenant_id=failed.tenant_id,
+                        trajectory_id=failed.trajectory_id,
+                        step_n=failed.step_n,
+                        seq=failed.seq,
+                        kind=failed.kind,
+                    )
+                if owner is not None and owner != failed.id:
+                    raise SlotConflictError(
+                        f"slot conflict trajectory={failed.trajectory_id!r} step={failed.step_n} "
+                        f"seq={failed.seq} kind={failed.kind!r}: different payload already stored"
+                    ) from None
+                raise
+            except Exception:
+                self._conn.rollback()
+                raise
+
+    def _insert_open(self, node: Node) -> None:
+        with self._conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO nodes
+                (id, trajectory_id, tenant_id, step_n, seq, kind, payload_json, ts)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (id) DO NOTHING
+                """,
+                (
+                    node.id,
+                    node.trajectory_id,
+                    node.tenant_id,
+                    node.step_n,
+                    node.seq,
+                    node.kind,
+                    json.dumps(node.payload),
+                    node.ts,
+                ),
+            )
+            owner = self._slot_owner_id(
+                cur,
+                tenant_id=node.tenant_id,
+                trajectory_id=node.trajectory_id,
+                step_n=node.step_n,
+                seq=node.seq,
+                kind=node.kind,
+            )
+            if owner != node.id:
+                if owner is not None:
+                    raise SlotConflictError(
+                        f"slot conflict trajectory={node.trajectory_id!r} step={node.step_n} "
+                        f"seq={node.seq} kind={node.kind!r}: different payload already stored"
+                    )
+                raise NodeNotStoredError(
+                    f"node not stored trajectory={node.trajectory_id!r} step={node.step_n} "
+                    f"seq={node.seq} kind={node.kind!r}"
+                )
 
     def claim_tool_call(
         self,
