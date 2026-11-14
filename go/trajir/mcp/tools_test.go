@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/client"
@@ -373,5 +374,139 @@ func intFromAny(v any) int {
 		return int(n)
 	default:
 		return 0
+	}
+}
+
+// A relative dest whose parent directory does not exist yet must be created
+// under work_dir instead of failing with a confusing temp-file open error.
+func TestExportCreatesDestParentUnderWorkDir(t *testing.T) {
+	work := t.TempDir()
+	t.Setenv("TRAJIR_MCP_ROOT", work)
+	seedTrajectory(t, work)
+
+	ctx := context.Background()
+	server := trajirmcp.NewServer()
+	t1, t2 := mcp.NewInMemoryTransports()
+	serverSession, err := server.Connect(ctx, t1, nil)
+	if err != nil {
+		t.Fatalf("server connect: %v", err)
+	}
+	defer serverSession.Close()
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "v0.0.1"}, nil)
+	clientSession, err := client.Connect(ctx, t2, nil)
+	if err != nil {
+		t.Fatalf("client connect: %v", err)
+	}
+	defer clientSession.Close()
+
+	ex, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
+		Name: "trajectory_export_tir",
+		Arguments: map[string]any{
+			"work_dir":      work,
+			"tenant_id":     "demo",
+			"trajectory_id": "mcp-traj",
+			"dest":          "evidence/out/pkg.tir",
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ex.IsError {
+		t.Fatalf("export error: %+v", ex)
+	}
+	if _, err := os.Stat(filepath.Join(work, "evidence", "out", "pkg.tir")); err != nil {
+		t.Fatalf("exported file missing: %v", err)
+	}
+}
+
+// exportViaMCP calls trajectory_export_tir over an in-memory MCP session.
+func exportViaMCP(t *testing.T, args map[string]any) *mcp.CallToolResult {
+	t.Helper()
+	ctx := context.Background()
+	server := trajirmcp.NewServer()
+	t1, t2 := mcp.NewInMemoryTransports()
+	serverSession, err := server.Connect(ctx, t1, nil)
+	if err != nil {
+		t.Fatalf("server connect: %v", err)
+	}
+	t.Cleanup(func() { serverSession.Close() })
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "v0.0.1"}, nil)
+	clientSession, err := client.Connect(ctx, t2, nil)
+	if err != nil {
+		t.Fatalf("client connect: %v", err)
+	}
+	t.Cleanup(func() { clientSession.Close() })
+
+	res, err := clientSession.CallTool(ctx, &mcp.CallToolParams{Name: "trajectory_export_tir", Arguments: args})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return res
+}
+
+// When work_dir is a real subdirectory, a dest that repeats it must be
+// rejected with a hint that names the path to pass instead.
+func TestExportRejectsDestStartingWithWorkDir(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("TRAJIR_MCP_ROOT", root)
+	work := filepath.Join(root, "sub", "agent")
+	if err := os.MkdirAll(work, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	seedTrajectory(t, work)
+
+	cases := []struct {
+		dest string
+		hint string
+	}{
+		{dest: "sub/agent/out/pkg.tir", hint: `"out/pkg.tir"`},
+		// Exact match: the hint must fall back to a file name, not repeat the rejected input.
+		{dest: "sub/agent", hint: `"out.tir"`},
+	}
+	for _, tc := range cases {
+		res := exportViaMCP(t, map[string]any{
+			"work_dir":      "sub/agent",
+			"tenant_id":     "demo",
+			"trajectory_id": "mcp-traj",
+			"dest":          tc.dest,
+		})
+		if !res.IsError {
+			t.Fatalf("dest %q: want error, got success", tc.dest)
+		}
+		msg := ""
+		if len(res.Content) > 0 {
+			if text, ok := res.Content[0].(*mcp.TextContent); ok {
+				msg = text.Text
+			}
+		}
+		if !strings.Contains(msg, "already starts with work_dir") || !strings.Contains(msg, tc.hint) {
+			t.Fatalf("dest %q: error %q lacks prefix rejection or hint %s", tc.dest, msg, tc.hint)
+		}
+	}
+}
+
+// A relative dest under a subdirectory work_dir resolves beneath work_dir.
+func TestExportRelativeDestUnderSubdirWorkDir(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("TRAJIR_MCP_ROOT", root)
+	work := filepath.Join(root, "sub", "agent")
+	if err := os.MkdirAll(work, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	seedTrajectory(t, work)
+
+	res := exportViaMCP(t, map[string]any{
+		"work_dir":      "sub/agent",
+		"tenant_id":     "demo",
+		"trajectory_id": "mcp-traj",
+		"dest":          "out/pkg.tir",
+	})
+	if res.IsError {
+		t.Fatalf("export error: %+v", res)
+	}
+	if _, err := os.Stat(filepath.Join(work, "out", "pkg.tir")); err != nil {
+		t.Fatalf("exported file missing under work_dir: %v", err)
 	}
 }
