@@ -2,7 +2,7 @@
 
 Trajectory IR is a library you keep next to an agent you already run. It writes a diary of what the agent decided, which tool it was about to call, and what came back. You can export that diary as a `.tir` file and check the file later with `trajir verify`.
 
-The current library tag is v0.3.0. `pyproject.toml` is 0.3.0. This page is the setup and the daily use. The short command list is also in [README.md](README.md) under "Attach it to a project". The normative rules stay in [docs/MASTER_SPECIFICATION.md](docs/MASTER_SPECIFICATION.md).
+The library version is the `version` field in `pyproject.toml`. The Go language line and the toolchain line are in `go/go.mod`. This page is the setup and the daily use. The short command list is also in [README.md](README.md) under "Attach it to a project". The normative rules stay in [docs/MASTER_SPECIFICATION.md](docs/MASTER_SPECIFICATION.md).
 
 You run Trajectory IR on your own machine, or on a Postgres and S3 you already operate. This repository does not host a cloud account for you.
 
@@ -11,7 +11,7 @@ You run Trajectory IR on your own machine, or on a Postgres and S3 you already o
 | Piece | When you need it |
 | --- | --- |
 | Git | Always |
-| Go 1.26.10 | Building `go/trajir.exe`, `go/trajir-mcp.exe`, and `go/trajir-console.exe`. The module toolchain in `go/go.mod` is `go1.26.10`. |
+| Go | Building `go/trajir.exe`, `go/trajir-mcp.exe`, and `go/trajir-console.exe`. Use the `go` and `toolchain` lines in `go/go.mod`. |
 | Python 3.11 or newer | The Python client, the Claude hooks, LangGraph, ADK callbacks, Postgres, and S3. |
 | A project you already open in an agent | Only if you want the one step attach. |
 
@@ -231,7 +231,7 @@ PostToolUseFailure records a failed tool and clears the pending row.
 
 If Claude denies the tool after the seal, neither post hook runs. The pending row stays in the target `.local-evidence` and the decision stays in the log. There is no cleanup command. Leave the row. The next tool is a new step.
 
-If `TRAJIR_IDENTITY_FILE` points at a file that is not there, PreToolUse exits 2 and the message names `scripts/install_claude.ps1` or `scripts/install_claude.sh`. If that variable is unset, the work directory falls back to this install's `.local-evidence/claude-agent`. The installer sets the variable to the target identity file, so a normal attach uses `<target>/.local-evidence/claude-agent`.
+If `TRAJIR_IDENTITY_FILE` points at a file that is not there, PreToolUse exits 2 and the message names `scripts/install_claude.ps1` or `scripts/install_claude.sh`. If that variable is unset, the work directory falls back to this install's `.local-evidence/claude-agent`. The hook launcher sets the variable to the target identity file, so a normal attach uses `<target>/.local-evidence/claude-agent`.
 
 If Python itself never starts, Claude can still run the tool. Once the launcher process is up, an import error on PreToolUse exits 2.
 
@@ -379,17 +379,19 @@ The usual laptop store is SQLite plus a directory of content-addressed bytes.
 * The node log is `nodes.sqlite` in the work directory (`memo.sqlite` sits beside it when the client opens a memo).
 * Artifact bytes go through `FileSystemCAS` if you are not using S3.
 
+The export below uses `qs.sqlite` and trajectory `qs-1` from the short Python run above. A brand new log has no nodes, and export refuses that.
+
 ```python
 from trajectory_ir.package import export_tir, load_tir
 from trajectory_ir.runtime.log import NodeLog
 from trajectory_ir.storage import FileSystemCAS, put_artifact, rehydrate_artifacts
 
 store = FileSystemCAS("./cas_root")
-log = NodeLog("traj.sqlite")
 ref = put_artifact(store, b"bytes from a tool", logical_path="out.bin")
+log = NodeLog("qs.sqlite")
 export_tir(
     log,
-    "my-traj",
+    "qs-1",
     "run.tir",
     mode="thin",
     artifacts=[ref],
