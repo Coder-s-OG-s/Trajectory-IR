@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `USERS.md` is the setup and use guide. It covers the clone, the project
+  attach, Claude hooks, MCP, the local console, LangGraph, ADK, SQLite,
+  and optional Postgres and S3.
 - The console Locked decisions tab reads `summary.seals` from the server.
   Each row keeps the node id, step, hash, and tool names from the seal
   event. A failed check stays failed and shows the error string. A run
