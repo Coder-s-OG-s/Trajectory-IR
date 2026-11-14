@@ -67,7 +67,7 @@ This is a **runtime trajectory IR**, not LLVM. You do not compile a prompt into 
 
 ## Quick start (Go — recommended)
 
-**Prerequisites:** Go 1.26.10, Git
+**Prerequisites:** Go 1.26.11, Git
 
 ```bash
 git clone https://github.com/Coder-s-OG-s/Trajectory-IR.git
@@ -269,11 +269,21 @@ Governance: [GOVERNANCE.md](GOVERNANCE.md) · Maintainers: [MAINTAINERS.md](MAIN
 
 ### Good first directions
 
+Start with an open [`good first issue`](https://github.com/Coder-s-OG-s/Trajectory-IR/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) and comment that you are taking it. Larger project ideas are in [docs/MENTORSHIP.md](docs/MENTORSHIP.md).
+
 - Improve docs and quickstarts for newcomers
 - Add or harden conformance / unit tests
 - Fix sandbox, redaction, or packaging edge cases
 - Dual-language parity when an issue asks for it
 - Real adopter stories in [ADOPTERS.md](ADOPTERS.md) (with consent only)
+
+---
+
+## Community
+
+- **Questions and ideas:** [GitHub Discussions](https://github.com/Coder-s-OG-s/Trajectory-IR/discussions)
+- **Bugs and feature requests:** [issues](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/new/choose)
+- **Community calls:** open to everyone. Agenda and date are posted in Discussions before each call, see [meeting 1](https://github.com/Coder-s-OG-s/Trajectory-IR/discussions/257). Notes from past calls are under [docs/community/](docs/community/README.md).
 
 ---
 

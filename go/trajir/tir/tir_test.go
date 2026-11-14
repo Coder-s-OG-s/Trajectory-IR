@@ -33,10 +33,17 @@ func TestLoadIntegerAboveSafeRange(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	badPath := writeNodePackage(t, "abc", safeHash, "9007199254740993")
-	_, err = tir.Load(badPath)
-	if err == nil || !strings.Contains(err.Error(), "safe integer") {
-		t.Fatalf("err=%v", err)
+	for _, badNum := range []string{
+		"9007199254740992",
+		"9007199254740993",
+		"18014398509481984",
+		"1000000000000000000",
+	} {
+		badPath := writeNodePackage(t, "abc", safeHash, badNum)
+		_, err = tir.Load(badPath)
+		if err == nil || !strings.Contains(err.Error(), "safe integer") {
+			t.Fatalf("%s: err=%v", badNum, err)
+		}
 	}
 }
 
@@ -94,36 +101,45 @@ func TestExportFloat1e18RoundTrip(t *testing.T) {
 }
 
 func TestExportRejectsStoredIntegerAboveSafeRange(t *testing.T) {
-	dir := t.TempDir()
-	dbPath := filepath.Join(dir, "nodes.sqlite")
-	nl, err := nodelog.Open(dbPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = nl.Close() })
+	for _, num := range []string{
+		"9007199254740992",
+		"9007199254740993",
+		"18014398509481984",
+		"1000000000000000000",
+	} {
+		t.Run(num, func(t *testing.T) {
+			dir := t.TempDir()
+			dbPath := filepath.Join(dir, "nodes.sqlite")
+			nl, err := nodelog.Open(dbPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = nl.Close() })
 
-	step := 1
-	id, err := nodes.NodeID("demo", "t1", &step, 2, "TOOL_RESULT", "66c87d9cb3014e05a11baa97df62282d89d425f22ee15816577c84534e2ef1bb")
-	if err != nil {
-		t.Fatal(err)
-	}
-	side, err := sql.Open("sqlite", dbPath+"?_busy_timeout=5000")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = side.Close() })
-	_, err = side.Exec(
-		`INSERT INTO nodes (id, trajectory_id, tenant_id, step_n, seq, kind, payload_json, ts)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		id, "t1", "demo", 1, 2, "TOOL_RESULT", `{"n":9007199254740993}`, 1.0,
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
+			step := 1
+			id, err := nodes.NodeID("demo", "t1", &step, 2, "TOOL_RESULT", "66c87d9cb3014e05a11baa97df62282d89d425f22ee15816577c84534e2ef1bb")
+			if err != nil {
+				t.Fatal(err)
+			}
+			side, err := sql.Open("sqlite", dbPath+"?_busy_timeout=5000")
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = side.Close() })
+			_, err = side.Exec(
+				`INSERT INTO nodes (id, trajectory_id, tenant_id, step_n, seq, kind, payload_json, ts)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+				id, "t1", "demo", 1, 2, "TOOL_RESULT", `{"n":`+num+`}`, 1.0,
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
 
-	_, err = tir.Export(nl, "t1", filepath.Join(dir, "out.tir"), tir.ExportOptions{Mode: tir.ModeThin})
-	if err == nil || !strings.Contains(err.Error(), "safe integer") {
-		t.Fatalf("err=%v", err)
+			_, err = tir.Export(nl, "t1", filepath.Join(dir, "out.tir"), tir.ExportOptions{Mode: tir.ModeThin})
+			if err == nil || !strings.Contains(err.Error(), "safe integer") {
+				t.Fatalf("%s: err=%v", num, err)
+			}
+		})
 	}
 }
 
