@@ -81,3 +81,30 @@ jobs:
           files: dist/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  pypi-publish:
+    name: Publish to PyPI
+    needs: python-dist
+    if: vars.ENABLE_PYPI == 'true'
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+      actions: read
+    steps:
+      - name: Download the dist
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: python-dist
+          path: dist
+
+      - name: Keep the wheel and sdist
+        run: |
+          set -euo pipefail
+          mkdir -p publish
+          cp dist/*.whl dist/*.tar.gz publish/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
+        with:
+          packages-dir: publish
