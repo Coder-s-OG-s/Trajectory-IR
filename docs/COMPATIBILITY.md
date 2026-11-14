@@ -19,9 +19,16 @@ Every `.tir` names its format twice:
 
 `0.1` has been the value since the first release. It has never been bumped.
 
-Go and Python only check that `COMPAT.json` is present. Neither reads
-`package_format` or `min_runtime`. A package that claims format `9.9` and
-runtime `99.0.0` still verifies with `trajir verify` and loads in Python
+Since spec 1.12 (§9, [#566](https://github.com/Coder-s-OG-s/Trajectory-IR/pull/566))
+both readers check `package_format` before reading any node. It must be in
+`manifest.json` and `COMPAT.json`, the two must match, it must be
+`MAJOR.MINOR`, and MAJOR must be `0`. A newer minor such as `0.9` still loads.
+Anything else fails with `tir.ErrFormat` in Go, `TirFormatError` in Python, and
+`UNSUPPORTED_FORMAT` from `trajir verify`. Every package written by 0.1.0
+through 0.3.0 passes this check.
+
+`min_runtime` is not checked. Neither SDK has a runtime version to compare it
+with, so the spec calls it informational for now
 ([#563](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/563)).
 
 ### Changes that broke earlier data or code
@@ -54,8 +61,10 @@ conformance (R09 to R11). Packages signed by one SDK verify in the other.
      scheme, a new required member, or a change in meaning of an existing
      field.
 2. A reader rejects a major version it does not know, and a `min_runtime`
-   newer than itself, with an error that names both versions. This needs
-   code ([#563](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/563)).
+   newer than itself, with an error that names both versions. The major check
+   is in place since spec 1.12. The `min_runtime` check needs a runtime
+   version in both SDKs that is bumped every release
+   ([#563](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/563)).
 3. A `.tir` written by any release verifies with every later release that
    reads the same major format.
 4. One exception to 3: a fix to hashing or canonicalisation that makes
