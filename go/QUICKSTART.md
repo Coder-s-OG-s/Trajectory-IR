@@ -1,7 +1,7 @@
 # Go quickstart (primary path)
 
-First success path without Python. Matches APIs under `go/trajir` on `main`
-(Phase 1B shipped as **v0.2.0**; Phase 1C is harden/adopt).
+First success path without Python. Matches APIs under `go/trajir` on `main`.
+The current release is v0.3.0.
 
 ## Prerequisites
 
