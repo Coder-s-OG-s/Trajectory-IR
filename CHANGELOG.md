@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `.tir` import writes the package nodes in one database transaction.
+  If a node conflicts, the import rolls back and the log stays as it was.
+  This covers the Go SQLite log and both Python logs (#534).
 - Go `durable.Step` and `nodes.PayloadHash` strictly reject all JSON
   integer literals outside `-(2^53-1) .. 2^53-1` (including exact floats
   such as `2^53`, `2^54`, and `2^60`), matching Python RFC 8785 across cold

@@ -17,7 +17,7 @@ from trajectory_ir.package import (
     load_tir,
     load_tir_unverified,
 )
-from trajectory_ir.runtime.log import NodeLog
+from trajectory_ir.runtime.log import NodeLog, SlotConflictError
 from trajectory_ir.runtime.nodes import payload_hash
 
 
@@ -171,6 +171,35 @@ def test_idempotent_reimport(sample_log: NodeLog, tmp_path: Path) -> None:
         import_tir(out, dest)
         import_tir(out, dest)
         assert len(dest.list_nodes("t-export", tenant_id="demo")) == 5
+    finally:
+        dest.close()
+
+
+def test_import_conflict_leaves_no_partial_trajectory(sample_log: NodeLog, tmp_path: Path) -> None:
+    out = tmp_path / "run.tir"
+    export_tir(sample_log, "t-export", out, mode="thin")
+    dest = NodeLog(str(tmp_path / "dest.sqlite"))
+    try:
+        dest.append(
+            "DECISION",
+            1,
+            {"plan": "other"},
+            trajectory_id="t-export",
+            tenant_id="demo",
+            seq=1,
+        )
+        dest.append(
+            "THOUGHT",
+            1,
+            {"text": "keep"},
+            trajectory_id="t-export",
+            tenant_id="demo",
+            seq=9,
+        )
+        with pytest.raises(SlotConflictError):
+            import_tir(out, dest)
+        kinds = [n["kind"] for n in dest.list_nodes("t-export", tenant_id="demo")]
+        assert kinds == ["DECISION", "THOUGHT"]
     finally:
         dest.close()
 

@@ -513,6 +513,42 @@ func TestIdempotentReimport(t *testing.T) {
 	}
 }
 
+func TestImportSlotConflictLeavesNoPartialTrajectory(t *testing.T) {
+	src := openLog(t, "src.sqlite")
+	seedSample(t, src)
+	out := filepath.Join(t.TempDir(), "run.tir")
+	if _, err := tir.Export(src, "t-export", out, tir.ExportOptions{Mode: tir.ModeThin}); err != nil {
+		t.Fatal(err)
+	}
+
+	dest := openLog(t, "dest.sqlite")
+	step := 1
+	if _, err := dest.Append("DECISION", &step, map[string]any{"plan": "other"}, "t-export", "demo", 1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := dest.Append("THOUGHT", &step, map[string]any{"text": "keep"}, "t-export", "demo", 9); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := tir.Import(out, dest)
+	if !errors.Is(err, nodelog.ErrSlotConflict) {
+		t.Fatalf("err=%v", err)
+	}
+	got, err := dest.ListNodes("t-export", "demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("import left %d nodes", len(got))
+	}
+	for _, n := range got {
+		kind, _ := n["kind"].(string)
+		if kind != "DECISION" && kind != "THOUGHT" {
+			t.Fatalf("unexpected kind %s", kind)
+		}
+	}
+}
+
 func TestThinRejectsEmbeddedBytes(t *testing.T) {
 	src := openLog(t, "src.sqlite")
 	seedSample(t, src)

@@ -677,6 +677,7 @@ def import_tir(
         ensure_artifacts_in_cas(cas, list(pkg.artifacts_manifest))
         if rehydrate:
             pkg.artifact_bytes = rehydrate_artifacts(cas, list(pkg.artifacts_manifest))
+    pending: list[tuple[Any, ...]] = []
     for n in pkg.nodes:
         node = Node(
             kind=n["kind"],
@@ -689,14 +690,22 @@ def import_tir(
         )
         if node.id != n["id"]:
             raise TirVerificationError(f"rebuilt node id {node.id} != package id {n['id']}")
-        node_log.append(
-            node.kind,
-            node.step_n,
-            node.payload,
-            node.trajectory_id,
-            node.tenant_id,
-            node.seq,
+        pending.append(
+            (
+                node.kind,
+                node.step_n,
+                node.payload,
+                node.trajectory_id,
+                node.tenant_id,
+                node.seq,
+            )
         )
+    write_many = getattr(node_log, "append_many", None)
+    if write_many is not None:
+        write_many(pending)
+    else:
+        for kind, step_n, payload, trajectory_id, tenant_id, seq in pending:
+            node_log.append(kind, step_n, payload, trajectory_id, tenant_id, seq)
     if on_imported is not None:
         member_count = 0
         size = 0
