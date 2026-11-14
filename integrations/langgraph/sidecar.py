@@ -31,6 +31,12 @@ from trajectory_ir.runtime.log import NodeLog
 from trajectory_ir.runtime.nodes import payload_hash
 from trajectory_ir.runtime.tool import Tool
 
+# Same ABORT reason and error cap as the Claude hook path
+# (integrations/hosthook/session.py), so a failed tool reads the same in a
+# pack from either host.
+_HOST_FAILURE = "HOST_REPORTED_FAILURE"
+_ERROR_TEXT_LIMIT = 2000
+
 
 def _as_mapping(args: Any) -> dict[str, Any]:
     if args is None:
@@ -227,6 +233,11 @@ class TrajIRToolGuard:
         same sequence number or open the next step while a tool is still running.
 
         ``fn`` receives kwargs only. The idempotency key is never injected into kwargs.
+
+        If ``fn`` raises, an ``ABORT`` with reason ``HOST_REPORTED_FAILURE``,
+        the tool name and the error text is written at the outcome slot, then
+        the error is raised again. Errors from the seal or the gate itself,
+        before the body runs, do not write this row.
         """
         if self._closed:
             raise RuntimeError("TrajIRToolGuard is closed")
@@ -248,20 +259,58 @@ class TrajIRToolGuard:
             )
             seq = 2 + 2 * self._tool_i
             self._tool_i += 1
+            body_error: list[BaseException] = []
+
+            def body(**kwargs: Any) -> Any:
+                try:
+                    return fn(**kwargs)
+                except Exception as exc:
+                    body_error.append(exc)
+                    raise
+
             tool = Tool(
                 name=name,
-                fn=fn,
+                fn=body,
                 effect_class=effect,
                 allow_open_world_override=self.allow_open_world_override,
             )
-            result = exec_tool(
-                self._traj,
-                self.step_n,
-                {"args": _as_mapping(args)},
-                tool,
-                seq=seq,
-            )
+            try:
+                result = exec_tool(
+                    self._traj,
+                    self.step_n,
+                    {"args": _as_mapping(args)},
+                    tool,
+                    seq=seq,
+                )
+            except Exception:
+                if body_error:
+                    self._record_failure(name, seq + 1, body_error[0])
+                raise
             return result.result
+
+    def _record_failure(self, name: str, outcome_seq: int, error: BaseException) -> None:
+        """Caller holds ``_lock``. Write ABORT unless the slot already has an outcome.
+
+        This records what this host saw. It does not prove the remote side
+        never received the call. An ABORT here is final: resuming the same
+        slot blocks and does not run the tool again.
+        """
+        text = f"{type(error).__name__}: {error}"[:_ERROR_TEXT_LIMIT]
+        log = NodeLog(self._db_path)
+        try:
+            for kind in ("TOOL_RESULT", "ABORT"):
+                if log.has(self.trajectory_id, self.tenant_id, self.step_n, kind, seq=outcome_seq):
+                    return
+            log.append(
+                "ABORT",
+                self.step_n,
+                {"reason": _HOST_FAILURE, "tool": name, "error": text},
+                self.trajectory_id,
+                self.tenant_id,
+                seq=outcome_seq,
+            )
+        finally:
+            log.close()
 
     def finish(self) -> None:
         """Append COMMIT_STEP for the current step."""
