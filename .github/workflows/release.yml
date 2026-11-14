@@ -104,7 +104,38 @@ jobs:
           mkdir -p publish
           cp dist/*.whl dist/*.tar.gz publish/
 
+      # PyPI uploads cannot be replaced. Publish only a final vX.Y.Z tag, and
+      # only when it matches the version the wheel and sdist were built with.
+      - name: Check tag and package version
+        id: guard
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::notice::$TAG is not a final X.Y.Z tag, skipping the PyPI upload"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          shopt -s nullglob
+          wheels=(publish/*.whl)
+          sdists=(publish/*.tar.gz)
+          if [ "${#wheels[@]}" -ne 1 ] || [ "${#sdists[@]}" -ne 1 ]; then
+            echo "::error::expected one wheel and one sdist, got ${#wheels[@]} and ${#sdists[@]}"
+            exit 1
+          fi
+          wheel_version="$(basename "${wheels[0]}" | cut -d- -f2)"
+          sdist_name="$(basename "${sdists[0]}" .tar.gz)"
+          sdist_version="${sdist_name##*-}"
+          if [ "$wheel_version" != "$version" ] || [ "$sdist_version" != "$version" ]; then
+            echo "::error::tag $TAG does not match the package version (wheel $wheel_version, sdist $sdist_version). Bump version in pyproject.toml and tag again."
+            exit 1
+          fi
+          echo "publish=true" >> "$GITHUB_OUTPUT"
+
       - name: Publish to PyPI
+        if: steps.guard.outputs.publish == 'true'
         uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
         with:
           packages-dir: publish
