@@ -127,10 +127,22 @@ python -c "import trajectory_ir; print('ok')"
 # Optional: clone still needed for conformance suite paths; at minimum import works.
 ```
 
-### Automation later
+### Trusted Publishing
 
-Trusted Publishing from GitHub Actions can replace manual twine. That is a follow
-up workflow change, not required for the first upload.
+`.github/workflows/release.yml` can upload the wheel and sdist on a `v*` tag.
+The publish job runs only when the repository variable `ENABLE_PYPI` is `true`.
+It uses GitHub's OIDC token. It does not read a PyPI password from the repo.
+
+Before you set that variable:
+
+1. Create the PyPI project `trajectory-ir` if the name is still free.
+2. Add this GitHub repo as a Trusted Publisher for that project.
+   Workflow file: `.github/workflows/release.yml`. Environment name: `pypi`.
+3. Set the repository variable `ENABLE_PYPI` to `true`.
+
+The next tag then uploads the wheel and sdist. Until that upload exists,
+QUICKSTART and the README keep the clone install. `pip install trajectory-ir`
+still returns 404.
 
 ## After the release
 
