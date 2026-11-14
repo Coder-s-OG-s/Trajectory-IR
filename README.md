@@ -282,6 +282,7 @@ Start with an open [`good first issue`](https://github.com/Coder-s-OG-s/Trajecto
 
 ## Community
 
+- **Chat:** [Discord](https://discord.gg/qn6zHrPMr)
 - **Questions and ideas:** [GitHub Discussions](https://github.com/Coder-s-OG-s/Trajectory-IR/discussions)
 - **Bugs and feature requests:** [issues](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/new/choose)
 - **Community calls:** open to everyone. Agenda and date are posted in Discussions before each call, see [meeting 1](https://github.com/Coder-s-OG-s/Trajectory-IR/discussions/257). Notes from past calls are under [docs/community/](docs/community/README.md).
