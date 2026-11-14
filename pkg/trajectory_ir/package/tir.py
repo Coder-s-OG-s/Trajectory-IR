@@ -84,6 +84,50 @@ class TirLimitError(TirError):
     """Raised when a package exceeds safe size or count limits."""
 
 
+class TirFormatError(TirError):
+    """Raised when a package names a package_format this reader does not implement."""
+
+
+def _format_major(value: str) -> int | None:
+    """Return MAJOR from a ``"MAJOR.MINOR"`` string of ASCII digits, else None."""
+    major, sep, minor = value.partition(".")
+    for part in (major, minor):
+        if not part or len(part) > 9 or not all("0" <= c <= "9" for c in part):
+            return None
+    if not sep:
+        return None
+    return int(major)
+
+
+def _check_package_format(manifest: Any, compat_raw: bytes) -> None:
+    """Reject a package_format this reader does not implement (spec section 9).
+
+    manifest.json and COMPAT.json must both name it, agree, and use the
+    MAJOR.MINOR form. A newer minor of the same major is accepted.
+    """
+    try:
+        compat = json.loads(compat_raw)
+    except json.JSONDecodeError as exc:
+        raise TirError(f"COMPAT.json: {exc}") from None
+    from_compat = compat.get("package_format") if isinstance(compat, dict) else None
+    if not isinstance(from_compat, str):
+        raise TirFormatError("COMPAT.json has no package_format string")
+    from_manifest = manifest.get("package_format") if isinstance(manifest, dict) else None
+    if not isinstance(from_manifest, str):
+        raise TirFormatError("manifest.json has no package_format string")
+    if from_compat != from_manifest:
+        raise TirFormatError(
+            f"manifest.json package_format {from_manifest!r} != COMPAT.json {from_compat!r}"
+        )
+    got = _format_major(from_compat)
+    if got is None:
+        raise TirFormatError(f"package_format {from_compat!r} is not MAJOR.MINOR")
+    if got != _format_major(PACKAGE_FORMAT_VERSION):
+        raise TirFormatError(
+            f"package_format {from_compat}, this reader implements {PACKAGE_FORMAT_VERSION}"
+        )
+
+
 @dataclass(frozen=True)
 class ArtifactRef:
     """One artifact entry for thin or fat packages."""
@@ -542,8 +586,7 @@ def _load_tir_impl(
         artifacts_manifest = json.loads(
             _read_zip_member(zf, "artifacts-manifest.json", budget=budget)
         )
-        # COMPAT is advisory for now but must still be readable under budget.
-        _read_zip_member(zf, "COMPAT.json", budget=budget)
+        _check_package_format(manifest, _read_zip_member(zf, "COMPAT.json", budget=budget))
 
         nodes_raw = _read_zip_member(zf, "nodes.ndjson", budget=budget).decode("utf-8")
         nodes: list[dict[str, Any]] = []

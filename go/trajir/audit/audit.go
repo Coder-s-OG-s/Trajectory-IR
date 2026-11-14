@@ -57,6 +57,8 @@ func VerifyFile(path string, opts Options) (*Result, error) {
 		code := "LOAD_FAILED"
 		if errors.Is(err, tir.ErrSignature) {
 			code = "SIGNATURE_REQUIRED"
+		} else if errors.Is(err, tir.ErrFormat) {
+			code = "UNSUPPORTED_FORMAT"
 		}
 		return &Result{
 			Path: path,

@@ -79,6 +79,9 @@ var (
 	ErrVerification = errors.New("tir verification")
 	ErrLimit        = errors.New("tir limit")
 	ErrUnsafePath   = errors.New("tir unsafe path")
+	// ErrFormat means the package names a package_format this reader does
+	// not implement, or the format fields are missing or disagree.
+	ErrFormat = errors.New("tir unsupported format")
 )
 
 // ArtifactRef is one artifact entry for thin or fat packages.
@@ -871,7 +874,11 @@ func loadFromZipWithOptions(zr *zip.Reader, verify bool, opts VerifyOptions) (*P
 		return nil, fmt.Errorf("%w: too many artifact manifest entries: > %d", ErrLimit, MaxArtifacts)
 	}
 
-	if _, err := readMember("COMPAT.json"); err != nil {
+	rawCompat, err := readMember("COMPAT.json")
+	if err != nil {
+		return nil, err
+	}
+	if err := checkPackageFormat(manifest, rawCompat); err != nil {
 		return nil, err
 	}
 
@@ -1060,4 +1067,62 @@ func ImportWithOptions(path string, nodeLog *nodelog.NodeLog, opts ImportOptions
 // Verification cannot be disabled — forged packages must not enter a durable log.
 func Import(path string, nodeLog *nodelog.NodeLog) (*Package, error) {
 	return ImportWithOptions(path, nodeLog, ImportOptions{})
+}
+
+// checkPackageFormat rejects a package whose package_format this reader does
+// not implement (MASTER_SPECIFICATION §9). manifest.json and COMPAT.json must
+// both name it, agree, and use the MAJOR.MINOR form. A newer minor of the same
+// major is accepted. A different major is refused before any node is read.
+func checkPackageFormat(manifest map[string]any, rawCompat []byte) error {
+	var compat map[string]any
+	if err := json.Unmarshal(rawCompat, &compat); err != nil {
+		return fmt.Errorf("%w: COMPAT.json: %v", ErrTir, err)
+	}
+	fromCompat, ok := compat["package_format"].(string)
+	if !ok {
+		return fmt.Errorf("%w: COMPAT.json has no package_format string", ErrFormat)
+	}
+	fromManifest, ok := manifest["package_format"].(string)
+	if !ok {
+		return fmt.Errorf("%w: manifest.json has no package_format string", ErrFormat)
+	}
+	if fromCompat != fromManifest {
+		return fmt.Errorf("%w: manifest.json package_format %q != COMPAT.json %q",
+			ErrFormat, fromManifest, fromCompat)
+	}
+	got, ok := formatMajor(fromCompat)
+	if !ok {
+		return fmt.Errorf("%w: package_format %q is not MAJOR.MINOR", ErrFormat, fromCompat)
+	}
+	want, _ := formatMajor(PackageFormatVersion)
+	if got != want {
+		return fmt.Errorf("%w: package_format %s, this reader implements %s",
+			ErrFormat, fromCompat, PackageFormatVersion)
+	}
+	return nil
+}
+
+// formatMajor returns MAJOR from a "MAJOR.MINOR" string of ASCII digits.
+func formatMajor(v string) (int, bool) {
+	major, minor, ok := strings.Cut(v, ".")
+	if !ok || !allDigits(major) || !allDigits(minor) {
+		return 0, false
+	}
+	n, err := strconv.Atoi(major)
+	if err != nil {
+		return 0, false
+	}
+	return n, true
+}
+
+func allDigits(s string) bool {
+	if s == "" || len(s) > 9 {
+		return false
+	}
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }

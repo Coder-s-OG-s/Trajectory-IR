@@ -63,11 +63,11 @@ func TestLoadKeepsSeqAboveSafeRange(t *testing.T) {
 		id, seq, ph,
 	)
 	path := writePackage(t, map[string]string{
-		"manifest.json":           "{\"mode\":\"thin\",\"tenant_id\":\"demo\"}\n",
+		"manifest.json":           "{\"mode\":\"thin\",\"package_format\":\"0.1\",\"tenant_id\":\"demo\"}\n",
 		"nodes.ndjson":            line,
 		"seals.json":              "[]\n",
 		"artifacts-manifest.json": "[]\n",
-		"COMPAT.json":             "{}\n",
+		"COMPAT.json":             "{\"package_format\":\"0.1\"}\n",
 	})
 	if _, err := tir.Load(path); err != nil {
 		t.Fatal(err)
@@ -150,11 +150,11 @@ func writeNodePackage(t *testing.T, id, phash, num string) string {
 		id, num, phash,
 	)
 	return writePackage(t, map[string]string{
-		"manifest.json":           "{\"mode\":\"thin\",\"tenant_id\":\"demo\"}\n",
+		"manifest.json":           "{\"mode\":\"thin\",\"package_format\":\"0.1\",\"tenant_id\":\"demo\"}\n",
 		"nodes.ndjson":            line,
 		"seals.json":              "[]\n",
 		"artifacts-manifest.json": "[]\n",
-		"COMPAT.json":             "{}\n",
+		"COMPAT.json":             "{\"package_format\":\"0.1\"}\n",
 	})
 }
 
