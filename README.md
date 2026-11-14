@@ -41,6 +41,8 @@ Production agent stacks keep failing the same way. Crash replay is already Tempo
 
 **One-line pitch:** portable semantics for *what the agent actually did*, on top of engines that already solve crash safety.
 
+New here? The [audit walkthrough](docs/AUDIT_WALKTHROUGH.md) records an agent run, verifies it offline, and shows an edited copy failing. About ten minutes, no API key.
+
 ### What "IR" means here
 
 This is a **runtime trajectory IR**, not LLVM. You do not compile a prompt into `.tir` ahead of time. Hosts **lower** a live agent step into typed, content-addressed nodes; you can project, redact, graft, verify, and export that trace onto more than one backend. If you wanted a compiler, this is the wrong repo. If you wanted a vendor-neutral flight recorder for agent steps, this is the product.
@@ -243,6 +245,7 @@ Same agent, two modes: **live** does the job; **sandbox** refuses dangerous *cla
 | [USERS.md](USERS.md) | Setup and daily use: install, agents, MCP, console, storage |
 | [docs/SCOPE_AND_NON_GOALS.md](docs/SCOPE_AND_NON_GOALS.md) | In / out of scope |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Public roadmap |
+| [docs/AUDIT_WALKTHROUGH.md](docs/AUDIT_WALKTHROUGH.md) | Record a run, verify it, tamper with it, sign it |
 | [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) | Host and backend integration notes |
 | [docs/RELEASE.md](docs/RELEASE.md) | Release process |
 | [website/README.md](website/README.md) | Demo / docs site (MkDocs) |
