@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Go `trajir/log` no longer imports `trajir/postgres`, so a SQLite only
+  build does not link `pgx`. The slot errors now live in the new
+  dependency free `trajir/logerr`; `log.ErrSlotConflict`,
+  `postgres.ErrSlotConflict` and the `ErrNotStored` pair are the same values
+  as before, so `errors.Is` checks are unchanged (#536).
+
 ### Added
 
 - `USERS.md` is the setup and use guide. It covers the clone, the project
