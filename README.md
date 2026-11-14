@@ -67,9 +67,7 @@ This is a **runtime trajectory IR**, not LLVM. You do not compile a prompt into 
 
 ## Quick start (Go — recommended)
 
-**Prerequisites:** Go **1.26.0** minimum (language level, per `go/go.mod`); `go/go.mod` pins `toolchain go1.26.11`, which the toolchain downloads on first run if your local Go is older. Git.
-
-> **Toolchain note:** if `go test ./...` fails with an odd error such as `go: no such tool "vet"`, run `go env GOTOOLCHAIN` — with `GOTOOLCHAIN` pinned to a local version older than 1.26.11 the pinned toolchain is never fetched. Set `GOTOOLCHAIN=auto` (or install Go 1.26.11). The first command run with `auto` downloads the 1.26.11 toolchain once, then reuses it.
+**Prerequisites:** Go **1.26.0+** — any Go 1.26.0 or newer works; with the default `GOTOOLCHAIN=auto`, Go downloads the pinned `toolchain go1.26.11` once (CI builds on 1.26.11). Git.
 
 ```bash
 git clone https://github.com/Coder-s-OG-s/Trajectory-IR.git
