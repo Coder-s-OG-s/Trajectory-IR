@@ -67,7 +67,7 @@ This is a **runtime trajectory IR**, not LLVM. You do not compile a prompt into 
 
 ## Quick start (Go — recommended)
 
-**Prerequisites:** Go 1.26.11, Git
+**Prerequisites:** Go **1.26.0+** — any Go 1.26.0 or newer works; with the default `GOTOOLCHAIN=auto`, Go downloads the pinned `toolchain go1.26.11` once (CI builds on 1.26.11). Git.
 
 ```bash
 git clone https://github.com/Coder-s-OG-s/Trajectory-IR.git

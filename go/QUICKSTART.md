@@ -5,7 +5,7 @@ First success path without Python. Matches APIs under `go/trajir` on `main`
 
 ## Prerequisites
 
-- Go **1.26.11** (see `go/go.mod`)
+- Go **1.26.0** minimum (language level, `go 1.26.0` in `go/go.mod`); the module pins `toolchain go1.26.11`
 - Git
 
 Optional later: Docker Postgres/MinIO/Temporal for live drivers
