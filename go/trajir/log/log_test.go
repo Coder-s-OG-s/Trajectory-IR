@@ -600,3 +600,26 @@ func TestListNodesKeepsLargeIntegersAndRejectsCorruptPayload(t *testing.T) {
 		t.Fatal("expected a payload_json with trailing data to be rejected")
 	}
 }
+
+func TestAppendLargeFloatRoundTripsViaListNodes(t *testing.T) {
+	nl := openTemp(t)
+	step := 1
+	n, err := nl.Append("TOOL_RESULT", &step, map[string]any{
+		"f18":   float64(1e18),
+		"pow53": float64(int64(1 << 53)),
+	}, "t1", "demo", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows, err := nl.ListNodes("t1", "demo")
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("rows=%d err=%v", len(rows), err)
+	}
+	ph, err := nodes.PayloadHash(rows[0]["payload"].(map[string]any))
+	if err != nil {
+		t.Fatalf("PayloadHash after reload: %v", err)
+	}
+	if ph != n.PHash {
+		t.Fatalf("hash mismatch: got %s want %s", ph, n.PHash)
+	}
+}

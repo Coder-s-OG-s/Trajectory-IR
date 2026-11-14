@@ -345,6 +345,46 @@ func TestGatedRunningToolLosingToResolverReturnsRecordedResult(t *testing.T) {
 	}
 }
 
+func TestGatedStructFieldRecordsIntegerFailure(t *testing.T) {
+	nl := openLog(t)
+	runs := 0
+	type row struct {
+		N int64 `json:"n"`
+	}
+	gated := resume.MakeGatedToolCall(nl, "t1", "demo", 1, 2, "mint",
+		func(map[string]any) (any, error) {
+			runs++
+			return row{N: 1 << 53}, nil
+		})
+
+	_, err := gated(nil)
+	var unsafe *resume.UnsafeInteger
+	if !errors.As(err, &unsafe) {
+		t.Fatalf("err=%v, want UnsafeInteger", err)
+	}
+	stepN := 1
+	got, found, err := nl.GetNodePayload("t1", "demo", &stepN, 3, "TOOL_RESULT")
+	if err != nil || !found {
+		t.Fatalf("failure row found=%v err=%v", found, err)
+	}
+	if got["error"] != "integer_domain" {
+		t.Fatalf("row=%#v", got)
+	}
+	if _, ok := got["result"]; ok {
+		t.Fatalf("row must not carry the value: %#v", got)
+	}
+	if _, err := gated(nil); !errors.As(err, &unsafe) {
+		t.Fatalf("re-entry err=%v", err)
+	}
+	if runs != 1 {
+		t.Fatalf("runs=%d, want 1", runs)
+	}
+	ok, err := nl.Has("t1", "demo", 1, "ABORT", intPtr(3))
+	if err != nil || ok {
+		t.Fatalf("ABORT present=%v err=%v, want none", ok, err)
+	}
+}
+
 func TestGatedUnsafeResultRecordsIntegerFailure(t *testing.T) {
 	nl := openLog(t)
 	runs := 0
