@@ -243,6 +243,7 @@ Same agent, two modes: **live** does the job; **sandbox** refuses dangerous *cla
 | [USERS.md](USERS.md) | Setup and daily use: install, agents, MCP, console, storage |
 | [docs/SCOPE_AND_NON_GOALS.md](docs/SCOPE_AND_NON_GOALS.md) | In / out of scope |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Public roadmap |
+| [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) | What stays stable across releases (proposal) |
 | [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) | Host and backend integration notes |
 | [docs/RELEASE.md](docs/RELEASE.md) | Release process |
 | [website/README.md](website/README.md) | Demo / docs site (MkDocs) |

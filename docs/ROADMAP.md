@@ -35,7 +35,7 @@ trajectories (seals, effects, `.tir`) on top of existing durable backends.
 | Theme | Direction |
 |-------|-----------|
 | Interop demos | Documented path: produce `.tir` in one runtime, consume in another |
-| Spec stability | Clarify package/compat policy as adoption grows |
+| Spec stability | Agree the package/compat policy proposed in [COMPATIBILITY.md](COMPATIBILITY.md) |
 | Community | Multi-org contributors, adopters list, optional TAG engagement |
 | Security maturity | OpenSSF Best Practices badge progress, Scorecard improvements |
 
