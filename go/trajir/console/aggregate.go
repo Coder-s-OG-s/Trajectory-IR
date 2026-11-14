@@ -52,6 +52,7 @@ type Summary struct {
 	Economy   EconomyView   `json:"economy"`
 	Transfers TransfersView `json:"transfers"`
 	Evidence  EvidenceView  `json:"evidence"`
+	Seals     SealsView     `json:"seals"`
 }
 
 // Summarize builds aggregates from an ordered event list.
@@ -109,6 +110,7 @@ func Summarize(trajectoryID string, events []Event) Summary {
 	s.Economy = deriveEconomy(events, s)
 	s.Transfers = deriveTransfers(events, s)
 	s.Evidence = deriveEvidence(events)
+	s.Seals = deriveSeals(events)
 	return s
 }
 
