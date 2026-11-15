@@ -12,15 +12,15 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/logerr"
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/nodes"
-	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/postgres"
 
 	"modernc.org/sqlite"
 )
 
 var (
-	ErrSlotConflict = postgres.ErrSlotConflict
-	ErrNotStored    = postgres.ErrNotStored
+	ErrSlotConflict = logerr.ErrSlotConflict
+	ErrNotStored    = logerr.ErrNotStored
 )
 
 // NodeLog is an append only SQLite log keyed by content addressed node id.

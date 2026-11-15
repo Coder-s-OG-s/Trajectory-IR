@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/logerr"
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/nodes"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -26,10 +27,12 @@ import (
 const defaultPGConnectTimeout = 10 * time.Second
 
 // ErrSlotConflict is raised when a different payload already occupies the slot.
-var ErrSlotConflict = errors.New("postgres: slot conflict")
+// Same value as logerr.ErrSlotConflict and log.ErrSlotConflict.
+var ErrSlotConflict = logerr.ErrSlotConflict
 
 // ErrNotStored means the append did not leave this node in the slot.
-var ErrNotStored = errors.New("node not stored")
+// Same value as logerr.ErrNotStored and log.ErrNotStored.
+var ErrNotStored = logerr.ErrNotStored
 
 // NodeLog is an append only, content addressed IR log on PostgreSQL.
 type NodeLog struct {
