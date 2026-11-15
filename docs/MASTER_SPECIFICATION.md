@@ -375,6 +375,8 @@ SIGNATURE                 # optional; scheme trajir-pkg-sig-v1 (§9.1). Absent =
 
 Import verifies node ids and seals against their recorded hashes. Import does not automatically acquire a writer lease on the trajectory.
 
+**Package format version.** `manifest.json` and `COMPAT.json` each carry `package_format` as `"MAJOR.MINOR"`, both parts ASCII digits. The current value is `0.1`. A reader **must** reject a package, before reading any node, when either field is missing or not in that form, when the two values differ, or when MAJOR is not the major version the reader implements. A higher MINOR with the same MAJOR **must** be accepted. This applies to verified and unverified loads. `COMPAT.json` `min_runtime` is informational: readers do not compare it with their own version yet.
+
 **Default projector policy (resolves the R04 dependency on an optional policy file):** when `projector-policy.yaml` is absent, the runtime applies a built in minimal policy: pinned items and all `CONSTRAINT` nodes are always included in context and are never silently dropped; if constraints alone exceed the token budget, the projector raises a hard `BUDGET_IMPOSSIBLE` error rather than trimming silently. A custom policy file must preserve this same invariant to be considered conformant.
 
 ### 9.1 Package signatures (`trajir-pkg-sig-v1`)
@@ -777,6 +779,7 @@ Trajectory IR deliberately does not attempt to:
 | 1.9 | 2026-10-23 | `TOOL_RESULT` may be `{"error": "integer_domain", "message", "result_digest"}` when the tool return has an integer outside the RFC 8785 range (§6.2). That row is a storage failure, not `{"result": ...}` and not `ABORT`. A plan with such an integer seals no `DECISION`. The local memo may infer again on the same workflow id. DBOS replays the recorded error until the host uses a new workflow id (§8.2). |
 | 1.10 | 2026-10-24 | `AGENT_SPAWN` is block-and-gated on resume like `NON_IDEMPOTENT_WRITE` (§7.1, §8.2). `SENSITIVE` is documented as a layered flag with no resume gate of its own. |
 | 1.11 | 2026-11-05 | `SENSITIVE` is a flag on the tool that follows its base class, and the bare class is block-and-gated (§7.1, §8.2). The 1.10 wording left sensitive writes ungated because a tool carried only one class. Gated re-entry with a different tool or args is a slot conflict, not a replay of the stored result (§8.3). Optional resolve hook for a claimed call with no outcome (§8.3). Go records and reads the `integer_domain` `TOOL_RESULT` (§6.2). |
+| 1.12 | 2026-11-15 | Readers check `package_format` in `manifest.json` and `COMPAT.json`: both present, `MAJOR.MINOR`, equal, and a major the reader implements, else the load fails. A newer minor is accepted. `min_runtime` stays informational (§9). |
 
 ---
 

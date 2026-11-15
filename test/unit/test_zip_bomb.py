@@ -45,11 +45,11 @@ def test_read_zip_member_enforces_entry_limit(tmp_path: Path, monkeypatch):
 
 def _seals_zip(path: Path, seals: bytes) -> None:
     with zipfile.ZipFile(path, "w") as zf:
-        zf.writestr("manifest.json", b"{}")
+        zf.writestr("manifest.json", b'{"package_format": "0.1"}')
         zf.writestr("nodes.ndjson", b"\n")
         zf.writestr("seals.json", seals)
         zf.writestr("artifacts-manifest.json", b"[]")
-        zf.writestr("COMPAT.json", b"{}")
+        zf.writestr("COMPAT.json", b'{"package_format": "0.1"}')
 
 
 def test_load_rejects_too_many_seals(tmp_path: Path, monkeypatch) -> None:

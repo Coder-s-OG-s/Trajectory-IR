@@ -4,6 +4,7 @@ Where to find us and where call notes live.
 
 ## Channels
 
+- [Discord](https://discord.gg/qn6zHrPMr) for discussion and community chat
 - [GitHub Discussions](https://github.com/Coder-s-OG-s/Trajectory-IR/discussions) for questions, ideas and call agendas
 - [Issues](https://github.com/Coder-s-OG-s/Trajectory-IR/issues) for bugs, features and spec questions
 - Security reports go through [SECURITY.md](../../SECURITY.md), not public channels
