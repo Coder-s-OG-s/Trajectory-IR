@@ -2,6 +2,7 @@ package resume
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/durable"
@@ -130,6 +131,13 @@ func RunStep(
 		if _, err := nodes.PayloadHash(DecisionPayload(plan, cfg.WorldSnapshot)); err != nil {
 			return nil, err
 		}
+		stored, err := memoPlan(plan)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := resolveCalls(stored, cfg.Tools); err != nil {
+			return nil, err
+		}
 		return plan, nil
 	})
 	if err != nil {
@@ -138,6 +146,10 @@ func RunStep(
 	plan, err := asStringMap(planAny)
 	if err != nil {
 		return nil, fmt.Errorf("resume: plan: %w", err)
+	}
+	calls, err := resolveCalls(plan, cfg.Tools)
+	if err != nil {
+		return nil, err
 	}
 
 	snapshot := cfg.WorldSnapshot
@@ -174,17 +186,9 @@ func RunStep(
 		}
 	}
 
-	calls, err := toolCallsFromPlan(plan)
-	if err != nil {
-		return nil, err
-	}
-
 	results := make([]any, 0, len(calls))
 	for i, call := range calls {
-		tool, ok := cfg.Tools[call.Name]
-		if !ok {
-			return nil, fmt.Errorf("resume: unknown tool %q", call.Name)
-		}
+		tool := call.tool
 		seq := 2 + 2*i
 		args := call.Args
 		if args == nil {
@@ -259,6 +263,43 @@ func RunStep(
 type toolCall struct {
 	Name string
 	Args map[string]any
+}
+
+type resolvedCall struct {
+	toolCall
+	tool Tool
+}
+
+func memoPlan(plan map[string]any) (map[string]any, error) {
+	raw, err := nodes.MarshalJSON(plan)
+	if err != nil {
+		return nil, err
+	}
+	var decoded any
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		return nil, err
+	}
+	stored, err := asStringMap(decoded)
+	if err != nil {
+		return nil, fmt.Errorf("resume: plan: %w", err)
+	}
+	return stored, nil
+}
+
+func resolveCalls(plan map[string]any, tools map[string]Tool) ([]resolvedCall, error) {
+	calls, err := toolCallsFromPlan(plan)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]resolvedCall, 0, len(calls))
+	for _, call := range calls {
+		tool, ok := tools[call.Name]
+		if !ok {
+			return nil, fmt.Errorf("resume: unknown tool %q", call.Name)
+		}
+		out = append(out, resolvedCall{toolCall: call, tool: tool})
+	}
+	return out, nil
 }
 
 func toolCallsFromPlan(plan map[string]any) ([]toolCall, error) {
