@@ -10,6 +10,7 @@ Python remains the supported **reference and parity port** from Phase 1A.
 | `trajir/nodes` | Node kinds, RFC 8785 payload hash, node id |
 | `trajir/log` | SQLite append only NodeLog |
 | `trajir/postgres` | PostgreSQL NodeLog (parity with `trajectory_ir.drivers.postgres`; needs DSN) |
+| `trajir/logerr` | Error values shared by the SQLite and Postgres logs (`ErrSlotConflict`, `ErrNotStored`). No dependencies |
 | `trajir/effects` | Effect classes and fail closed MCP mapping |
 | `trajir/durable` | Pluggable step memoization backend |
 | `trajir/durable/temporal` | Temporal Backend + worker registration |
