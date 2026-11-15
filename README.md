@@ -244,6 +244,7 @@ Same agent, two modes: **live** does the job; **sandbox** refuses dangerous *cla
 | [docs/SCOPE_AND_NON_GOALS.md](docs/SCOPE_AND_NON_GOALS.md) | In / out of scope |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Public roadmap |
 | [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) | Host and backend integration notes |
+| [docs/PERFORMANCE.md](docs/PERFORMANCE.md) | Benchmarks for step, export, import, verify and how to rerun them |
 | [docs/RELEASE.md](docs/RELEASE.md) | Release process |
 | [website/README.md](website/README.md) | Demo / docs site (MkDocs) |
 | [CHANGELOG.md](CHANGELOG.md) | What shipped |
@@ -281,6 +282,7 @@ Start with an open [`good first issue`](https://github.com/Coder-s-OG-s/Trajecto
 
 ## Community
 
+- **Chat:** [Discord](https://discord.gg/qn6zHrPMr)
 - **Questions and ideas:** [GitHub Discussions](https://github.com/Coder-s-OG-s/Trajectory-IR/discussions)
 - **Bugs and feature requests:** [issues](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/new/choose)
 - **Community calls:** open to everyone. Agenda and date are posted in Discussions before each call, see [meeting 1](https://github.com/Coder-s-OG-s/Trajectory-IR/discussions/257). Notes from past calls are under [docs/community/](docs/community/README.md).

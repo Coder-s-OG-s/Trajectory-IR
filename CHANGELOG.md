@@ -19,6 +19,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `.tir` readers now check `package_format` (spec 1.12, §9). Go `tir.Load`,
+  `LoadUnverified` and Python `load_tir`, `load_tir_unverified` fail with
+  `tir.ErrFormat` / `TirFormatError` when `manifest.json` or `COMPAT.json` is
+  missing it, the two differ, it is not `MAJOR.MINOR`, or the major is not
+  `0`. `trajir verify` reports this as `UNSUPPORTED_FORMAT`. Before, a package
+  claiming any format loaded and could verify OK. Every package written by
+  0.1.0 through 0.3.0 has `0.1` in both files and still loads (#563).
 - Go `durable.Step` and `nodes.PayloadHash` strictly reject all JSON
   integer literals outside `-(2^53-1) .. 2^53-1` (including exact floats
   such as `2^53`, `2^54`, and `2^60`), matching Python RFC 8785 across cold
