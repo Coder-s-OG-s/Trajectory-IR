@@ -96,6 +96,8 @@ guard.close()
 
 Each model turn seals a new step, even when the plan matches the previous turn. The guard seals that plan, then runs the tools. Parallel tools that still have unused calls in that plan share one seal and take separate sequence numbers. Opening the same work directory again continues after the last stored step instead of starting at step 1. If resume skips the tool body, the wrap returns a tool message from the sealed result.
 
+If a tool body raises, the guard writes an `ABORT` with reason `HOST_REPORTED_FAILURE`, the tool name and the error text (capped at 2000 characters), the same row the Claude hook path writes, and raises the error again. An `ABORT` is final: resuming that slot blocks and does not run the tool again. A seal or gate refusal before the body runs writes no such row. When ToolNode turns a tool error into an error message instead of raising, that message is recorded as the `TOOL_RESULT`.
+
 Then:
 
 ```powershell
