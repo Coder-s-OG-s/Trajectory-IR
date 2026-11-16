@@ -1,6 +1,9 @@
 <div align="center">
 
-<img src="docs/assets/readme/logo.png" alt="Trajectory IR logo" width="140">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/logo-dark.png">
+  <img src="docs/assets/readme/logo-light.png" alt="Trajectory IR logo" width="150">
+</picture>
 
 <h1>Trajectory IR</h1>
 
