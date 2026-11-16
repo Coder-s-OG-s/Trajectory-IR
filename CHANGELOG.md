@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Go `trajir/log` no longer imports `trajir/postgres`, so a SQLite only
+  build does not link `pgx`. The slot errors now live in the new
+  dependency free `trajir/logerr`; `log.ErrSlotConflict`,
+  `postgres.ErrSlotConflict` and the `ErrNotStored` pair are the same values
+  as before, so `errors.Is` checks are unchanged (#536).
+
 ### Added
 
 - `USERS.md` is the setup and use guide. It covers the clone, the project
@@ -19,6 +27,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `.tir` readers now check `package_format` (spec 1.12, §9). Go `tir.Load`,
+  `LoadUnverified` and Python `load_tir`, `load_tir_unverified` fail with
+  `tir.ErrFormat` / `TirFormatError` when `manifest.json` or `COMPAT.json` is
+  missing it, the two differ, it is not `MAJOR.MINOR`, or the major is not
+  `0`. `trajir verify` reports this as `UNSUPPORTED_FORMAT`. Before, a package
+  claiming any format loaded and could verify OK. Every package written by
+  0.1.0 through 0.3.0 has `0.1` in both files and still loads (#563).
+- LangGraph `TrajIRToolGuard.run_sealed` records a tool that raises as
+  `ABORT` with reason `HOST_REPORTED_FAILURE`, the tool name and the error
+  text, matching the Claude hook path, then raises the error again. Before,
+  the pack had a `TOOL_CALL` with no outcome, no error text, and a
+  `COMMIT_STEP`, which read like an unfinished call (#561).
 - Go `durable.Step` and `nodes.PayloadHash` strictly reject all JSON
   integer literals outside `-(2^53-1) .. 2^53-1` (including exact floats
   such as `2^53`, `2^54`, and `2^60`), matching Python RFC 8785 across cold

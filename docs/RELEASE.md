@@ -138,9 +138,19 @@ Before you set that variable:
 1. Create the PyPI project `trajectory-ir` if the name is still free.
 2. Add this GitHub repo as a Trusted Publisher for that project.
    Workflow file: `.github/workflows/release.yml`. Environment name: `pypi`.
-3. Set the repository variable `ENABLE_PYPI` to `true`.
+3. Create the `pypi` environment under Settings, Environments, and add at
+   least one maintainer as a required reviewer. Without this GitHub creates
+   the environment on first use with no protection, and any `v*` tag
+   publishes with no approval.
+4. Set the repository variable `ENABLE_PYPI` to `true`.
 
-The next tag then uploads the wheel and sdist. Until that upload exists,
+The next tag then waits for that approval and uploads the wheel and sdist.
+
+The job only uploads a final `vX.Y.Z` tag. Any other tag (for example
+`v0.4.0-rc1` or `v0.4.0rc1`) still builds and attaches to the GitHub release,
+but the upload step is skipped. The job fails, and uploads nothing, if the tag
+does not match the version in `pyproject.toml`. A PyPI version cannot be
+uploaded twice, so bump the version before tagging. Until that upload exists,
 QUICKSTART and the README keep the clone install. `pip install trajectory-ir`
 still returns 404.
 
