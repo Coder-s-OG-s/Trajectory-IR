@@ -160,16 +160,27 @@ throwaway script. The signature format is `trajir-pkg-sig-v1` (Ed25519), see
 
 ## 7. When a tool fails
 
-What gets recorded depends on the host today.
+A tool that raises is recorded as an `ABORT` at its outcome slot, with reason
+`HOST_REPORTED_FAILURE`, the tool name and the error text (capped at 2000
+characters). The LangGraph wrap and the Claude Code hooks write the same kind
+of row. A plan of two tools, `lookup` then `restart`, where `restart` raises:
 
-- **Claude Code hooks.** A failed tool is written as an `ABORT` row with
-  `HOST_REPORTED_FAILURE`, the tool name and the error text. This repo's own
-  sessions run with the hooks, and their logs show these rows.
-- **LangGraph wrap.** A tool that raises leaves its `TOOL_CALL` with no
-  `TOOL_RESULT` and no `ABORT`, the error is not recorded, and the step still
-  gets a `COMMIT_STEP`. That is a bug, tracked in
-  [#561](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/561). Until it is
-  fixed, a `TOOL_CALL` with no result means "did not finish", not "succeeded".
+```
+1 4 TOOL_CALL {"args": {"service": "api"}, ..., "tool": "restart"}
+1 5 ABORT {"error": "RuntimeError: restart api: permission denied", "reason": "HOST_REPORTED_FAILURE", "tool": "restart"}
+1 6 COMMIT_STEP {}
+```
+
+The error is raised to your code as well, and the package still verifies. For
+a gated write (`NON_IDEMPOTENT_WRITE`) the `ABORT` is final: re-entering that
+call blocks and the tool is not run again.
+
+An `ABORT` records what the host saw. For a write that timed out, the remote
+side may still have done it.
+
+A `TOOL_CALL` with nothing after it means the process stopped before the tool
+returned, for example a crash. On resume, a gated write in that state blocks
+with `BLOCKED_NEEDS_GATE` instead of running again.
 
 ## Using Claude Code instead
 
