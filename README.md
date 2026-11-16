@@ -1,99 +1,146 @@
-# Trajectory IR
+<div align="center">
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/logo-dark.png">
+  <img src="docs/assets/readme/logo-light.png" alt="Trajectory IR logo" width="150">
+</picture>
+
+<h1>Trajectory IR</h1>
+
+**A flight recorder for AI agent runs.**
+
+Record what an agent decided and did as typed, hash-linked nodes,<br>
+then export the run as a `.tir` package anyone can verify.
+
+[![CI](https://github.com/Coder-s-OG-s/Trajectory-IR/actions/workflows/ci.yml/badge.svg)](https://github.com/Coder-s-OG-s/Trajectory-IR/actions/workflows/ci.yml)
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/14075/badge)](https://www.bestpractices.dev/projects/14075)
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/Coder-s-OG-s/Trajectory-IR/badge)](https://scorecard.dev/viewer/?uri=github.com/Coder-s-OG-s/Trajectory-IR)
-[![CI](https://github.com/Coder-s-OG-s/Trajectory-IR/actions/workflows/ci.yml/badge.svg)](https://github.com/Coder-s-OG-s/Trajectory-IR/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+
 [![Go](https://img.shields.io/badge/Go-primary_SDK-00ADD8?logo=go&logoColor=white)](go/QUICKSTART.md)
 [![Python](https://img.shields.io/badge/Python-reference_port-3776AB?logo=python&logoColor=white)](QUICKSTART.md)
 [![Spec](https://img.shields.io/badge/spec-v0.2--draft-informational)](docs/MASTER_SPECIFICATION.md)
+[![Discord](https://img.shields.io/badge/Discord-join-5865F2?logo=discord&logoColor=white)](https://discord.gg/qn6zHrPMr)
 
-**Portable, hash-verifiable intermediate representation for agent execution trajectories.**
+[Quick start](#quick-start) ·
+[How it works](#how-it-works) ·
+[Use it with your agent](#use-it-with-your-agent) ·
+[Docs](#documentation) ·
+[Contributing](#contributing)
 
-A **flight recorder** for agent runs: typed nodes, a sealed model plan, fail-closed effect classes, and a runtime-independent `.tir` package anyone can verify by content hash.
-
-It sits **on top of** durable execution engines (Temporal, DBOS, Restate). It does **not** replace them, and it is **not** another agent framework. It does **not** freeze AWS, auctions, or users while you are crashed, and a client-side gate is **not** exactly-once at Stripe.
-
-```text
-  Agent host / framework          (Claude Code, LangGraph, ADK, MCP hosts, ...)
-            │
-            ▼
-  ┌─────────────────────────────┐
-  │       Trajectory IR         │  seals · effect classes · .tir · sandbox
-  └─────────────────────────────┘
-            │
-            ▼
-  Durable backend                 (Temporal · DBOS · Restate)
-```
+</div>
 
 ---
+
+## What is Trajectory IR?
+
+AI agents call tools that change the real world. They deploy, pay, send email, and delete things. When a run crashes halfway, or someone asks a week later what the agent actually did, a chat transcript is a poor record.
+
+Trajectory IR is a small library that keeps that record properly. It:
+
+- **Seals the plan.** The model's decision is frozen before any tool with side effects runs.
+- **Classifies every tool call** by its effect, and assumes the worst when it does not know.
+- **Does not blindly retry a dangerous call** after a crash. It stops and waits for a person.
+- **Exports the run** as a `.tir` package that is checked by content hash, on any runtime.
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/architecture-dark.svg">
+    <img src="docs/assets/readme/architecture-light.svg" width="860" alt="An agent host sends each step to Trajectory IR, which seals, classifies, gates and records it on top of a durable backend, and exports a .tir package that anyone can verify by hash.">
+  </picture>
+</p>
+
+> [!NOTE]
+> Trajectory IR sits **on top of** durable execution engines such as Temporal, DBOS, and Restate. It does not replace them, and it is not another agent framework.
 
 ## Why it exists
 
-Production agent stacks keep failing the same way. Crash replay is already Temporal/DBOS/Restate's job. The hole they do not fill is a **portable, hash-verifiable record of what the agent actually decided and invoked**, plus agent-shaped policy on top of that record.
+Crash replay is already the job of Temporal, DBOS, and Restate. What they do not give you is a portable, hash-verifiable record of what the agent decided and invoked, with agent-shaped policy on top. Three gaps keep showing up in production agent stacks:
 
-| Failure | Who actually solves it | What Trajectory IR adds |
+- **A crash mid-tool gets retried blindly.** The deploy or the payment fires twice.
+- **Resume asks the model again.** The agent quietly follows a different plan than the one it started.
+- **The history is locked in one runtime.** Nobody outside it can check what happened.
+
+## How it works
+
+Each agent step is recorded as a chain of typed nodes. The plan is sealed before the tools run.
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/step-flow-dark.svg">
+    <img src="docs/assets/readme/step-flow-light.svg" width="860" alt="One step: PROJECT_CONTEXT, then a sealed DECISION, then TOOL_CALL, TOOL_RESULT and COMMIT_STEP. If the process dies between the call and its result, resume reuses the sealed plan and a non-idempotent tool waits for a person.">
+  </picture>
+</p>
+
+| Idea | In one line |
+|---|---|
+| **Sealed decision** | The model's plan (`DECISION`) is frozen before world-changing tools run. The world is not frozen with it. |
+| **Effect classes** | Every tool call carries one of six classes. Unknown tools get the most restrictive one. |
+| **Honest resume** | A sealed step is not planned again (R01). Looking at the world again is allowed, and a new plan is a new step. Hosts that declared a `WORLD_SNAPSHOT` get a loud `WORLD_DRIFT` from `CheckWorld`. |
+| **Block-and-gate** | An interrupted non-idempotent call is not retried on its own (R02). It becomes `BLOCKED_NEEDS_GATE` for a person. That is at most one automatic attempt, not exactly-once. |
+| **Idempotency key** | Every `TOOL_CALL` carries a seal-derived `sha256` key. Your host forwards it to the remote API as `Idempotency-Key`. |
+| **`.tir` package** | Thin or fat export with content-addressed identity and optional `trajir-pkg-sig-v1` signatures. |
+| **Sandbox mode** | Same agent, but the three gated classes are rejected before the tool body runs (R06). A gate for demos and CI, not a process sandbox. |
+| **Conformance suite** | R01 to R11, runnable across Go and Python. |
+
+<details>
+<summary><b>The six effect classes</b></summary>
+
+<br>
+
+| Class | Meaning | After a crash |
 |---|---|---|
-| **Crash mid-tool** | Durable backend memoization. **Exactly-once** still needs a server-side idempotency key the remote API honors. | Block-and-gate: at most one automatic attempt from this client. Unknown in-flight calls go to `BLOCKED_NEEDS_GATE` for a human, not a second LLM turn. The seal-derived key is recorded on `TOOL_CALL` so you can *forward* it. |
-| **Naive resume** | Do not re-call the model for a sealed step (backend replay + IR seal). | Honest resume of the sealed plan (R01). That freezes **the plan**, not **the world**. If the cluster changed while you were dead, re-observe (`READ_ONLY`) or abort and start a **new** step. Hosts that declared a `WORLD_SNAPSHOT` at seal time can `CheckWorld` and get fail-loud `WORLD_DRIFT`. Do not silently re-infer the sealed one. |
-| **Locked history** | Nobody else ships a runtime-independent unit. | Portable thin/fat `.tir` with hash-checked node IDs |
-| **Unsafe demos** | Host policy. | Sandbox mode is a **demo/CI effect-class gate** before the tool body (R06). It is not a process sandbox, not an AST of `bash`, and not a security boundary for arbitrary code. |
+| `PURE` | No external change | May recompute freely |
+| `READ_ONLY` | Reads an external system | May re-fetch. A different answer is recorded as a new result |
+| `IDEMPOTENT_WRITE` | Write that is safe to retry with the same key | Replay with the same key |
+| `NON_IDEMPOTENT_WRITE` | Deploy, payment, email, delete, or anything ambiguous | Block-and-gate: needs a person |
+| `AGENT_SPAWN` | Starts another agent | Block-and-gate |
+| `SENSITIVE` | Touches secrets or PII | Block-and-gate when no base class is known |
 
-**One-line pitch:** portable semantics for *what the agent actually did*, on top of engines that already solve crash safety.
+A missing class or an unknown tool name is `NON_IDEMPOTENT_WRITE`. So are open-world tools such as `bash`, `python`, `sql`, and the browser, unless an operator sets the class on the tool. There is no command parser.
 
-### What "IR" means here
+</details>
 
-This is a **runtime trajectory IR**, not LLVM. You do not compile a prompt into `.tir` ahead of time. Hosts **lower** a live agent step into typed, content-addressed nodes; you can project, redact, graft, verify, and export that trace onto more than one backend. If you wanted a compiler, this is the wrong repo. If you wanted a vendor-neutral flight recorder for agent steps, this is the product.
+## Quick start
 
-> Full normative contract: **[docs/MASTER_SPECIFICATION.md](docs/MASTER_SPECIFICATION.md)** (`spec-v0.2-draft`).  
-> Short scope card: **[docs/SCOPE_AND_NON_GOALS.md](docs/SCOPE_AND_NON_GOALS.md)**.
-
----
-
-## Features
-
-- **Sealed decisions** — freeze the model's plan (`DECISION`) before world-changing tools run. The world is not frozen with it.
-- **Effect classes** — fail-closed mapping from MCP tool hints, plus `AGENT_SPAWN` and `SENSITIVE`. Open-world primitives (`bash`, `python`, `sql`, browser) stay `NON_IDEMPOTENT_WRITE` unless an operator sets the class on the tool. No command parser.
-- **Honest resume** — a sealed step does not re-infer (R01). Re-observe is allowed; re-plan is a **new** step. Optional `WORLD_SNAPSHOT` + `CheckWorld` is fail-loud when the host declared what it depends on.
-- **Block-and-gate** — non-idempotent tools are not blindly retried after interruption (R02). At-most-one automatic attempt, not exactly-once in the world.
-- **Seal-derived idempotency keys** — length-prefixed `sha256` of domain, tenant, trajectory, step, and seq on every `TOOL_CALL`, exposed to the tool body as CallMeta so you can send `Idempotency-Key`. Never stuffed into Python kwargs. Hosts must forward that string to the remote API. The withdrawn colon key does not resume onto this hash.
-- **`.tir` packages** — thin or fat export/import with content-addressed identity; optional `trajir-pkg-sig-v1` signatures
-- **Sandbox mode** — demo/CI gate that rejects dangerous effect classes before the tool body. Not a security sandbox.
-- **Dual SDK** — **Go primary** (Temporal production backend), **Python reference** (DBOS local profile)
-- **Conformance suite** — R01–R11 runnable across languages
-- **OpenSSF Best Practices** — project badge and continuous hardening
-
----
-
-## Quick start (Go — recommended)
-
-**Prerequisites:** Go 1.26.11, Git
+**You need:** Go 1.26.11 and Git. No services, no API keys.
 
 ```bash
 git clone https://github.com/Coder-s-OG-s/Trajectory-IR.git
 cd Trajectory-IR/go
-go test ./...
+go test ./...                     # run the test suite
+go run ./examples/adoption_host   # watch a host seal and run one step
 ```
 
-Minimal client step:
+One step, in Go:
 
 ```go
 tr, err := client.OpenTrajectory("demo", "qs-1", client.Options{WorkDir: dir})
-// ...
+
+// 1. Project the context for step 1
 tr.Project(1, map[string]any{"goal": "hello"})
+
+// 2. Seal the model's plan before any tool runs
 tr.SealDecision(1, map[string]any{
     "tool_calls": []any{
         map[string]any{"name": "echo", "args": map[string]any{"msg": "hi"}},
     },
 })
+
+// 3. Run the tool under its effect class
 res, err := tr.ExecTool(1, 2, tool, map[string]any{"msg": "hi"})
 fmt.Println(res.Result) // hi
+
+// 4. Commit the step
 tr.CommitStep(1, 4)
 ```
 
-Full walkthrough, Temporal notes, and demos: **[go/QUICKSTART.md](go/QUICKSTART.md)**
+The complete program, Temporal notes, and the kill-mid-deploy demo are in **[go/QUICKSTART.md](go/QUICKSTART.md)**.
 
-### Python reference port (optional)
+<details>
+<summary><b>Python reference port</b></summary>
+
+<br>
 
 ```bash
 cd Trajectory-IR
@@ -107,43 +154,53 @@ pytest conformance/ -q
 
 `.[dev]` includes DBOS. Outside the repo, a base install covers the client, node log, projection, and `.tir` export. `pip install "trajectory-ir[dbos]"` adds the DBOS backend that the default `make_run_step` hooks use.
 
-More: **[QUICKSTART.md](QUICKSTART.md)** · kill-mid-deploy demo: [`examples/kill_mid_deploy/`](examples/kill_mid_deploy/)
+More in **[QUICKSTART.md](QUICKSTART.md)** and the [kill-mid-deploy demo](examples/kill_mid_deploy/).
 
----
+</details>
 
-## Attach it to a project
+## Use it with your agent
 
-One command in this checkout builds `trajir.exe`, `trajir-mcp.exe`, and `trajir-console.exe`. It does not download Claude. It writes project-local hooks and smoke-checks one pack. The user profile is not edited. With no target, that project is this checkout. `--target` is another directory.
+| Host | How it attaches | Seals the host's tool calls? |
+|---|---|---|
+| **Claude Code** | Project-local hooks, written by the installer | Yes |
+| **LangGraph** | `TrajIRToolGuard` wraps the tool node | Yes, and it gates the tool body |
+| **Google ADK** | `AdkToolGuard` callbacks | Yes. The callbacks do not call the tool |
+| **Cursor, VS Code, Gemini CLI, Codex** | Project MCP config, written by the installer | No. The MCP tools report status and export or check packs |
+| **Your own loop** | The [Go](go/QUICKSTART.md) or [Python](QUICKSTART.md) client | Yes |
 
-```powershell
-pwsh -File scripts\install_claude.ps1
-pwsh -File scripts\install_claude.ps1 -Target C:\path\to\other\repo
-```
+### One-step install
+
+Run this from a Trajectory IR checkout. With no target it attaches to the checkout itself.
 
 ```bash
-./scripts/install_claude.sh
-./scripts/install_claude.sh --target /path/to/other/repo
+./scripts/install_claude.sh --target /path/to/your/project
 ```
 
-PowerShell uses `TRAJIR_PYTHON`, then `.venv\Scripts\python.exe`, then `python`. The shell script uses `TRAJIR_PYTHON`, then `.venv/bin/python`, then `.venv/Scripts/python.exe` when that file exists, then `python3`, then `python`. That interpreter is what the hook command runs.
+```powershell
+pwsh -File scripts\install_claude.ps1 -Target C:\path\to\your\project
+```
 
-`--target` writes the config into that directory. The hook scripts stay in this install. The same step writes Cursor, VS Code, Gemini CLI, and Codex project MCP config. Those entries do not seal the host's own tools. LangGraph and ADK snippets land in `.trajir/` and import their libraries only when called.
+The installer:
 
-Invalid JSON, including a comment or a trailing comma, is left as it is and the command exits 1, so the smoke check does not run. Claude Code asks you to approve the project MCP server before that server starts. The smoke check seals one local pack through the library and prints `INSTALL OK`. It does not run the hook scripts, so it does not prove the hook command. There is no `pack.tir` until something writes one:
+1. Builds `trajir.exe`, `trajir-mcp.exe`, and `trajir-console.exe`. The names keep `.exe` on every OS.
+2. Writes hooks and MCP config into the target project. Your user profile is not edited.
+3. Seals one local pack through the library and prints `INSTALL OK`. This does not run the hook scripts.
+4. Starts the local console on `127.0.0.1:8787` if that port is free. Pass `--skip-console` to skip it.
+
+Then check any pack you export:
 
 ```bash
 ./go/trajir.exe verify path/to/pack.tir
 ```
 
-The first PreToolUse exits 0 after the seal so the host can run the tool. The hook command carries the owner word `project`. The same owner asking again while that call is still pending exits 2 for `NON_IDEMPOTENT_WRITE` and for a row with no effect class. That is a crash before PostToolUse. A different owner on that pending call exits 0, so a second registration can watch the same attempt. A second registration of this hook must use a different owner word. The same word looks like a retry and blocks the first run. After PostToolUse records the result, a later PreToolUse for that `NON_IDEMPOTENT_WRITE` id exits 2. A recorded row with no effect class exits 2 as well. The hook does not call the tool and does not start DBOS. PostToolUse is best-effort: if the diary write fails, it still exits 0, and the tool-call row is stored only after the tool has run. PostToolUseFailure records a failed tool and clears the pending row. If Claude denies the tool after the seal, neither post hook runs. The pending row stays in the target `.local-evidence` and the decision stays in the log. The next tool is a new step. Leave that row. There is no cleanup command. A missing `TRAJIR_IDENTITY_FILE` exits 2 and names `scripts/install_claude.ps1` or `scripts/install_claude.sh`. When that variable is unset, the work directory is this install's `.local-evidence/claude-agent`. The launcher only runs `pre_tool_use.py`, `post_tool_use.py`, and `post_tool_use_failure.py` from this install. Any other script exits 2 on PreToolUse and is not executed. If Python itself never starts, the host can still run the tool. Once the launcher process is up, an import error on PreToolUse exits 2.
+Every file the installer writes, the hook exit codes, and a troubleshooting table are in **[USERS.md](USERS.md)**.
 
-The installer adds `.local-evidence/`, `.claude/settings.local.json`, `.mcp.json`, `.cursor/mcp.json`, `.vscode/mcp.json`, `.gemini/settings.json`, `.codex/config.toml`, and `.trajir/*.py` to the target `.gitignore` when those lines are missing.
+<details>
+<summary><b>LangGraph and Google ADK snippets</b></summary>
 
-If `127.0.0.1:8787` is free, the installer starts `trajir-console` and waits until it accepts a connection. The console data directory is `<target>/.local-evidence/console-data`. If something is already listening, it leaves that process alone. If the new process dies, the installer says so and exits 1. `--skip-console` skips the start. There is no second console. The binary names keep the `.exe` suffix on every OS, because `go/trajir` is the package directory. If `go/trajir-console.exe` is missing and `go` is not installed, the installer names the path and stops.
+<br>
 
-Two in-process wraps are already on main, for hosts that call tools in the same process.
-
-LangGraph is the path that gates the tool body:
+LangGraph gates the tool body:
 
 ```python
 from integrations.langgraph import TrajIRToolGuard
@@ -152,7 +209,7 @@ guard = TrajIRToolGuard(tenant_id="demo", trajectory_id="lg-live", work_dir=".lo
 tools = ToolNode(my_tools, wrap_tool_call=guard.wrap_tool_call)
 ```
 
-Google ADK uses the same seal, with callbacks. The callbacks do not call the tool:
+Google ADK uses the same seal through callbacks:
 
 ```python
 from integrations.adk import AdkToolGuard
@@ -165,144 +222,117 @@ agent = Agent(
 )
 ```
 
-MCP (`trajectory_status`, `trajectory_export_tir`, `trajectory_import_tir`, `trajectory_verify_signature`) reports status and checks packs. It does not seal the host's own tools. An unknown tool, and any tool named Bash, stays `NON_IDEMPOTENT_WRITE`.
+The installer also drops both snippets into `.trajir/` in the target project.
 
-Token numbers on the console are `ceil(chars/4)` estimates. Adopters stay empty. This is not exactly-once, not a process sandbox, and not Sigstore.
+</details>
 
-The install page is [website/docs/one-step.md](website/docs/one-step.md). GitHub Actions builds it from `.github/workflows/docs-site.yml` after that file is on main. The Article 12 field map names pack fields. It is not a compliance claim: [docs/ARTICLE_12_FIELD_MAP.md](docs/ARTICLE_12_FIELD_MAP.md).
-
----
-
-## Who is this for?
-
-| Audience | Start here |
-|---|---|
-| **Students / newcomers** | This README → [go/QUICKSTART.md](go/QUICKSTART.md) → try sandbox + kill-mid-deploy demos |
-| **Claude Code** | [Attach it to a project](#attach-it-to-a-project) |
-| **Agent / platform engineers** | [docs/SCOPE_AND_NON_GOALS.md](docs/SCOPE_AND_NON_GOALS.md) → [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) → wire seals into your host loop |
-| **Security / compliance** | Seals + `.tir` (hash-verifiable export); report issues via [SECURITY.md](SECURITY.md). Sandbox is a demo gate, not a security boundary. |
-| **Contributors** | [CONTRIBUTING.md](CONTRIBUTING.md) (DCO required) → Phase 1B/1C: **Go first** |
-| **AI coding agents** | [docs/MASTER_SPECIFICATION.md](docs/MASTER_SPECIFICATION.md) + [AI_POLICY.md](AI_POLICY.md) — implement the spec, do not invent behavior |
-| **Talks / demos** | [website/](website/README.md) MkDocs site and speaker runbook |
-
----
-
-## How a run looks
-
-```mermaid
-flowchart LR
-  A[PROJECT_CONTEXT] --> B[DECISION seal]
-  B --> C[TOOL_CALL]
-  C --> D[TOOL_RESULT]
-  D --> E[COMMIT_STEP]
-```
-
-1. Host projects context for the step  
-2. Model plan is **sealed** before tools with side effects  
-3. Tools execute under an effect class (fail closed if unknown)  
-4. Step commits; trajectory can be exported as `.tir`
-
-Same agent, two modes: **live** does the job; **sandbox** refuses dangerous *classified* effects and still keeps the sealed plan. Tag `bash` as read-only and `ExecTool` will refuse unless you set `AllowOpenWorldOverride` and own that lie.
-
----
-
-## What this is / is not
+## What it is, and what it is not
 
 | Trajectory IR **is** | Trajectory IR **is not** |
 |---|---|
-| A portable runtime IR + `.tir` package for agent trajectories | LLVM, bytecode, or a compiler for prompts |
-| Seals, effect classes, resume *semantics*, hash-verifiable export | A replacement for Temporal / DBOS / Restate (adapters only) |
-| A thin layer over pluggable durable backends | An agent orchestration framework (not LangGraph) |
-| At-most-one automatic retry policy + a key you can forward | Exactly-once remote writes (that is the *server's* idempotency key) |
-| A demo/CI effect-class gate (R06) | A process sandbox or `bash` AST analyzer |
-| Open source libraries (Apache-2.0) | A hosted multi-tenant SaaS control plane, or a long-term memory product |
+| A portable runtime IR and `.tir` package for agent trajectories | LLVM, bytecode, or a compiler for prompts |
+| Seals, effect classes, resume semantics, hash-verifiable export | A replacement for Temporal, DBOS, or Restate (adapters only) |
+| A thin layer over pluggable durable backends | An agent orchestration framework |
+| An at-most-one automatic retry policy, plus a key you can forward | Exactly-once remote writes (that is the server's idempotency key) |
+| A demo and CI effect-class gate | A process sandbox, a `bash` AST analyzer, or a security boundary |
+| Open source libraries under Apache-2.0 | A hosted control plane or a long-term memory product |
 
----
+The "IR" is a *runtime* trajectory IR. Nothing is compiled ahead of time. A host lowers each live agent step into typed, content-addressed nodes that you can project, redact, graft, verify, and export.
+
+Scope in one page: [docs/SCOPE_AND_NON_GOALS.md](docs/SCOPE_AND_NON_GOALS.md). Limits to read before a security review: [USERS.md](USERS.md#limits).
+
+## Repository layout
+
+```text
+go/             Go SDK, the primary implementation (client, resume, effects, tir, console, MCP)
+pkg/            Python reference port (trajectory_ir)
+conformance/    R01 to R11 conformance tests (the Go twin is in go/conformance)
+integrations/   Claude Code hooks, LangGraph, Google ADK, MCP, OpenTelemetry
+examples/       Runnable demos: kill_mid_deploy, adoption_host, host_loop
+scripts/        Installers and local tooling
+test/           Python unit, integration, and end-to-end tests
+docs/           Specification, roadmap, and design notes
+website/        MkDocs docs site and demo runbook
+```
+
+## Documentation
+
+| If you are | Read |
+|---|---|
+| New to the project | This page, then [go/QUICKSTART.md](go/QUICKSTART.md) and the sandbox and kill-mid-deploy demos |
+| Attaching it to an agent | [USERS.md](USERS.md), then [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) |
+| Reviewing security or compliance | [docs/SCOPE_AND_NON_GOALS.md](docs/SCOPE_AND_NON_GOALS.md) and [SECURITY.md](SECURITY.md) |
+| Contributing code | [CONTRIBUTING.md](CONTRIBUTING.md) |
+| An AI coding agent | [docs/MASTER_SPECIFICATION.md](docs/MASTER_SPECIFICATION.md) and [AI_POLICY.md](AI_POLICY.md). Implement the spec, do not invent behavior |
+
+<details>
+<summary><b>All documentation</b></summary>
+
+<br>
+
+| Doc | What it covers |
+|---|---|
+| [docs/MASTER_SPECIFICATION.md](docs/MASTER_SPECIFICATION.md) | The normative contract: architecture, data model, protocols |
+| [QUICKSTART.md](QUICKSTART.md) | Repo-wide quickstart for Go and Python |
+| [USERS.md](USERS.md) | Setup and daily use: install, agents, MCP, console, storage |
+| [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) | Host and backend integration notes |
+| [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) | What stays stable across releases (proposal) |
+| [docs/PERFORMANCE.md](docs/PERFORMANCE.md) | Benchmarks and how to rerun them |
+| [docs/ROADMAP.md](docs/ROADMAP.md) · [CHANGELOG.md](CHANGELOG.md) · [docs/RELEASE.md](docs/RELEASE.md) | Where the project is going, what shipped, how releases are cut |
+| [website/](website/README.md) | Docs site source, demos, and the speaker runbook |
+| [docs/ARTICLE_12_FIELD_MAP.md](docs/ARTICLE_12_FIELD_MAP.md) | Names the pack fields. It is not a compliance claim |
+
+</details>
 
 ## Project status
 
-| Item | Status |
+| | |
 |---|---|
-| Spec | `spec-v0.2-draft` — [master specification](docs/MASTER_SPECIFICATION.md) |
-| Phase | **1C harden and adopt** (Go primary; Python parity) — see [docs/ROADMAP.md](docs/ROADMAP.md) |
-| Library | Latest tag is **v0.3.0**. `pyproject.toml` is **0.3.0**. The one-step Claude attach ships in that tag, not as its own release |
-| OpenSSF Best Practices | [Project 14075](https://www.bestpractices.dev/projects/14075) |
-| OpenSSF Scorecard | [Live report](https://scorecard.dev/viewer/?uri=github.com/Coder-s-OG-s/Trajectory-IR) |
-| CNCF Sandbox | Preparing — [outline](docs/CNCF_SANDBOX_APPLICATION_OUTLINE.md). **Not** claiming CNCF membership until TOC approval |
-| Adopters | Honest empty list — [ADOPTERS.md](ADOPTERS.md) (add yourself via PR when you consent) |
-
----
-
-## Documentation map
-
-| Doc | Purpose |
-|---|---|
-| [docs/MASTER_SPECIFICATION.md](docs/MASTER_SPECIFICATION.md) | **Normative** architecture, data model, protocols |
-| [go/QUICKSTART.md](go/QUICKSTART.md) | Fastest path to a working Go client |
-| [QUICKSTART.md](QUICKSTART.md) | Repo-wide quickstart (Go + Python) |
-| [USERS.md](USERS.md) | Setup and daily use: install, agents, MCP, console, storage |
-| [docs/SCOPE_AND_NON_GOALS.md](docs/SCOPE_AND_NON_GOALS.md) | In / out of scope |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | Public roadmap |
-| [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) | What stays stable across releases (proposal) |
-| [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) | Host and backend integration notes |
-| [docs/PERFORMANCE.md](docs/PERFORMANCE.md) | Benchmarks for step, export, import, verify and how to rerun them |
-| [docs/RELEASE.md](docs/RELEASE.md) | Release process |
-| [website/README.md](website/README.md) | Demo / docs site (MkDocs) |
-| [CHANGELOG.md](CHANGELOG.md) | What shipped |
-| [website/docs/one-step.md](website/docs/one-step.md) | One-step Claude Code attach in this checkout |
-
----
+| **Release** | [v0.3.0](CHANGELOG.md) |
+| **Spec** | `spec-v0.2-draft`, see the [master specification](docs/MASTER_SPECIFICATION.md) |
+| **Phase** | 1C, harden and adopt. Go is primary and Python keeps parity. See the [roadmap](docs/ROADMAP.md) |
+| **OpenSSF** | [Best Practices project 14075](https://www.bestpractices.dev/projects/14075) · [Scorecard report](https://scorecard.dev/viewer/?uri=github.com/Coder-s-OG-s/Trajectory-IR) |
+| **CNCF Sandbox** | Preparing an [application](docs/CNCF_SANDBOX_APPLICATION_OUTLINE.md). No CNCF membership is claimed until the TOC approves |
+| **Adopters** | An honest empty list. Add yourself to [ADOPTERS.md](ADOPTERS.md) by pull request |
 
 ## Contributing
 
-We welcome students, first-time OSS contributors, and experienced systems engineers.
+Students, first-time open source contributors, and experienced systems engineers are all welcome.
 
-1. Read **[CONTRIBUTING.md](CONTRIBUTING.md)** — every commit needs `Signed-off-by` (DCO)
-2. Follow **[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)**
-3. Prefer **Go** for new Phase 1B/1C features (`go/trajir`); keep Python green for parity
-4. Do **not** reimplement durable execution (retry / lease / crash engines) — adapters only
-5. Spec questions → open a **Spec question** issue; do not invent undefined behavior
+1. **Pick something.** Start with a [`good first issue`](https://github.com/Coder-s-OG-s/Trajectory-IR/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) and comment that you are taking it. Larger ideas are in [docs/MENTORSHIP.md](docs/MENTORSHIP.md).
+2. **Get it running.** `cd go && go test ./...` is the whole setup for Go.
+3. **Make the change.** New features go in Go first (`go/trajir`). Keep the Python port green.
+4. **Sign off every commit.** The DCO is required:
 
-```bash
-git commit -s -m "feat: short description"
-```
+   ```bash
+   git commit -s -m "feat: short description"
+   ```
 
-Governance: [GOVERNANCE.md](GOVERNANCE.md) · Maintainers: [MAINTAINERS.md](MAINTAINERS.md) · AI-assisted work: [AI_POLICY.md](AI_POLICY.md)
+5. **Open a pull request.** [CONTRIBUTING.md](CONTRIBUTING.md) explains what CI runs and how review works.
 
-### Good first directions
+Two rules save the most review time:
 
-Start with an open [`good first issue`](https://github.com/Coder-s-OG-s/Trajectory-IR/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) and comment that you are taking it. Larger project ideas are in [docs/MENTORSHIP.md](docs/MENTORSHIP.md).
+- **Spec before code.** If the spec does not say, open a *Spec question* issue. Do not invent behavior.
+- **Adapters only.** Do not reimplement durable execution: no retry, lease, or crash engines.
 
-- Improve docs and quickstarts for newcomers
-- Add or harden conformance / unit tests
-- Fix sandbox, redaction, or packaging edge cases
-- Dual-language parity when an issue asks for it
-- Real adopter stories in [ADOPTERS.md](ADOPTERS.md) (with consent only)
+Good places to begin are docs and quickstarts, conformance and unit tests, and sandbox, redaction, or packaging edge cases.
 
----
+Also read: [Code of Conduct](CODE_OF_CONDUCT.md) · [Governance](GOVERNANCE.md) · [Maintainers](MAINTAINERS.md) · [AI policy](AI_POLICY.md)
 
 ## Community
 
 - **Chat:** [Discord](https://discord.gg/qn6zHrPMr)
 - **Questions and ideas:** [GitHub Discussions](https://github.com/Coder-s-OG-s/Trajectory-IR/discussions)
-- **Bugs and feature requests:** [issues](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/new/choose)
-- **Community calls:** open to everyone. Agenda and date are posted in Discussions before each call, see [meeting 1](https://github.com/Coder-s-OG-s/Trajectory-IR/discussions/257). Notes from past calls are under [docs/community/](docs/community/README.md).
-
----
+- **Bugs and feature requests:** [open an issue](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/new/choose)
+- **Community calls:** open to everyone. The agenda and date are posted in Discussions before each call ([meeting 1](https://github.com/Coder-s-OG-s/Trajectory-IR/discussions/257)). Notes from past calls are in [docs/community/](docs/community/README.md).
 
 ## Security
 
-Please report vulnerabilities privately per **[SECURITY.md](SECURITY.md)**.  
-Do not open public issues for undisclosed security bugs.
-
----
+Report vulnerabilities privately, as described in [SECURITY.md](SECURITY.md). Please do not open a public issue for an undisclosed security bug.
 
 ## License
 
-Apache License 2.0 — see [LICENSE](LICENSE).  
-Third-party notices: [docs/THIRD_PARTY_LICENSES.md](docs/THIRD_PARTY_LICENSES.md)
-
----
+Apache License 2.0. See [LICENSE](LICENSE) and the [third-party notices](docs/THIRD_PARTY_LICENSES.md).
 
 ## Acknowledgments
 
@@ -310,4 +340,6 @@ Trajectory IR builds on ideas and prior art from durable execution (Temporal, DB
 
 ---
 
-*Questions? Open a GitHub Discussion or Issue. Spec wins over chat — when in doubt, read [docs/MASTER_SPECIFICATION.md](docs/MASTER_SPECIFICATION.md).*
+<p align="center">
+  <sub>When chat and the spec disagree, the spec wins: <a href="docs/MASTER_SPECIFICATION.md">docs/MASTER_SPECIFICATION.md</a></sub>
+</p>

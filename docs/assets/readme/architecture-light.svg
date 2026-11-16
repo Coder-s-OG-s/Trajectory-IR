@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 432" width="900" height="432" role="img" aria-labelledby="t d">
+  <title id="t">Where Trajectory IR sits</title>
+  <desc id="d">An agent host sends each step's plan and tool calls to Trajectory IR, which seals, classifies, gates and records them, keeps step state in a durable backend, and exports a .tir package that anyone can verify by content hash.</desc>
+
+  <style>
+    text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif; fill: #1f2328; }
+    .mono { font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; }
+    .label { font-size: 11px; font-weight: 600; letter-spacing: 1.2px; fill: #59636e; }
+    .acc-label { font-size: 11px; font-weight: 700; letter-spacing: 1.2px; fill: #b4490f; }
+    .chip-t { font-size: 13px; text-anchor: middle; }
+    .h { font-size: 14px; font-weight: 600; text-anchor: middle; }
+    .s { font-size: 11.5px; fill: #59636e; text-anchor: middle; }
+    .note { font-size: 12px; fill: #59636e; }
+    .band { fill: #f6f8fa; stroke: #d0d7de; }
+    .chip { fill: #ffffff; stroke: #d0d7de; }
+    .acc { fill: #fff5ec; stroke: #e8792b; stroke-width: 1.5; }
+    .cell { fill: #ffffff; stroke: #f3c19c; }
+    .arrow { stroke: #8c959f; stroke-width: 1.5; fill: none; }
+    .head { fill: #8c959f; }
+  </style>
+
+  <!-- agent host -->
+  <rect class="band" x="24" y="16" width="580" height="100" rx="12"/>
+  <text class="label" x="48" y="44">YOUR AGENT HOST</text>
+  <rect class="chip" x="48" y="60" width="106" height="30" rx="15"/><text class="chip-t" x="101.0" y="79.5">Claude Code</text>
+  <rect class="chip" x="162" y="60" width="96" height="30" rx="15"/><text class="chip-t" x="210.0" y="79.5">LangGraph</text>
+  <rect class="chip" x="266" y="60" width="102" height="30" rx="15"/><text class="chip-t" x="317.0" y="79.5">Google ADK</text>
+  <rect class="chip" x="376" y="60" width="96" height="30" rx="15"/><text class="chip-t" x="424.0" y="79.5">MCP hosts</text>
+  <rect class="chip" x="480" y="60" width="116" height="30" rx="15"/><text class="chip-t" x="538.0" y="79.5">Your own loop</text>
+
+  <path class="arrow" d="M314 116 V149"/><path class="head" d="M309 148 L319 148 L314 156 Z"/>
+  <text class="note" x="330" y="141">plan and tool calls, one step at a time</text>
+
+  <!-- trajectory ir -->
+  <rect class="acc" x="24" y="156" width="580" height="132" rx="12"/>
+  <text class="acc-label" x="48" y="184">TRAJECTORY IR</text>
+  <rect class="cell" x="48" y="200" width="127" height="64" rx="8"/><text class="h" x="111.5" y="226">Seal</text><text class="s" x="111.5" y="245">plan frozen first</text>
+  <rect class="cell" x="183" y="200" width="127" height="64" rx="8"/><text class="h" x="246.5" y="226">Classify</text><text class="s" x="246.5" y="245">an effect per tool</text>
+  <rect class="cell" x="318" y="200" width="127" height="64" rx="8"/><text class="h" x="381.5" y="226">Gate</text><text class="s" x="381.5" y="245">no blind retries</text>
+  <rect class="cell" x="453" y="200" width="127" height="64" rx="8"/><text class="h" x="516.5" y="226">Record</text><text class="s" x="516.5" y="245">hash-linked nodes</text>
+
+  <path class="arrow" d="M314 288 V321"/><path class="head" d="M309 320 L319 320 L314 328 Z"/>
+  <text class="note" x="330" y="313">step state and replay</text>
+
+  <!-- durable backend -->
+  <rect class="band" x="24" y="328" width="580" height="88" rx="12"/>
+  <text class="label" x="48" y="356">DURABLE BACKEND</text>
+  <rect class="chip" x="48" y="372" width="90" height="30" rx="15"/><text class="chip-t" x="93.0" y="391.5">Temporal</text>
+  <rect class="chip" x="146" y="372" width="70" height="30" rx="15"/><text class="chip-t" x="181.0" y="391.5">DBOS</text>
+  <rect class="chip" x="224" y="372" width="84" height="30" rx="15"/><text class="chip-t" x="266.0" y="391.5">Restate</text>
+  <text class="note" x="356" y="391">crash-safe execution stays their job</text>
+
+  <!-- export -->
+  <path class="arrow" d="M604 222 H685"/><path class="head" d="M684 217 L684 227 L692 222 Z"/>
+  <text class="note" x="622" y="212">export</text>
+
+  <rect class="band" x="692" y="156" width="184" height="132" rx="12"/>
+  <path class="cell" d="M712 180 h22 l10 10 v34 h-32 z"/>
+  <path class="arrow" d="M734 180 v10 h10" style="stroke:#f3c19c"/>
+  <text class="mono" x="756" y="200" style="font-size:15px;font-weight:700">.tir</text>
+  <text x="756" y="218" style="font-size:12px;fill:#59636e">package</text>
+  <text x="712" y="250" style="font-size:12px;fill:#59636e">thin or fat</text>
+  <text x="712" y="268" style="font-size:12px;fill:#59636e">content-addressed</text>
+
+  <path class="arrow" d="M784 288 V321"/><path class="head" d="M779 320 L789 320 L784 328 Z"/>
+
+  <rect class="band" x="692" y="328" width="184" height="88" rx="12"/>
+  <text x="784" y="358" style="font-size:14px;font-weight:600;text-anchor:middle">Verify anywhere</text>
+  <text class="mono" x="784" y="380" style="font-size:11.5px;fill:#b4490f;text-anchor:middle">trajir verify pack.tir</text>
+  <text class="s" x="784" y="399">any runtime, by hash</text>
+</svg>
