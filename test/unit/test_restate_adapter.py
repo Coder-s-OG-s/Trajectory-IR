@@ -9,6 +9,7 @@ from trajectory_ir.drivers.durable_backend.restate import (
     durable_tool,
     durable_workflow,
     init_backend,
+    local_memo,
 )
 from trajectory_ir.drivers.durable_backend.restate.local_memo import clear_memo, workflow_scope
 from trajectory_ir.effects import EffectClass
@@ -185,3 +186,125 @@ def test_local_memo_cross_step_isolation(tmp_path):
     # Two different steps should run independently without memo collisions
     assert model_calls["n"] == 2
     assert tool_calls["n"] == 2
+
+
+def test_local_memo_rejects_values_json_cannot_encode():
+    clear_memo()
+    init_backend()
+    calls: list[object] = []
+
+    def take(x: object) -> object:
+        calls.append(x)
+        return x
+
+    wrapped = durable_tool(take)
+
+    class Box:
+        def __str__(self) -> str:
+            return "box"
+
+    with workflow_scope("bad"):
+        with pytest.raises(ValueError, match="JSON-serializable"):
+            wrapped(Box())
+        assert wrapped(1) == 1
+    with workflow_scope("bad"):
+        assert wrapped(1) == 1
+    assert calls == [1]
+
+    with workflow_scope("bytes"):
+        with pytest.raises(ValueError, match="JSON-serializable"):
+            wrapped(b"ab")
+        with pytest.raises(ValueError, match="JSON-serializable"):
+            wrapped({"k": {1, 2}})
+    loop: list[object] = []
+    loop.append(loop)
+    with workflow_scope("loop"), pytest.raises(ValueError, match="JSON-serializable"):
+        wrapped(loop)
+    assert calls == [1]
+
+
+def test_local_memo_tuple_does_not_replay_a_list():
+    clear_memo()
+    init_backend()
+    calls: list[str] = []
+
+    def kind(x: object) -> str:
+        calls.append(type(x).__name__)
+        return type(x).__name__
+
+    wrapped = durable_tool(kind)
+    with workflow_scope("seq"):
+        assert wrapped([1, 2]) == "list"
+    with workflow_scope("seq"), pytest.raises(ValueError, match="JSON-serializable"):
+        wrapped((1, 2))
+    with workflow_scope("seq"):
+        assert wrapped([1, 2]) == "list"
+    assert calls == ["list"]
+
+    positional: list[tuple[int, int]] = []
+
+    def add(x: int, y: int) -> int:
+        positional.append((x, y))
+        return x + y
+
+    summed = durable_tool(add)
+    with workflow_scope("pos"):
+        assert summed(1, 2) == 3
+    with workflow_scope("pos"):
+        assert summed(1, 2) == 3
+    assert positional == [(1, 2)]
+
+
+def test_local_memo_kwargs_order_still_hits():
+    clear_memo()
+    init_backend()
+    calls: list[dict[str, int]] = []
+
+    def add(**kwargs: int) -> int:
+        calls.append(dict(kwargs))
+        return kwargs["a"] + kwargs["b"]
+
+    wrapped = durable_tool(add)
+    with workflow_scope("kw"):
+        assert wrapped(a=1, b=2) == 3
+    with workflow_scope("kw"):
+        assert wrapped(b=2, a=1) == 3
+    assert calls == [{"a": 1, "b": 2}]
+
+
+def test_local_memo_drops_least_recently_used(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(local_memo, "_MEMO_LIMIT", 2)
+    clear_memo()
+    init_backend()
+    calls: list[int] = []
+
+    def add(*, x: int) -> int:
+        calls.append(x)
+        return x
+
+    wrapped = durable_tool(add)
+    with workflow_scope("a"):
+        assert wrapped(x=1) == 1
+    with workflow_scope("b"):
+        assert wrapped(x=2) == 2
+    with workflow_scope("a"):
+        assert wrapped(x=1) == 1
+    assert calls == [1, 2]
+    with workflow_scope("c"):
+        assert wrapped(x=3) == 3
+    assert len(local_memo._memo) == 2
+    with workflow_scope("a"):
+        assert wrapped(x=1) == 1
+    with workflow_scope("b"):
+        assert wrapped(x=2) == 2
+    assert calls == [1, 2, 3, 2]
+
+    clear_memo()
+    calls.clear()
+    with workflow_scope("long"):
+        for i in range(5):
+            assert wrapped(x=i) == i
+    assert calls == [0, 1, 2, 3, 4]
+    assert len(local_memo._memo) == 2
+    init_backend()
+    assert len(local_memo._memo) == 2
