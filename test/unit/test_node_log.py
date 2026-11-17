@@ -85,6 +85,61 @@ def test_list_nodes_tenant_filter(log):
     assert len(all_nodes) == 2
 
 
+def test_list_nodes_page(log):
+    for seq in range(5):
+        log.append("THOUGHT", 1, {"i": seq}, "t1", "demo", seq)
+    page = log.list_nodes("t1", tenant_id="demo", limit=2, offset=1)
+    assert [row["seq"] for row in page] == [1, 2]
+    assert [row["payload"]["i"] for row in page] == [1, 2]
+    assert log.list_nodes("t1", tenant_id="demo", limit=2, offset=10) == []
+    assert log.list_nodes("t1", tenant_id="demo", limit=0) == []
+    assert [row["seq"] for row in log.list_nodes("t1", tenant_id="demo")] == [0, 1, 2, 3, 4]
+
+
+def test_list_nodes_rejects_bad_page(log):
+    with pytest.raises(ValueError, match="limit"):
+        log.list_nodes("t1", tenant_id="demo", limit=-1)
+    with pytest.raises(ValueError, match="offset"):
+        log.list_nodes("t1", tenant_id="demo", offset=-1)
+    with pytest.raises(ValueError, match="limit"):
+        log.list_nodes("t1", tenant_id="demo", limit=True)
+
+
+def test_has_trajectory(log):
+    assert log.has_trajectory("t1", tenant_id="demo") is False
+    log.append("THOUGHT", 1, {"i": 1}, "t1", "demo", 0)
+    log.append("THOUGHT", 1, {"i": 2}, "t1", "other", 1)
+    assert log.has_trajectory("t1", tenant_id="demo") is True
+    assert log.has_trajectory("t1", tenant_id="other") is True
+    assert log.has_trajectory("missing", tenant_id="demo") is False
+    with pytest.raises(ValueError, match="tenant_id"):
+        log.has_trajectory("t1", tenant_id="")
+
+
+def test_get_kind_payload_reads_lowest_seq(log):
+    for seq in range(4):
+        log.append("THOUGHT", 1, {"i": seq}, "t1", "demo", seq)
+    log.append(
+        "DECISION",
+        2,
+        {"plan": {"n": 9}, "world_snapshot": {"k": "later"}},
+        "t1",
+        "demo",
+        4,
+    )
+    log.append(
+        "DECISION",
+        2,
+        {"plan": {"n": 1}, "world_snapshot": {"k": "v"}},
+        "t1",
+        "demo",
+        1,
+    )
+    got = log.get_kind_payload("t1", "demo", 2, "DECISION")
+    assert got == {"plan": {"n": 1}, "world_snapshot": {"k": "v"}}
+    assert log.get_kind_payload("t1", "demo", 1, "DECISION") is None
+
+
 def test_file_log_uses_wal(log):
     mode = log._conn.execute("PRAGMA journal_mode").fetchone()[0]
     assert mode == "wal"

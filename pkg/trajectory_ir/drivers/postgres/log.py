@@ -27,7 +27,7 @@ import threading
 from typing import Any
 from urllib.parse import parse_qsl, urlparse
 
-from trajectory_ir.runtime.log import NodeNotStoredError, SlotConflictError
+from trajectory_ir.runtime.log import NodeNotStoredError, SlotConflictError, _page_bounds
 from trajectory_ir.runtime.nodes import Node
 
 
@@ -324,6 +324,42 @@ class PostgresNodeLog:
             row = cur.fetchone()
             return int(row[0]) if row else 0
 
+    def has_trajectory(self, trajectory_id: str, *, tenant_id: str) -> bool:
+        """True when this tenant has any node on the trajectory."""
+        if not tenant_id:
+            raise ValueError("tenant_id must be a non-empty string")
+        with self._lock, self._conn.cursor() as cur:
+            cur.execute(
+                "SELECT 1 FROM nodes WHERE trajectory_id = %s AND tenant_id = %s LIMIT 1",
+                (trajectory_id, tenant_id),
+            )
+            return cur.fetchone() is not None
+
+    def get_kind_payload(
+        self,
+        trajectory_id: str,
+        tenant_id: str,
+        step_n: int,
+        kind: str,
+    ) -> dict | None:
+        """Payload of the lowest-seq node of ``kind`` at ``step_n``, or None."""
+        if not tenant_id:
+            raise ValueError("tenant_id must be a non-empty string")
+        if not kind:
+            raise ValueError("kind must be a non-empty string")
+        with self._lock, self._conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT payload_json FROM nodes
+                WHERE trajectory_id = %s AND tenant_id = %s AND step_n = %s AND kind = %s
+                ORDER BY seq
+                LIMIT 1
+                """,
+                (trajectory_id, tenant_id, step_n, kind),
+            )
+            row = cur.fetchone()
+        return json.loads(row[0]) if row is not None else None
+
     def get_node_payload(
         self,
         trajectory_id: str,
@@ -354,10 +390,13 @@ class PostgresNodeLog:
         trajectory_id: str,
         *,
         tenant_id: str,
+        limit: int | None = None,
+        offset: int = 0,
     ) -> list[dict[str, Any]]:
         if not tenant_id:
             raise ValueError("tenant_id must be a non-empty string")
-        return self._list_nodes(trajectory_id, tenant_id=tenant_id)
+        limit, offset = _page_bounds(limit, offset)
+        return self._list_nodes(trajectory_id, tenant_id=tenant_id, limit=limit, offset=offset)
 
     def list_nodes_all_tenants(self, trajectory_id: str) -> list[dict[str, Any]]:
         return self._list_nodes(trajectory_id, tenant_id=None)
@@ -367,6 +406,8 @@ class PostgresNodeLog:
         trajectory_id: str,
         *,
         tenant_id: str | None,
+        limit: int | None = None,
+        offset: int = 0,
     ) -> list[dict[str, Any]]:
         sql = """
             SELECT id, trajectory_id, tenant_id, step_n, seq, kind, payload_json, ts
@@ -378,6 +419,12 @@ class PostgresNodeLog:
             sql += " AND tenant_id = %s"
             params.append(tenant_id)
         sql += " ORDER BY COALESCE(step_n, -1), seq"
+        if limit is not None:
+            sql += " LIMIT %s OFFSET %s"
+            params.extend([limit, offset])
+        elif offset:
+            sql += " OFFSET %s"
+            params.append(offset)
         with self._lock, self._conn.cursor() as cur:
             cur.execute(sql, params)
             rows: list[dict[str, Any]] = []
