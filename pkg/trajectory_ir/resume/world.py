@@ -62,13 +62,13 @@ def sealed_world_snapshot(
     step_n: int,
 ) -> dict[str, str] | None:
     """Return the sealed snapshot, {} if present-but-empty, or None if no DECISION."""
-    for row in node_log.list_nodes(trajectory_id, tenant_id=tenant_id):
-        if row["kind"] == "DECISION" and row["step_n"] == step_n:
-            raw = row["payload"].get("world_snapshot")
-            if raw is None:
-                return {}
-            return normalize_world_snapshot(raw)
-    return None
+    payload = node_log.get_kind_payload(trajectory_id, tenant_id, step_n, "DECISION")
+    if payload is None:
+        return None
+    raw = payload.get("world_snapshot")
+    if raw is None:
+        return {}
+    return normalize_world_snapshot(raw)
 
 
 def check_world(

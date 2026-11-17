@@ -16,6 +16,18 @@ class NodeNotStoredError(RuntimeError):
     """Raised when an append does not leave this node in the slot."""
 
 
+def _page_bounds(limit: int | None, offset: int) -> tuple[int | None, int]:
+    if isinstance(limit, bool) or (limit is not None and not isinstance(limit, int)):
+        raise ValueError("limit must be a non-negative integer")
+    if isinstance(offset, bool) or not isinstance(offset, int):
+        raise ValueError("offset must be a non-negative integer")
+    if limit is not None and limit < 0:
+        raise ValueError("limit must be a non-negative integer")
+    if offset < 0:
+        raise ValueError("offset must be a non-negative integer")
+    return limit, offset
+
+
 class NodeLog:
     """Append-only, content-addressed node log backed by SQLite.
 
@@ -245,6 +257,38 @@ class NodeLog:
             cur = self._conn.execute("SELECT COUNT(*) FROM nodes WHERE id = ?", (node_id,))
             return int(cur.fetchone()[0])
 
+    def has_trajectory(self, trajectory_id: str, *, tenant_id: str) -> bool:
+        """True when this tenant has any node on the trajectory."""
+        if not tenant_id:
+            raise ValueError("tenant_id must be a non-empty string")
+        with self._lock:
+            cur = self._conn.execute(
+                "SELECT 1 FROM nodes WHERE trajectory_id = ? AND tenant_id = ? LIMIT 1",
+                (trajectory_id, tenant_id),
+            )
+            return cur.fetchone() is not None
+
+    def get_kind_payload(
+        self,
+        trajectory_id: str,
+        tenant_id: str,
+        step_n: int,
+        kind: str,
+    ) -> dict | None:
+        """Payload of the lowest-seq node of ``kind`` at ``step_n``, or None."""
+        if not tenant_id:
+            raise ValueError("tenant_id must be a non-empty string")
+        if not kind:
+            raise ValueError("kind must be a non-empty string")
+        with self._lock:
+            cur = self._conn.execute(
+                "SELECT payload_json FROM nodes WHERE trajectory_id = ? AND tenant_id = ? "
+                "AND step_n = ? AND kind = ? ORDER BY seq LIMIT 1",
+                (trajectory_id, tenant_id, step_n, kind),
+            )
+            row = cur.fetchone()
+        return json.loads(row[0]) if row is not None else None
+
     def get_node_payload(
         self,
         trajectory_id: str,
@@ -274,6 +318,8 @@ class NodeLog:
         trajectory_id: str,
         *,
         tenant_id: str,
+        limit: int | None = None,
+        offset: int = 0,
     ) -> list[dict[str, Any]]:
         """Return stored nodes for a trajectory ordered by step then seq.
 
@@ -281,10 +327,14 @@ class NodeLog:
         isolation at the read path. Callers that genuinely need rows across
         tenants (e.g. ``export_tir``'s own mixed-tenant check) must use
         ``list_nodes_all_tenants`` explicitly instead.
+
+        ``limit`` and ``offset`` page that order. Omit ``limit`` to read the
+        whole trajectory.
         """
         if not tenant_id:
             raise ValueError("tenant_id must be a non-empty string")
-        return self._list_nodes(trajectory_id, tenant_id=tenant_id)
+        limit, offset = _page_bounds(limit, offset)
+        return self._list_nodes(trajectory_id, tenant_id=tenant_id, limit=limit, offset=offset)
 
     def list_nodes_all_tenants(self, trajectory_id: str) -> list[dict[str, Any]]:
         """Return stored nodes for a trajectory across all tenants.
@@ -300,6 +350,8 @@ class NodeLog:
         trajectory_id: str,
         *,
         tenant_id: str | None,
+        limit: int | None = None,
+        offset: int = 0,
     ) -> list[dict[str, Any]]:
         sql = """
             SELECT id, trajectory_id, tenant_id, step_n, seq, kind, payload_json, ts
@@ -311,6 +363,12 @@ class NodeLog:
             sql += " AND tenant_id = ?"
             params.append(tenant_id)
         sql += " ORDER BY COALESCE(step_n, -1), seq"
+        if limit is not None:
+            sql += " LIMIT ? OFFSET ?"
+            params.extend([limit, offset])
+        elif offset:
+            sql += " LIMIT -1 OFFSET ?"
+            params.append(offset)
         with self._lock:
             cur = self._conn.execute(sql, params)
             rows: list[dict[str, Any]] = []

@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"sync"
 
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/nodes"
 	"github.com/gowebpki/jcs"
@@ -41,12 +42,65 @@ type Result struct {
 	Metric      string
 }
 
+const sizeCacheMax = 100_000
+
+var (
+	sizeMu    sync.Mutex
+	sizeCache = map[string]int{}
+	sizeOrder []string
+)
+
+func sha256NodeID(id string) (string, bool) {
+	if len(id) != 64 {
+		return "", false
+	}
+	for i := 0; i < len(id); i++ {
+		c := id[i]
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return "", false
+		}
+	}
+	return id, true
+}
+
+func cachedSize(id string) (int, bool) {
+	sizeMu.Lock()
+	defer sizeMu.Unlock()
+	n, ok := sizeCache[id]
+	return n, ok
+}
+
+func storeSize(id string, n int) {
+	sizeMu.Lock()
+	defer sizeMu.Unlock()
+	if _, ok := sizeCache[id]; ok {
+		sizeCache[id] = n
+		return
+	}
+	if len(sizeCache) >= sizeCacheMax && len(sizeOrder) > 0 {
+		drop := sizeOrder[0]
+		sizeOrder = sizeOrder[1:]
+		delete(sizeCache, drop)
+	}
+	sizeCache[id] = n
+	sizeOrder = append(sizeOrder, id)
+}
+
 // NodeSizeUnits returns the rfc8785_bytes size of one node record (JCS length).
 func NodeSizeUnits(node map[string]any) (int, error) {
 	kind, _ := node["kind"].(string)
 	payload := node["payload"]
 	if payload == nil {
 		payload = map[string]any{}
+	}
+	var cachedID string
+	if id, ok := node["id"].(string); ok {
+		if hexID, ok := sha256NodeID(id); ok {
+			cachedID = hexID
+			if n, hit := cachedSize(hexID); hit {
+				return n, nil
+			}
+		}
 	}
 	// encoding/json then jcs.Transform — same pattern as nodes.PayloadHash.
 	raw, err := json.Marshal(map[string]any{"kind": kind, "payload": payload})
@@ -57,7 +111,11 @@ func NodeSizeUnits(node map[string]any) (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("jcs: %w", err)
 	}
-	return len(canon), nil
+	n := len(canon)
+	if cachedID != "" {
+		storeSize(cachedID, n)
+	}
+	return n, nil
 }
 
 type sortKey struct {
