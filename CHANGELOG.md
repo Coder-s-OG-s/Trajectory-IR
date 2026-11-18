@@ -34,6 +34,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   only, so a later call can infer again. Python DBOS still replays a
   recorded step error on the same workflow id, as it does for an unsafe
   plan (#568).
+- `list_nodes` takes `limit` and `offset`. Go `ListNodesPage` does the same.
+  Export writes `nodes.ndjson` one line at a time. The Python member is
+  opened with zip64 so a file over 2 GiB can finish. Projection remembers
+  `rfc8785_bytes` for a sha256 node id. Resume checks that a trajectory
+  has a row, world snapshot reads that step's `DECISION`, and MCP status
+  counts kinds in SQL (#517).
 - `.tir` readers now check `package_format` (spec 1.12, §9). Go `tir.Load`,
   `LoadUnverified` and Python `load_tir`, `load_tir_unverified` fail with
   `tir.ErrFormat` / `TirFormatError` when `manifest.json` or `COMPAT.json` is

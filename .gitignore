@@ -115,3 +115,5 @@ go/_demo_capture*/
 
 
 
+# trajir CLI built by docs/AUDIT_WALKTHROUGH.md
+/bin/
