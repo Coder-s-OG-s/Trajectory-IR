@@ -27,6 +27,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A plan whose `tool_calls` cannot run is rejected before `DECISION` is
+  appended, and the infer memo does not keep that plan. Missing
+  `tool_calls`, a non-list, a call with no name, args that are not an
+  object, and an unknown tool all leave the step with `PROJECT_CONTEXT`
+  only, so a later call can infer again. Python DBOS still replays a
+  recorded step error on the same workflow id, as it does for an unsafe
+  plan (#568).
 - `list_nodes` takes `limit` and `offset`. Go `ListNodesPage` does the same.
   Export writes `nodes.ndjson` one line at a time. The Python member is
   opened with zip64 so a file over 2 GiB can finish. Projection remembers
