@@ -17,15 +17,12 @@ scope (see issue #75).
 from __future__ import annotations
 
 import json
-import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from trajectory_ir.runtime.projector import SIZE_METRIC
-
-_ENV_POLICY = "TRAJIR_PROJECTOR_POLICY"
 
 _ALLOWED_KEYS = frozenset({"default_budget", "always_include_kinds", "size_metric"})
 
@@ -164,13 +161,3 @@ def load_projector_policy(path: str | Path) -> ProjectorPolicy:
     if not isinstance(raw, dict):
         raise PolicyError("policy root must be a mapping")
     return policy_from_mapping(raw)
-
-
-def load_projector_policy_from_env(
-    env_var: str = _ENV_POLICY,
-) -> ProjectorPolicy | None:
-    """Load policy from ``TRAJIR_PROJECTOR_POLICY`` path if set; else None."""
-    path = os.environ.get(env_var)
-    if not path:
-        return None
-    return load_projector_policy(path)

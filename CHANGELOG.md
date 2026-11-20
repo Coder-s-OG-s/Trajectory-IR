@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- `load_projector_policy_from_env` had no callers. A policy file still loads
+  through `load_projector_policy`.
+- `console_sink_configured` had no callers. Console events still follow
+  `TRAJIR_CONSOLE_SINK`.
+- Go `Trajectory.Backend` had no callers. `Trajectory.Log` is unchanged.
+- The empty `trajectory_ir.drivers.sqlite` package is gone. The SQLite log
+  remains `trajectory_ir.runtime.log`.
+
 ### Changed
 
 - Go `trajir/log` no longer imports `trajir/postgres`, so a SQLite only
