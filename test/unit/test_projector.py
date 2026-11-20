@@ -90,3 +90,21 @@ def test_pinned_ids_always_included() -> None:
 def test_negative_budget_rejected() -> None:
     with pytest.raises(ValueError, match="budget"):
         project_context([], budget=-1)
+
+
+def test_node_size_units_remembers_a_sha256_id() -> None:
+    record = {
+        "id": "ab" * 32,
+        "kind": "THOUGHT",
+        "payload": {"text": "a"},
+    }
+    first = node_size_units(record)
+    record["payload"] = {"text": "b" * 80}
+    assert node_size_units(record) == first
+
+
+def test_node_size_units_measures_fixture_ids_again() -> None:
+    record = {"id": "c1", "kind": "THOUGHT", "payload": {"text": "a"}}
+    first = node_size_units(record)
+    record["payload"] = {"text": "b" * 80}
+    assert node_size_units(record) != first

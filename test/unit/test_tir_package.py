@@ -72,6 +72,10 @@ def test_export_import_round_trip_thin(sample_log: NodeLog, tmp_path: Path) -> N
     out = tmp_path / "run.tir"
     export_tir(sample_log, "t-export", out, mode="thin")
     assert out.is_file()
+    with zipfile.ZipFile(out) as zf:
+        info = zf.getinfo("nodes.ndjson")
+        assert info.extract_version >= zipfile.ZIP64_VERSION
+        assert zf.read("nodes.ndjson")
 
     dest = NodeLog(str(tmp_path / "dest.sqlite"))
     try:

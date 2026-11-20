@@ -65,7 +65,7 @@ def _call(run_step, traj, plan):
         ({"tool_calls": [{"name": "echo", "args": ["x"]}]}, r"tool_calls\[0\]\.args"),
     ],
 )
-def test_bad_plan_raises_after_decision(tmp_path, plan, match):
+def test_bad_plan_is_rejected_before_decision(tmp_path, plan, match):
     sealed = {"n": 0}
 
     def on_sealed():
@@ -75,8 +75,32 @@ def test_bad_plan_raises_after_decision(tmp_path, plan, match):
     run_step, node_log = _step(tmp_path, traj, on_sealed=on_sealed)
     with pytest.raises(ValueError, match=match):
         _call(run_step, traj, plan)
-    assert _kinds(node_log, traj) == ["PROJECT_CONTEXT", "DECISION"]
-    assert sealed["n"] == 1
+    assert _kinds(node_log, traj) == ["PROJECT_CONTEXT"]
+    assert sealed["n"] == 0
+
+
+def test_rejected_plan_is_not_memoized(tmp_path):
+    calls = {"n": 0}
+
+    def model(_context):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return {}
+        return {"tool_calls": [{"name": "echo", "args": {"msg": "ok"}}]}
+
+    def echo(**args):
+        return args["msg"]
+
+    tools = {"echo": Tool(name="echo", fn=echo, effect_class=EffectClass.PURE)}
+    traj = "retry-plan"
+    run_step, node_log = _step(tmp_path, traj, tools=tools)
+    with workflow_scope(traj), pytest.raises(ValueError, match="missing tool_calls"):
+        run_step(step_n=1, model_call=model, context={"goal": "demo"})
+    assert _kinds(node_log, traj) == ["PROJECT_CONTEXT"]
+    with workflow_scope(traj):
+        assert run_step(step_n=1, model_call=model, context={"goal": "demo"}) == ["ok"]
+    assert calls["n"] == 2
+    assert _kinds(node_log, traj)[-1] == "COMMIT_STEP"
 
 
 def test_non_object_plan_is_rejected_before_decision(tmp_path):

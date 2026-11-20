@@ -301,3 +301,125 @@ def test_otel_label_is_copied_only_after_the_seal(tmp_path: Path, monkeypatch) -
     assert span.attrs["trajir.trajectory_id"] == "ut-otel"
     assert span.attrs["trajir.node_id"]
     assert span.attrs["trajir.control"] == "in_process_wrap"
+
+
+def _rows(tmp_path: Path, trajectory_id: str) -> list[dict]:
+    log = NodeLog(str(tmp_path / "nodes.sqlite"))
+    try:
+        return log.list_nodes(trajectory_id, tenant_id="demo")
+    finally:
+        log.close()
+
+
+def test_tool_that_raises_records_abort(tmp_path: Path) -> None:
+    def lookup(service: str) -> dict:
+        return {"service": service, "status": "ok"}
+
+    def restart(service: str) -> dict:
+        raise RuntimeError(f"restart {service}: permission denied")
+
+    plan = [
+        {"name": "lookup", "args": {"service": "api"}},
+        {"name": "restart", "args": {"service": "api"}},
+    ]
+    with TrajIRToolGuard(
+        tenant_id="demo",
+        trajectory_id="ut-fail",
+        work_dir=tmp_path,
+        effect_hints={
+            "lookup": EffectClass.READ_ONLY,
+            "restart": EffectClass.NON_IDEMPOTENT_WRITE,
+        },
+    ) as guard:
+        guard.run_sealed("lookup", plan[0]["args"], lookup, plan_calls=plan)
+        with pytest.raises(RuntimeError, match="permission denied"):
+            guard.run_sealed("restart", plan[1]["args"], restart, plan_calls=plan)
+        guard.finish()
+
+    rows = _rows(tmp_path, "ut-fail")
+    assert [(r["seq"], r["kind"]) for r in rows] == [
+        (0, "PROJECT_CONTEXT"),
+        (1, "DECISION"),
+        (2, "TOOL_CALL"),
+        (3, "TOOL_RESULT"),
+        (4, "TOOL_CALL"),
+        (5, "ABORT"),
+        (6, "COMMIT_STEP"),
+    ]
+    abort = rows[5]["payload"]
+    assert abort == {
+        "reason": "HOST_REPORTED_FAILURE",
+        "tool": "restart",
+        "error": "RuntimeError: restart api: permission denied",
+    }
+
+
+def test_aborted_write_is_not_run_again(tmp_path: Path) -> None:
+    from trajectory_ir.client.python.trajectory_client import exec_tool, open_trajectory
+    from trajectory_ir.resume.gate import BlockedNeedsGate
+    from trajectory_ir.runtime.tool import Tool
+
+    calls: list[str] = []
+
+    def restart(service: str) -> dict:
+        calls.append(service)
+        raise RuntimeError("timeout")
+
+    with (
+        TrajIRToolGuard(
+            tenant_id="demo",
+            trajectory_id="ut-fail-gate",
+            work_dir=tmp_path,
+            effect_hints={"restart": EffectClass.NON_IDEMPOTENT_WRITE},
+        ) as guard,
+        pytest.raises(RuntimeError),
+    ):
+        guard.run_sealed("restart", {"service": "api"}, restart)
+    assert calls == ["api"]
+
+    # Re-enter the same slot directly. The ABORT is final, so the write is
+    # blocked and the body does not run a second time.
+    traj = open_trajectory("demo", "ut-fail-gate", db_path=str(tmp_path / "nodes.sqlite"))
+    try:
+        tool = Tool(name="restart", fn=restart, effect_class=EffectClass.NON_IDEMPOTENT_WRITE)
+        with pytest.raises(BlockedNeedsGate):
+            exec_tool(traj, 1, {"args": {"service": "api"}}, tool, seq=2)
+    finally:
+        traj.close()
+    assert calls == ["api"]
+    aborts = [r for r in _rows(tmp_path, "ut-fail-gate") if r["kind"] == "ABORT"]
+    assert len(aborts) == 1
+    assert aborts[0]["payload"]["reason"] == "HOST_REPORTED_FAILURE"
+
+
+def test_refusal_before_the_body_writes_no_abort(tmp_path: Path) -> None:
+    with (
+        TrajIRToolGuard(
+            tenant_id="demo",
+            trajectory_id="ut-ow-abort",
+            work_dir=tmp_path,
+            effect_hints={"bash": EffectClass.READ_ONLY},
+        ) as guard,
+        pytest.raises(OpenWorldOverrideRequired),
+    ):
+        guard.run_sealed("bash", {"cmd": "echo hi"}, lambda cmd: cmd)
+    assert not [r for r in _rows(tmp_path, "ut-ow-abort") if r["kind"] == "ABORT"]
+
+
+def test_abort_error_text_is_capped(tmp_path: Path) -> None:
+    def noisy() -> None:
+        raise ValueError("x" * 5000)
+
+    with (
+        TrajIRToolGuard(
+            tenant_id="demo",
+            trajectory_id="ut-fail-long",
+            work_dir=tmp_path,
+            effect_hints={"noisy": EffectClass.PURE},
+        ) as guard,
+        pytest.raises(ValueError),
+    ):
+        guard.run_sealed("noisy", {}, noisy)
+    abort = next(r for r in _rows(tmp_path, "ut-fail-long") if r["kind"] == "ABORT")
+    assert len(abort["payload"]["error"]) == 2000
+    assert abort["payload"]["error"].startswith("ValueError: xxx")

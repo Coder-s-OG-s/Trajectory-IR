@@ -7,11 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Go `trajir/log` no longer imports `trajir/postgres`, so a SQLite only
+  build does not link `pgx`. The slot errors now live in the new
+  dependency free `trajir/logerr`; `log.ErrSlotConflict`,
+  `postgres.ErrSlotConflict` and the `ErrNotStored` pair are the same values
+  as before, so `errors.Is` checks are unchanged (#536).
+
+### Added
+
+- `USERS.md` is the setup and use guide. It covers the clone, the project
+  attach, Claude hooks, MCP, the local console, LangGraph, ADK, SQLite,
+  and optional Postgres and S3.
+- The console Locked decisions tab reads `summary.seals` from the server.
+  Each row keeps the node id, step, hash, and tool names from the seal
+  event. A failed check stays failed and shows the error string. A run
+  that has steps and no seals says so (#395).
+
 ### Fixed
 
 - `.tir` import writes the package nodes in one database transaction.
   If a node conflicts, the import rolls back and the log stays as it was.
   This covers the Go SQLite log and both Python logs (#534).
+- A plan whose `tool_calls` cannot run is rejected before `DECISION` is
+  appended, and the infer memo does not keep that plan. Missing
+  `tool_calls`, a non-list, a call with no name, args that are not an
+  object, and an unknown tool all leave the step with `PROJECT_CONTEXT`
+  only, so a later call can infer again. Python DBOS still replays a
+  recorded step error on the same workflow id, as it does for an unsafe
+  plan (#568).
+- `list_nodes` takes `limit` and `offset`. Go `ListNodesPage` does the same.
+  Export writes `nodes.ndjson` one line at a time. The Python member is
+  opened with zip64 so a file over 2 GiB can finish. Projection remembers
+  `rfc8785_bytes` for a sha256 node id. Resume checks that a trajectory
+  has a row, world snapshot reads that step's `DECISION`, and MCP status
+  counts kinds in SQL (#517).
+- `.tir` readers now check `package_format` (spec 1.12, §9). Go `tir.Load`,
+  `LoadUnverified` and Python `load_tir`, `load_tir_unverified` fail with
+  `tir.ErrFormat` / `TirFormatError` when `manifest.json` or `COMPAT.json` is
+  missing it, the two differ, it is not `MAJOR.MINOR`, or the major is not
+  `0`. `trajir verify` reports this as `UNSUPPORTED_FORMAT`. Before, a package
+  claiming any format loaded and could verify OK. Every package written by
+  0.1.0 through 0.3.0 has `0.1` in both files and still loads (#563).
+- LangGraph `TrajIRToolGuard.run_sealed` records a tool that raises as
+  `ABORT` with reason `HOST_REPORTED_FAILURE`, the tool name and the error
+  text, matching the Claude hook path, then raises the error again. Before,
+  the pack had a `TOOL_CALL` with no outcome, no error text, and a
+  `COMMIT_STEP`, which read like an unfinished call (#561).
 - Go `durable.Step` and `nodes.PayloadHash` strictly reject all JSON
   integer literals outside `-(2^53-1) .. 2^53-1` (including exact floats
   such as `2^53`, `2^54`, and `2^60`), matching Python RFC 8785 across cold

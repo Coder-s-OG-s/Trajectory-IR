@@ -153,12 +153,12 @@ func Resume(tenantID, trajectoryID string, opts Options) (*Trajectory, error) {
 	if err != nil {
 		return nil, err
 	}
-	rows, err := tr.log.ListNodes(trajectoryID, tenantID)
+	found, err := tr.log.HasTrajectory(trajectoryID, tenantID)
 	if err != nil {
 		_ = tr.Close()
 		return nil, err
 	}
-	if len(rows) == 0 {
+	if !found {
 		_ = tr.Close()
 		return nil, fmt.Errorf(
 			"client: cannot resume trajectory_id=%q: no existing nodes found in %q; use OpenTrajectory to start a new one",

@@ -249,6 +249,7 @@ func TestRunStepMissingToolCallsInPlan(t *testing.T) {
 	if _, err := resume.RunStep(ctx, cfg, 1, model, nil); err == nil {
 		t.Fatal("expected error for plan missing tool_calls")
 	}
+	assertKinds(t, nl, "t1", "PROJECT_CONTEXT")
 }
 
 func TestRunStepUnknownTool(t *testing.T) {
@@ -263,6 +264,7 @@ func TestRunStepUnknownTool(t *testing.T) {
 	if _, err := resume.RunStep(ctx, cfg, 1, model, nil); err == nil {
 		t.Fatal("expected error for unknown tool")
 	}
+	assertKinds(t, nl, "t1", "PROJECT_CONTEXT")
 }
 
 func TestRunStepToolCallMissingName(t *testing.T) {
@@ -276,6 +278,96 @@ func TestRunStepToolCallMissingName(t *testing.T) {
 	cfg := resume.RunStepConfig{Log: nl, Backend: backend, TrajectoryID: "t1", TenantID: "demo"}
 	if _, err := resume.RunStep(ctx, cfg, 1, model, nil); err == nil {
 		t.Fatal("expected error for tool_call missing name")
+	}
+	assertKinds(t, nl, "t1", "PROJECT_CONTEXT")
+}
+
+func TestRunStepBadPlanIsNotMemoized(t *testing.T) {
+	ctx := context.Background()
+	nl, backend := testEnv(t)
+	var n atomic.Int32
+	model := func(context.Context, map[string]any) (map[string]any, error) {
+		if n.Add(1) == 1 {
+			return map[string]any{}, nil
+		}
+		return map[string]any{
+			"tool_calls": []any{
+				map[string]any{"name": "echo", "args": map[string]any{"msg": "ok"}},
+			},
+		}, nil
+	}
+	cfg := resume.RunStepConfig{
+		Log: nl, Backend: backend, TrajectoryID: "t1", TenantID: "demo",
+		Tools: map[string]resume.Tool{
+			"echo": {
+				Name:   "echo",
+				Effect: effects.PURE,
+				Fn: func(args map[string]any) (any, error) {
+					return args["msg"], nil
+				},
+			},
+		},
+	}
+	if _, err := resume.RunStep(ctx, cfg, 1, model, nil); err == nil {
+		t.Fatal("expected error for empty plan")
+	}
+	assertKinds(t, nl, "t1", "PROJECT_CONTEXT")
+	got, err := resume.RunStep(ctx, cfg, 1, model, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n.Load() != 2 {
+		t.Fatalf("model calls=%d want 2", n.Load())
+	}
+	if len(got) != 1 || got[0] != "ok" {
+		t.Fatalf("got %#v", got)
+	}
+}
+
+func TestRunStepToolCallsAsMapSlice(t *testing.T) {
+	ctx := context.Background()
+	nl, backend := testEnv(t)
+	cfg := resume.RunStepConfig{
+		Log: nl, Backend: backend, TrajectoryID: "t1", TenantID: "demo",
+		Tools: map[string]resume.Tool{
+			"echo": {
+				Name:   "echo",
+				Effect: effects.PURE,
+				Fn: func(args map[string]any) (any, error) {
+					return args["msg"], nil
+				},
+			},
+		},
+	}
+	model := func(context.Context, map[string]any) (map[string]any, error) {
+		return map[string]any{
+			"tool_calls": []map[string]any{
+				{"name": "echo", "args": map[string]any{"msg": "ok"}},
+			},
+		}, nil
+	}
+	got, err := resume.RunStep(ctx, cfg, 1, model, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0] != "ok" {
+		t.Fatalf("got %#v", got)
+	}
+}
+
+func assertKinds(t *testing.T, nl *nodelog.NodeLog, traj string, want ...string) {
+	t.Helper()
+	rows, err := nl.ListNodes(traj, "demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := make([]string, len(rows))
+	for i, row := range rows {
+		kind, _ := row["kind"].(string)
+		got[i] = kind
+	}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("kinds=%v want %v", got, want)
 	}
 }
 

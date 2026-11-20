@@ -391,6 +391,7 @@ td.bad { color: var(--bad); font-weight: 600; }
 }
 .dot.ok { background: var(--ok); box-shadow: 0 0 0 4px var(--ok-dim); }
 .dot.bad { background: var(--bad); box-shadow: 0 0 0 4px var(--bad-dim); }
+.what.bad { color: var(--bad); }
 .dot.gold { background: var(--gold); box-shadow: 0 0 0 4px var(--gold-dim); }
 .when { color: var(--muted); font-size: 0.75rem; }
 .what { font-weight: 600; }

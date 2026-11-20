@@ -826,13 +826,16 @@
   }
 
   function renderSeals() {
-    const seals = filteredEvents().filter(
-      (e) => e.kind === "seal.created" || e.kind === "seal.verified"
-    );
-    const sealPage = takePage("seals", seals);
     const s = state.summary || {};
+    const view = s.seals || {};
+    const all = Array.isArray(view.rows) ? view.rows : [];
+    const rows = all.filter((row) => inRange(row.ts));
+    const page = takePage("seals", rows);
+    let empty = "No lock events yet.";
+    if (all.length > 0) empty = "No lock events in this time range.";
+    else if ((s.node_count || 0) > 0) empty = "This run has steps, but no decision is locked yet.";
     $("panel-seals").innerHTML = `
-      <p class="lede muted">A lock freezes the plan. It does not freeze the outside world.</p>
+      <p class="lede muted">A lock freezes the plan. It does not freeze the outside world. The status on each row comes from the server.</p>
       <div class="stats">
         ${stat("Decisions locked", s.seal_created_count)}
         ${stat("Checks passed", s.seal_verified_ok, "ok")}
@@ -840,32 +843,33 @@
       </div>
       <ol class="timeline">
         ${
-          seals.length
-            ? sealPage.rows
-                .map((e) => {
-                  const p = e.payload || {};
-                  const cls = e.kind === "seal.verified" && p.ok === false ? "bad" : "ok";
-                  const detail =
-                    e.kind === "seal.verified"
-                      ? p.ok === false
-                        ? `Failed. ${p.error || ""} ${p.content_hash || ""}`.trim()
-                        : `Passed. ${p.content_hash || ""}`
-                      : `Step ${fmt(p.step_n)}. ${p.content_hash || ""}`;
-                  return `<li>
-                    <span class="dot ${cls}"></span>
-                    <div>
-                      <div class="what">${esc(kindLabel(e.kind))}</div>
-                      <div class="when">${esc(fmtTime(e.ts))}</div>
-                      <div class="detail"><code>${esc(detail)}</code></div>
-                    </div>
-                  </li>`;
-                })
-                .join("")
-            : `<li><span class="dot"></span><div class="muted">No lock events in this time range.</div></li>`
+          rows.length
+            ? page.rows.map((row) => sealRowHTML(row)).join("")
+            : `<li><span class="dot"></span><div class="muted">${esc(empty)}</div></li>`
         }
       </ol>
-      ${pagerHTML("seals", seals.length)}`;
+      ${pagerHTML("seals", rows.length)}`;
     bindPager($("panel-seals"));
+  }
+
+  function sealRowHTML(row) {
+    const status = row.status || "";
+    const failed = status === "failed";
+    const word = failed ? "Failed" : status === "verified" ? "Checked" : "Locked";
+    const bits = [];
+    if (row.step_n) bits.push("Step " + row.step_n);
+    if (row.node_id) bits.push("Node " + row.node_id);
+    if (row.content_hash) bits.push(row.content_hash);
+    if (Array.isArray(row.tool_names) && row.tool_names.length) bits.push("Tools " + row.tool_names.join(", "));
+    if (failed && row.error) bits.push(row.error);
+    return `<li>
+      <span class="dot ${failed ? "bad" : "ok"}"></span>
+      <div>
+        <div class="what${failed ? " bad" : ""}">${esc(word)}</div>
+        <div class="when">${esc(fmtTime(row.ts))} <code>${esc(row.kind || "")}</code></div>
+        <div class="detail"><code>${esc(bits.join(". "))}</code></div>
+      </div>
+    </li>`;
   }
 
   function renderTransfers() {
