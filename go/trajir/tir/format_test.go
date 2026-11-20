@@ -142,3 +142,163 @@ func TestVerifyReportsUnsupportedFormat(t *testing.T) {
 		t.Fatalf("want one UNSUPPORTED_FORMAT finding, got ok=%v %v", res.OK, res.Findings)
 	}
 }
+
+// rewriteMinRuntime copies a package and sets COMPAT.json min_runtime.
+// A nil value deletes the key.
+func rewriteMinRuntime(t *testing.T, src string, value *string) string {
+	t.Helper()
+	zr, err := zip.OpenReader(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer zr.Close()
+	dst := filepath.Join(t.TempDir(), "runtime.tir")
+	f, err := os.Create(dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	zw := zip.NewWriter(f)
+	for _, m := range zr.File {
+		rc, err := m.Open()
+		if err != nil {
+			t.Fatal(err)
+		}
+		data, err := io.ReadAll(rc)
+		rc.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if m.Name == "COMPAT.json" {
+			data = setMinRuntime(t, data, value)
+		}
+		w, err := zw.Create(m.Name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := w.Write(data); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return dst
+}
+
+func setMinRuntime(t *testing.T, raw []byte, value *string) []byte {
+	t.Helper()
+	var doc map[string]any
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatal(err)
+	}
+	if value == nil {
+		delete(doc, "min_runtime")
+	} else {
+		doc["min_runtime"] = *value
+	}
+	out, err := json.Marshal(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+func TestLoadRejectsNewerMinRuntime(t *testing.T) {
+	src := samplePackage(t)
+	for _, value := range []string{"99.0.0", "0.3.1", "0.10.0"} {
+		t.Run(value, func(t *testing.T) {
+			pkg := rewriteMinRuntime(t, src, &value)
+			_, err := tir.Load(pkg)
+			if !errors.Is(err, tir.ErrRuntime) {
+				t.Fatalf("err=%v, want ErrRuntime", err)
+			}
+			if errors.Is(err, tir.ErrFormat) {
+				t.Fatalf("min_runtime must not be reported as a format error: %v", err)
+			}
+			if !strings.Contains(err.Error(), value) || !strings.Contains(err.Error(), tir.RuntimeVersion) {
+				t.Fatalf("error should name both versions: %v", err)
+			}
+			t.Setenv("TRAJIR_ALLOW_UNVERIFIED", "1")
+			if _, err := tir.LoadUnverified(pkg); !errors.Is(err, tir.ErrRuntime) {
+				t.Fatalf("LoadUnverified err=%v, want ErrRuntime", err)
+			}
+		})
+	}
+}
+
+func TestLoadAcceptsMinRuntimeAtOrBelowReader(t *testing.T) {
+	src := samplePackage(t)
+	if _, err := tir.Load(src); err != nil {
+		t.Fatalf("exported min_runtime 0.1.0 should load: %v", err)
+	}
+	equal := tir.RuntimeVersion
+	older := "0.2.10"
+	for name, value := range map[string]*string{
+		"equal":       &equal,
+		"older patch": &older,
+		"missing":     nil,
+	} {
+		v := value
+		t.Run(name, func(t *testing.T) {
+			if _, err := tir.Load(rewriteMinRuntime(t, src, v)); err != nil {
+				t.Fatalf("min_runtime should load: %v", err)
+			}
+		})
+	}
+}
+
+func TestLoadRejectsBadMinRuntime(t *testing.T) {
+	src := samplePackage(t)
+	for _, value := range []string{"9.9", "v0.3.0", "0.3.0 "} {
+		t.Run(value, func(t *testing.T) {
+			_, err := tir.Load(rewriteMinRuntime(t, src, &value))
+			if !errors.Is(err, tir.ErrRuntime) {
+				t.Fatalf("err=%v, want ErrRuntime", err)
+			}
+			if !strings.Contains(err.Error(), tir.RuntimeVersion) {
+				t.Fatalf("error should name the reader version: %v", err)
+			}
+		})
+	}
+}
+
+func TestVerifyReportsRuntimeTooOld(t *testing.T) {
+	value := "99.0.0"
+	pkg := rewriteMinRuntime(t, samplePackage(t), &value)
+	res, err := audit.VerifyFile(pkg, audit.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.OK || len(res.Findings) != 1 || res.Findings[0].Code != "RUNTIME_TOO_OLD" {
+		t.Fatalf("want one RUNTIME_TOO_OLD finding, got ok=%v %v", res.OK, res.Findings)
+	}
+	if !strings.Contains(res.Findings[0].Message, "99.0.0") || !strings.Contains(res.Findings[0].Message, tir.RuntimeVersion) {
+		t.Fatalf("finding should name both versions: %s", res.Findings[0].Message)
+	}
+}
+
+func TestRuntimeVersionMatchesPyproject(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "pyproject.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `version = "` + tir.RuntimeVersion + `"`
+	inProject := false
+	found := false
+	for _, line := range strings.Split(string(raw), "\n") {
+		trim := strings.TrimSpace(line)
+		if strings.HasPrefix(trim, "[") {
+			inProject = trim == "[project]"
+			continue
+		}
+		if inProject && trim == want {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("pyproject.toml [project] has no %s", want)
+	}
+}
