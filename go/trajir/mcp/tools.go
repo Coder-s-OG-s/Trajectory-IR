@@ -85,7 +85,7 @@ type exportIn struct {
 	WorkDir      string `json:"work_dir" jsonschema:"directory under workspace root containing nodes.sqlite"`
 	TenantID     string `json:"tenant_id" jsonschema:"tenant id"`
 	TrajectoryID string `json:"trajectory_id" jsonschema:"trajectory id"`
-	Dest         string `json:"dest" jsonschema:"output .tir path (must stay under work_dir / workspace)"`
+	Dest         string `json:"dest" jsonschema:"output .tir path relative to work_dir, for example out.tir"`
 	Mode         string `json:"mode,omitempty" jsonschema:"package mode: thin (default) or fat"`
 }
 
@@ -123,6 +123,27 @@ func toolExportTIR(ctx context.Context, _ *mcp.CallToolRequest, in exportIn) (*m
 	dest, err := requireBoundedPath(in.Dest, workDir)
 	if err != nil {
 		return nil, zero, err
+	}
+	if !filepath.IsAbs(in.Dest) {
+		root, err := approvedRoot()
+		if err != nil {
+			return nil, zero, err
+		}
+		rel, err := filepath.Rel(root, workDir)
+		if err != nil {
+			return nil, zero, err
+		}
+		if hint, repeated := repeatedDestHint(in.Dest, rel); repeated {
+			return nil, zero, fmt.Errorf(
+				"mcp: dest %q already includes work_dir; pass a path relative to work_dir, for example %q",
+				in.Dest, hint,
+			)
+		}
+	}
+	if workdir.IsSubpath(workDir, dest) {
+		if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+			return nil, zero, fmt.Errorf("mcp: create dest directory: %w", err)
+		}
 	}
 	nodesPath, memoPath, err := workdirSQLitePaths(workDir)
 	if err != nil {
@@ -177,6 +198,32 @@ func toolExportTIR(ctx context.Context, _ *mcp.CallToolRequest, in exportIn) (*m
 		TenantID:     in.TenantID,
 		NodeCount:    len(rows),
 	}, nil
+}
+
+// repeatedDestHint reports the path to pass when dest already contains the
+// work directory. relWork is work_dir relative to TRAJIR_MCP_ROOT. The bool
+// is false when work_dir is the root, or when dest does not repeat it.
+// A name that only shares a prefix, such as sub/agent-extra next to
+// sub/agent, is not a repeat. When dest is exactly the work_dir path, the
+// hint is out.tir so the caller is not told to send the same path again.
+func repeatedDestHint(dest, relWork string) (string, bool) {
+	rel := filepath.ToSlash(filepath.Clean(relWork))
+	if rel == "." || rel == "" {
+		return "", false
+	}
+	clean := filepath.ToSlash(filepath.Clean(dest))
+	if clean == rel {
+		return "out.tir", true
+	}
+	prefix := rel + "/"
+	if !strings.HasPrefix(clean, prefix) {
+		return "", false
+	}
+	hint := strings.TrimPrefix(clean, prefix)
+	if hint == "" || hint == "." {
+		return "out.tir", true
+	}
+	return hint, true
 }
 
 type pathIn struct {
