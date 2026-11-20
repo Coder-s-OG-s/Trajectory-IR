@@ -462,7 +462,3 @@ def _tool_message_content(msg: Any) -> Any:
     if isinstance(msg, Mapping):
         return msg.get("content", msg)
     return getattr(msg, "content", msg)
-
-
-def console_sink_configured() -> bool:
-    return bool(os.environ.get("TRAJIR_CONSOLE_SINK", "").strip())
