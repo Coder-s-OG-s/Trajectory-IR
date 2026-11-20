@@ -70,6 +70,19 @@ class _FakeStore:
                 ts,
             ) = params
             if node_id not in self.rows:
+                for row in self.rows.values():
+                    sn = row["step_n"] if row["step_n"] is not None else -1
+                    pn = step_n if step_n is not None else -1
+                    if (
+                        row["tenant_id"] == tenant_id
+                        and row["trajectory_id"] == trajectory_id
+                        and sn == pn
+                        and row["seq"] == seq
+                        and row["kind"] == kind
+                    ):
+                        from psycopg.errors import UniqueViolation
+
+                        raise UniqueViolation("duplicate slot")
                 self._dirty = True
                 self.rows[node_id] = {
                     "id": node_id,
@@ -351,6 +364,17 @@ def test_unique_violation_without_owner_is_not_success():
         node_log.append("DECISION", 1, {"plan": "x"}, "t1", "demo", 1)
     assert conn.commits == 0
     assert conn.rollbacks == 1
+
+
+def test_append_many_same_batch_is_slot_conflict(log: PostgresNodeLog):
+    with pytest.raises(SlotConflictError):
+        log.append_many(
+            [
+                ("DECISION", 1, {"plan": "a"}, "t1", "demo", 1),
+                ("DECISION", 1, {"plan": "b"}, "t1", "demo", 1),
+            ]
+        )
+    assert log.list_nodes("t1", tenant_id="demo") == []
 
 
 def test_append_many_rolls_back(log: PostgresNodeLog):

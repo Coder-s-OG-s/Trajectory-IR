@@ -16,6 +16,23 @@ class NodeNotStoredError(RuntimeError):
     """Raised when an append does not leave this node in the slot."""
 
 
+def reject_same_batch_slot(seen: dict[tuple[Any, ...], str], node: Node) -> None:
+    """Raise when this batch already holds a different payload for the slot.
+
+    The check runs before the insert. Postgres aborts the transaction on a
+    unique violation, and a lookup after that rollback cannot see the first
+    row of this batch.
+    """
+    slot = (node.tenant_id, node.trajectory_id, node.step_n, node.seq, node.kind)
+    prior = seen.get(slot)
+    if prior is not None and prior != node.id:
+        raise SlotConflictError(
+            f"slot conflict trajectory={node.trajectory_id!r} step={node.step_n} "
+            f"seq={node.seq} kind={node.kind!r}: different payload already stored"
+        )
+    seen[slot] = node.id
+
+
 def _page_bounds(limit: int | None, offset: int) -> tuple[int | None, int]:
     if isinstance(limit, bool) or (limit is not None and not isinstance(limit, int)):
         raise ValueError("limit must be a non-negative integer")
@@ -111,7 +128,13 @@ class NodeLog:
         self,
         rows: list[tuple[str, int | None, dict, str, str, int]],
     ) -> None:
-        """Store every row in one transaction. A failure rolls the batch back."""
+        """Store every row in one transaction. A failure rolls the batch back.
+
+        Two different payloads for one slot in this batch raise
+        SlotConflictError before the insert, and nothing from the batch
+        is kept.
+        """
+        seen: dict[tuple[Any, ...], str] = {}
         with self._lock:
             try:
                 for kind, step_n, payload, trajectory_id, tenant_id, seq in rows:
@@ -123,6 +146,7 @@ class NodeLog:
                         seq=seq,
                         payload=payload,
                     )
+                    reject_same_batch_slot(seen, node)
                     self._insert_open(node)
                 self._conn.commit()
             except Exception:

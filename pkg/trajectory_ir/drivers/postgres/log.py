@@ -27,7 +27,12 @@ import threading
 from typing import Any
 from urllib.parse import parse_qsl, urlparse
 
-from trajectory_ir.runtime.log import NodeNotStoredError, SlotConflictError, _page_bounds
+from trajectory_ir.runtime.log import (
+    NodeNotStoredError,
+    SlotConflictError,
+    _page_bounds,
+    reject_same_batch_slot,
+)
 from trajectory_ir.runtime.nodes import Node
 
 
@@ -173,9 +178,15 @@ class PostgresNodeLog:
         self,
         rows: list[tuple[str, int | None, dict, str, str, int]],
     ) -> None:
-        """Store every row in one transaction. A failure rolls the batch back."""
+        """Store every row in one transaction. A failure rolls the batch back.
+
+        Two different payloads for one slot in this batch raise
+        SlotConflictError before the insert. A lookup after the Postgres
+        rollback cannot see that first row, so the check is in memory.
+        """
         from psycopg.errors import UniqueViolation
 
+        seen: dict[tuple[Any, ...], str] = {}
         with self._lock:
             failed: Node | None = None
             try:
@@ -188,6 +199,7 @@ class PostgresNodeLog:
                         seq=seq,
                         payload=payload,
                     )
+                    reject_same_batch_slot(seen, node)
                     try:
                         self._insert_open(node)
                     except UniqueViolation:
