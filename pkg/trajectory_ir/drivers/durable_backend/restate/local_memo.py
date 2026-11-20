@@ -6,6 +6,9 @@ Mirrors the DBOS adapter contract used by ``make_run_step``:
 * ``durable_infer`` / ``durable_tool`` run the body once per
   (workflow id, step name, args) and return the memoized result on replay
 
+Arguments have to be JSON. The process keeps at most 10000 results and drops
+the least recently used. A call after that drop runs the body again.
+
 This is **not** a production Restate deployment. It exists so:
 
 1. The Restate adapter package is testable without a Restate server
@@ -21,6 +24,7 @@ from __future__ import annotations
 
 import json
 import threading
+from collections import OrderedDict
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -31,8 +35,11 @@ F = TypeVar("F", bound=Callable[..., Any])
 _workflow_id: ContextVar[str] = ContextVar("restate_local_workflow_id", default="")
 _step_seq: ContextVar[int] = ContextVar("restate_local_step_seq", default=0)
 _lock = threading.RLock()
+_MEMO_LIMIT = 10000
+_MISSING = object()
+_ARGS_ERR = "restate local_memo: step arguments must be JSON-serializable"
 # key: (workflow_id, seq, step_kind, step_name, args_json) -> result
-_memo: dict[tuple[str, int, str, str, str], Any] = {}
+_memo: OrderedDict[tuple[str, int, str, str, str], Any] = OrderedDict()
 
 
 def set_workflow_id(workflow_id: str) -> None:
@@ -75,9 +82,65 @@ def init_backend(app_name: str = "trajectory-ir-restate-local") -> None:
     # Intentionally do not clear memo on every init: resume scenarios need it.
 
 
+def _json_value(value: Any, seen: set[int] | None = None) -> Any:
+    if value is None or isinstance(value, (str, int, float)):
+        return value
+    if seen is None:
+        seen = set()
+    if isinstance(value, list):
+        marker = id(value)
+        if marker in seen:
+            raise ValueError(_ARGS_ERR)
+        seen.add(marker)
+        try:
+            return [_json_value(item, seen) for item in value]
+        finally:
+            seen.discard(marker)
+    if isinstance(value, dict):
+        marker = id(value)
+        if marker in seen:
+            raise ValueError(_ARGS_ERR)
+        seen.add(marker)
+        try:
+            encoded: dict[str, Any] = {}
+            for key, item in value.items():
+                if not isinstance(key, str):
+                    raise ValueError(_ARGS_ERR)
+                encoded[key] = _json_value(item, seen)
+            return encoded
+        finally:
+            seen.discard(marker)
+    raise ValueError(_ARGS_ERR)
+
+
 def _args_key(args: tuple[Any, ...], kwargs: dict[str, Any]) -> str:
-    payload = {"args": list(args), "kwargs": kwargs}
-    return json.dumps(payload, sort_keys=True, default=str)
+    payload = {"args": _json_value(list(args)), "kwargs": _json_value(kwargs)}
+    try:
+        return json.dumps(payload, sort_keys=True)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(_ARGS_ERR) from exc
+
+
+def _cached(key: tuple[str, int, str, str, str]) -> Any:
+    with _lock:
+        found = _memo.get(key, _MISSING)
+        if found is _MISSING:
+            return _MISSING
+        _memo.move_to_end(key)
+        return found
+
+
+def _save(key: tuple[str, int, str, str, str], result: Any) -> Any:
+    with _lock:
+        # First writer wins if two threads race the miss path.
+        if key not in _memo:
+            _memo[key] = result
+            limit = _MEMO_LIMIT if _MEMO_LIMIT >= 1 else 1
+            while len(_memo) > limit:
+                _memo.popitem(last=False)
+        else:
+            _memo.move_to_end(key)
+        return _memo[key]
 
 
 def _memoize(step_kind: str, fn: F) -> F:
@@ -90,18 +153,15 @@ def _memoize(step_kind: str, fn: F) -> F:
                 "restate local_memo: workflow id not set; "
                 "call set_workflow_id() or use workflow_scope() before durable steps"
             )
+        args_key = _args_key(args, kwargs)
         seq = _step_seq.get()
         _step_seq.set(seq + 1)
-        key = (wid, seq, step_kind, step_name, _args_key(args, kwargs))
-        with _lock:
-            if key in _memo:
-                return _memo[key]
+        key = (wid, seq, step_kind, step_name, args_key)
+        cached = _cached(key)
+        if cached is not _MISSING:
+            return cached
         result = fn(*args, **kwargs)
-        with _lock:
-            # First writer wins if two threads race the miss path.
-            if key not in _memo:
-                _memo[key] = result
-            return _memo[key]
+        return _save(key, result)
 
     wrapper.__name__ = getattr(fn, "__name__", "wrapped")
     wrapper.__qualname__ = step_name
