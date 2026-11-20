@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import tomllib
 import zipfile
 from pathlib import Path
 
@@ -10,8 +11,10 @@ import pytest
 
 from trajectory_ir.package import (
     PACKAGE_FORMAT_VERSION,
+    RUNTIME_VERSION,
     TirError,
     TirFormatError,
+    TirRuntimeError,
     export_tir,
     load_tir,
     load_tir_unverified,
@@ -92,3 +95,61 @@ def test_bad_format_fields_are_rejected(
     bad = _rewrite(package, tmp_path / "bad.tir", manifest_format, compat_format)
     with pytest.raises(TirFormatError):
         load_tir(bad)
+
+
+def _set_min_runtime(src: Path, dst: Path, value: str | None) -> Path:
+    """Copy src, setting COMPAT.json min_runtime. None deletes the key."""
+
+    def patch(raw: bytes) -> bytes:
+        doc = json.loads(raw)
+        if value is None:
+            doc.pop("min_runtime", None)
+        else:
+            doc["min_runtime"] = value
+        return (json.dumps(doc, indent=2, sort_keys=True) + "\n").encode()
+
+    with zipfile.ZipFile(src) as zin, zipfile.ZipFile(dst, "w", zipfile.ZIP_DEFLATED) as zout:
+        for item in zin.infolist():
+            data = zin.read(item.filename)
+            if item.filename == "COMPAT.json":
+                data = patch(data)
+            zout.writestr(item, data)
+    return dst
+
+
+def test_runtime_version_matches_pyproject() -> None:
+    path = Path(__file__).resolve().parents[2] / "pyproject.toml"
+    with path.open("rb") as handle:
+        doc = tomllib.load(handle)
+    assert doc["project"]["version"] == RUNTIME_VERSION
+
+
+@pytest.mark.parametrize("value", ["99.0.0", "0.3.1", "0.10.0"])
+def test_newer_min_runtime_is_rejected(
+    package: Path, tmp_path: Path, value: str, monkeypatch
+) -> None:
+    bad = _set_min_runtime(package, tmp_path / "future.tir", value)
+    with pytest.raises(TirRuntimeError) as info:
+        load_tir(bad)
+    assert value in str(info.value)
+    assert RUNTIME_VERSION in str(info.value)
+    assert not isinstance(info.value, TirFormatError)
+    monkeypatch.setenv("TRAJIR_ALLOW_UNVERIFIED", "1")
+    with pytest.raises(TirRuntimeError):
+        load_tir_unverified(bad)
+
+
+@pytest.mark.parametrize("value", [RUNTIME_VERSION, "0.2.10", None])
+def test_min_runtime_at_or_below_reader_loads(
+    package: Path, tmp_path: Path, value: str | None
+) -> None:
+    pkg = _set_min_runtime(package, tmp_path / "ok.tir", value)
+    assert len(load_tir(pkg).nodes) == 2
+
+
+@pytest.mark.parametrize("value", ["9.9", "v0.3.0", "0.3.0 "])
+def test_bad_min_runtime_is_rejected(package: Path, tmp_path: Path, value: str) -> None:
+    bad = _set_min_runtime(package, tmp_path / "bad-runtime.tir", value)
+    with pytest.raises(TirRuntimeError) as info:
+        load_tir(bad)
+    assert RUNTIME_VERSION in str(info.value)
