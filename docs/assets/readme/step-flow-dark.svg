@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 286" width="900" height="286" role="img" aria-labelledby="t d">
+  <title id="t">How one agent step is recorded</title>
+  <desc id="d">Five nodes in order: PROJECT_CONTEXT, DECISION (sealed), TOOL_CALL, TOOL_RESULT, COMMIT_STEP. If the process crashes between TOOL_CALL and TOOL_RESULT, resume reuses the sealed plan, the model is not called again, and a non-idempotent tool waits for a person.</desc>
+
+  <style>
+    text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif; fill: #e6edf3; }
+    .mono { font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; }
+    .label { font-size: 11px; font-weight: 600; letter-spacing: 1.2px; fill: #9198a1; }
+    .acc-label { font-size: 11px; font-weight: 700; letter-spacing: 1.2px; fill: #ffa15c; }
+    .chip-t { font-size: 13px; text-anchor: middle; }
+    .h { font-size: 14px; font-weight: 600; text-anchor: middle; }
+    .s { font-size: 11.5px; fill: #9198a1; text-anchor: middle; }
+    .note { font-size: 12px; fill: #9198a1; }
+    .band { fill: #161b22; stroke: #30363d; }
+    .chip { fill: #0d1117; stroke: #3d444d; }
+    .acc { fill: #26170c; stroke: #d9773a; stroke-width: 1.5; }
+    .cell { fill: #0d1117; stroke: #7a431f; }
+    .arrow { stroke: #6e7681; stroke-width: 1.5; fill: none; }
+    .head { fill: #6e7681; }
+  </style>
+
+  <style>
+    .kind { font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 12.5px; font-weight: 700; text-anchor: middle; }
+    .num { font-size: 11px; font-weight: 700; text-anchor: middle; fill: #9198a1; }
+    .numc { fill: #161b22; stroke: #30363d; }
+    .warn-line { stroke: #ff7b72; stroke-width: 1.5; stroke-dasharray: 4 4; fill: none; }
+    .warn-box { fill: #2a1215; stroke: #792e2e; }
+    .warn-t { fill: #ff7b72; font-size: 13px; font-weight: 700; }
+    .body { font-size: 13px; }
+  </style>
+
+  <rect class="band" x="28" y="56" width="148" height="72" rx="10"/><text class="kind" x="102.0" y="87">PROJECT_CONTEXT</text><text class="s" x="102.0" y="108">host builds the context</text>
+  <circle class="numc" cx="102.0" cy="45" r="10"/><text class="num" x="102.0" y="49">1</text>
+  <rect class="acc" x="202" y="56" width="148" height="72" rx="10"/><text class="kind" x="276.0" y="87" style="fill:#ffa15c">DECISION</text><text class="s" x="276.0" y="108">model plan is frozen</text>
+  <rect class="band" x="376" y="56" width="148" height="72" rx="10"/><text class="kind" x="450.0" y="87">TOOL_CALL</text><text class="s" x="450.0" y="108">effect class checked</text>
+  <circle class="numc" cx="450.0" cy="45" r="10"/><text class="num" x="450.0" y="49">3</text>
+  <rect class="band" x="550" y="56" width="148" height="72" rx="10"/><text class="kind" x="624.0" y="87">TOOL_RESULT</text><text class="s" x="624.0" y="108">outcome recorded</text>
+  <circle class="numc" cx="624.0" cy="45" r="10"/><text class="num" x="624.0" y="49">4</text>
+  <rect class="band" x="724" y="56" width="148" height="72" rx="10"/><text class="kind" x="798.0" y="87">COMMIT_STEP</text><text class="s" x="798.0" y="108">step is final</text>
+  <circle class="numc" cx="798.0" cy="45" r="10"/><text class="num" x="798.0" y="49">5</text>
+  <path class="arrow" d="M178 92.0 H193"/><path class="head" d="M192 87.0 L192 97.0 L200 92.0 Z"/>
+  <path class="arrow" d="M352 92.0 H367"/><path class="head" d="M366 87.0 L366 97.0 L374 92.0 Z"/>
+  <path class="arrow" d="M526 92.0 H541"/><path class="head" d="M540 87.0 L540 97.0 L548 92.0 Z"/>
+  <path class="arrow" d="M700 92.0 H715"/><path class="head" d="M714 87.0 L714 97.0 L722 92.0 Z"/>
+
+  <!-- sealed badge -->
+  <rect x="202" y="35" width="148" height="20" rx="10" style="fill:#d9773a"/>
+  <text x="276" y="49" style="font-size:10.5px;font-weight:700;letter-spacing:1px;text-anchor:middle;fill:#ffffff">SEALED BEFORE TOOLS</text>
+
+  <!-- crash callout -->
+  <path class="warn-line" d="M537 104 V178"/>
+  <circle cx="537" cy="88" r="11" style="fill:#ff7b72"/>
+  <path d="M539.5 80.5 l-7 9 h4.5 l-2.5 8 l7.5 -10 h-4.5 z" style="fill:#ffffff"/>
+  <rect class="warn-box" x="150" y="178" width="600" height="92" rx="12"/>
+  <text class="warn-t" x="174" y="206">Process dies between the call and its result?</text>
+  <text class="body" x="174" y="230">Resume reads the sealed plan back. The model is not asked again,</text>
+  <text class="body" x="174" y="250">and a non-idempotent tool waits for a person instead of firing twice.</text>
+</svg>
