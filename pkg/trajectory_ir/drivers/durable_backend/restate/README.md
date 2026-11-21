@@ -46,6 +46,11 @@ with workflow_scope(trajectory_id):
 On a second call with the same workflow id, memoized infer/tool steps return
 prior results without re-executing the function body (R01 spirit).
 
+Step arguments have to be JSON: objects, arrays, strings, numbers, booleans,
+or null. A tuple is not an array. The process keeps at most 10000 of those
+results and drops the least recently used. A call after that drop runs the
+body again.
+
 ## Real Restate cluster (operator sketch)
 
 1. Run Restate server (`restate-server` / Docker image from Restate docs).

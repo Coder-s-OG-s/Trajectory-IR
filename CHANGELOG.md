@@ -33,6 +33,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `SlotConflictError` on both Python logs, including when the second row
   is only in the same batch. This covers the Go SQLite log and both
   Python logs (#534).
+- The Restate dev memo rejects step arguments that are not JSON, so a later
+  pass cannot reuse a result because `str()` of another argument matched.
+  A tuple is not an array, so it is rejected too. The in-process map keeps
+  at most 10000 results and drops the least recently used (#572).
 - A plan whose `tool_calls` cannot run is rejected before `DECISION` is
   appended, and the infer memo does not keep that plan. Missing
   `tool_calls`, a non-list, a call with no name, args that are not an
