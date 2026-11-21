@@ -39,6 +39,9 @@ import (
 // Package format constants match the Python reference.
 const (
 	PackageFormatVersion = "0.1"
+	// RuntimeVersion is this reader. It matches pyproject.toml. A package
+	// min_runtime may be older than this. It must not be newer.
+	RuntimeVersion = "0.3.0"
 
 	MaxZipEntries             = 10_000
 	MaxUncompressedEntryBytes = 32 * 1024 * 1024  // 32 MiB
@@ -81,6 +84,9 @@ var (
 	// ErrFormat means the package names a package_format this reader does
 	// not implement, or the format fields are missing or disagree.
 	ErrFormat = errors.New("tir unsupported format")
+	// ErrRuntime means COMPAT.json min_runtime is newer than this reader,
+	// or the field is present but not MAJOR.MINOR.PATCH.
+	ErrRuntime = errors.New("tir runtime")
 )
 
 // ArtifactRef is one artifact entry for thin or fat packages.
@@ -1110,7 +1116,68 @@ func checkPackageFormat(manifest map[string]any, rawCompat []byte) error {
 		return fmt.Errorf("%w: package_format %s, this reader implements %s",
 			ErrFormat, fromCompat, PackageFormatVersion)
 	}
+	return checkMinRuntime(compat)
+}
+
+// checkMinRuntime rejects a min_runtime this reader is too old to load.
+// A missing field still loads. A present value must be MAJOR.MINOR.PATCH
+// and must not be newer than RuntimeVersion. The error names both versions.
+func checkMinRuntime(compat map[string]any) error {
+	raw, present := compat["min_runtime"]
+	if !present || raw == nil {
+		return nil
+	}
+	value, ok := raw.(string)
+	if !ok || !validRuntimeVersion(value) {
+		return fmt.Errorf("%w: min_runtime %v is not MAJOR.MINOR.PATCH, this reader is %s",
+			ErrRuntime, raw, RuntimeVersion)
+	}
+	if !validRuntimeVersion(RuntimeVersion) {
+		return fmt.Errorf("%w: reader version %q is not MAJOR.MINOR.PATCH", ErrRuntime, RuntimeVersion)
+	}
+	if versionNewer(value, RuntimeVersion) {
+		return fmt.Errorf("%w: min_runtime %s, this reader is %s", ErrRuntime, value, RuntimeVersion)
+	}
 	return nil
+}
+
+func validRuntimeVersion(v string) bool {
+	_, ok := runtimeParts(v)
+	return ok
+}
+
+func runtimeParts(v string) ([3]int, bool) {
+	parts := strings.Split(v, ".")
+	if len(parts) != 3 {
+		return [3]int{}, false
+	}
+	var out [3]int
+	for i, part := range parts {
+		if !allDigits(part) {
+			return [3]int{}, false
+		}
+		n, err := strconv.Atoi(part)
+		if err != nil {
+			return [3]int{}, false
+		}
+		out[i] = n
+	}
+	return out, true
+}
+
+// versionNewer reports whether got is a newer MAJOR.MINOR.PATCH than reader.
+func versionNewer(got, reader string) bool {
+	g, okG := runtimeParts(got)
+	r, okR := runtimeParts(reader)
+	if !okG || !okR {
+		return false
+	}
+	for i := 0; i < 3; i++ {
+		if g[i] != r[i] {
+			return g[i] > r[i]
+		}
+	}
+	return false
 }
 
 // formatMajor returns MAJOR from a "MAJOR.MINOR" string of ASCII digits.

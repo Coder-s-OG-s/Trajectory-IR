@@ -174,7 +174,9 @@ func TestTamperInvalidatesSignature(t *testing.T) {
 		if err := json.Unmarshal(b, &m); err != nil {
 			t.Fatal(err)
 		}
-		m["min_runtime"] = "9.9.9"
+		// Stay inside the versions this reader accepts. A newer min_runtime
+		// fails the runtime check before Load looks at the signature.
+		m["min_runtime"] = "0.1.1"
 		out, err := json.MarshalIndent(m, "", "  ")
 		if err != nil {
 			t.Fatal(err)
