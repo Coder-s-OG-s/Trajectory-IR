@@ -27,6 +27,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `.tir` import writes the package nodes in one database transaction.
+  If a node conflicts, the import rolls back and the log stays as it was.
+  Two different payloads for one slot in that batch raise
+  `SlotConflictError` on both Python logs, including when the second row
+  is only in the same batch. This covers the Go SQLite log and both
+  Python logs (#534).
 - A plan whose `tool_calls` cannot run is rejected before `DECISION` is
   appended, and the infer memo does not keep that plan. Missing
   `tool_calls`, a non-list, a call with no name, args that are not an
