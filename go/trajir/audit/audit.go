@@ -59,6 +59,8 @@ func VerifyFile(path string, opts Options) (*Result, error) {
 			code = "SIGNATURE_REQUIRED"
 		} else if errors.Is(err, tir.ErrFormat) {
 			code = "UNSUPPORTED_FORMAT"
+		} else if errors.Is(err, tir.ErrRuntime) {
+			code = "RUNTIME_TOO_OLD"
 		}
 		return &Result{
 			Path: path,

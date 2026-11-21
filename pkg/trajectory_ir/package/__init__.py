@@ -11,10 +11,12 @@ from trajectory_ir.package.signature import (
 from trajectory_ir.package.tir import (
     COMPAT,
     PACKAGE_FORMAT_VERSION,
+    RUNTIME_VERSION,
     ArtifactRef,
     TirFormatError,
     TirLimitError,
     TirPackage,
+    TirRuntimeError,
     TirVerificationError,
     export_tir,
     import_tir,
@@ -25,6 +27,7 @@ from trajectory_ir.package.tir import (
 __all__ = [
     "COMPAT",
     "PACKAGE_FORMAT_VERSION",
+    "RUNTIME_VERSION",
     "ArtifactRef",
     "SignatureInfo",
     "SignerMeta",
@@ -32,6 +35,7 @@ __all__ = [
     "TirFormatError",
     "TirLimitError",
     "TirPackage",
+    "TirRuntimeError",
     "TirSignatureError",
     "TirVerificationError",
     "export_tir",
