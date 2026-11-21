@@ -11,7 +11,8 @@ import pytest
 pytest.importorskip("psycopg")
 
 from trajectory_ir.drivers.postgres.log import open_postgres_node_log
-from trajectory_ir.runtime.log import SlotConflictError
+from trajectory_ir.package import export_tir, import_tir
+from trajectory_ir.runtime.log import NodeLog, SlotConflictError
 
 pytestmark = pytest.mark.skipif(
     not os.environ.get("TRAJIR_DATABASE_URL"),
@@ -43,6 +44,66 @@ def test_live_slot_conflict(log):
     log.append("DECISION", 1, {"plan": "a"}, traj, "demo", 1)
     with pytest.raises(SlotConflictError):
         log.append("DECISION", 1, {"plan": "b"}, traj, "demo", 1)
+
+
+def test_live_append_many_commits_batch(log):
+    traj = f"live-batch-{uuid.uuid4().hex[:12]}"
+    rows = [
+        ("PROJECT_CONTEXT", 1, {"goal": "batch"}, traj, "demo", 0),
+        ("DECISION", 1, {"plan": "first"}, traj, "demo", 1),
+        ("THOUGHT", 1, {"text": "second"}, traj, "demo", 2),
+    ]
+
+    log.append_many(rows)
+
+    stored = log.list_nodes(traj, tenant_id="demo")
+    assert len(stored) == len(rows)
+    assert [node["seq"] for node in stored] == [0, 1, 2]
+    assert [node["kind"] for node in stored] == ["PROJECT_CONTEXT", "DECISION", "THOUGHT"]
+
+
+def test_live_append_many_rolls_back_conflicting_batch_and_recovers(log):
+    traj = f"live-batch-conflict-{uuid.uuid4().hex[:12]}"
+    log.append("DECISION", 1, {"plan": "existing"}, traj, "demo", 1)
+
+    with pytest.raises(SlotConflictError):
+        log.append_many(
+            [
+                ("PROJECT_CONTEXT", 1, {"goal": "must roll back"}, traj, "demo", 0),
+                ("DECISION", 1, {"plan": "conflicting"}, traj, "demo", 1),
+                ("THOUGHT", 1, {"text": "must not be written"}, traj, "demo", 2),
+            ]
+        )
+
+    after_failure = log.list_nodes(traj, tenant_id="demo")
+    assert len(after_failure) == 1
+    assert after_failure[0]["kind"] == "DECISION"
+    assert after_failure[0]["payload"] == {"plan": "existing"}
+
+    # The failed transaction must not leave the connection in PostgreSQL's
+    # aborted-transaction state.
+    recovered = log.append("THOUGHT", 1, {"text": "connection recovered"}, traj, "demo", 3)
+    assert log.count(recovered.id) == 1
+
+
+def test_live_append_many_is_idempotent_for_reimport(log, tmp_path):
+    traj = f"live-reimport-{uuid.uuid4().hex[:12]}"
+    source = NodeLog(str(tmp_path / "source.sqlite"))
+    try:
+        source.append("PROJECT_CONTEXT", 1, {"goal": "reimport"}, traj, "demo", 0)
+        source.append("DECISION", 1, {"plan": {"tool_calls": []}}, traj, "demo", 1)
+        package = tmp_path / "reimport.tir"
+        export_tir(source, traj, package, mode="thin")
+    finally:
+        source.close()
+
+    import_tir(package, log)
+    first_import = log.list_nodes(traj, tenant_id="demo")
+    import_tir(package, log)
+    second_import = log.list_nodes(traj, tenant_id="demo")
+
+    assert len(first_import) == 2
+    assert [node["id"] for node in second_import] == [node["id"] for node in first_import]
 
 
 def test_live_tenant_isolation(log):

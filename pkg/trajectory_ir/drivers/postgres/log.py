@@ -183,6 +183,11 @@ class PostgresNodeLog:
         Two different payloads for one slot in this batch raise
         SlotConflictError before the insert. A lookup after the Postgres
         rollback cannot see that first row, so the check is in memory.
+
+        Unlike `append`, a concurrent writer that inserts an identical node
+        after this batch's insert attempt can cause PostgreSQL to raise the raw
+        `UniqueViolation`. Callers may safely retry the batch (or package import)
+        after that race; re-importing is idempotent.
         """
         from psycopg.errors import UniqueViolation
 
