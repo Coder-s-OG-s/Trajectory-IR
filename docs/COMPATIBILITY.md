@@ -27,9 +27,13 @@ Anything else fails with `tir.ErrFormat` in Go, `TirFormatError` in Python, and
 `UNSUPPORTED_FORMAT` from `trajir verify`. Every package written by 0.1.0
 through 0.3.0 passes this check.
 
-`min_runtime` is not checked. Neither SDK has a runtime version to compare it
-with, so the spec calls it informational for now
-([#563](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/563)).
+`min_runtime`, when it is present, is checked against reader version `0.3.0`
+(spec 1.13, [#563](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/563)).
+It must be `MAJOR.MINOR.PATCH`. A higher value fails with `tir.ErrRuntime`
+in Go and `TirRuntimeError` in Python. `trajir verify` reports
+`RUNTIME_TOO_OLD`. The error names both versions. Writers still store
+`0.1.0`, which is below `0.3.0`, so current packages load. A package that
+omits the field still loads.
 
 ### Changes that broke earlier data or code
 
@@ -61,10 +65,10 @@ conformance (R09 to R11). Packages signed by one SDK verify in the other.
      scheme, a new required member, or a change in meaning of an existing
      field.
 2. A reader rejects a major version it does not know, and a `min_runtime`
-   newer than itself, with an error that names both versions. The major check
-   is in place since spec 1.12. The `min_runtime` check needs a runtime
-   version in both SDKs that is bumped every release
-   ([#563](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/563)).
+   newer than itself, with an error that names both versions. Both checks
+   are in the code. Go and Python carry runtime version `0.3.0`, the same
+   value as `pyproject.toml`, and that constant has to move when the
+   package version moves. Agreeing the rest of this list is still separate.
 3. A `.tir` written by any release verifies with every later release that
    reads the same major format.
 4. One exception to 3: a fix to hashing or canonicalisation that makes

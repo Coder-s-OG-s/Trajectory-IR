@@ -16,6 +16,35 @@ class NodeNotStoredError(RuntimeError):
     """Raised when an append does not leave this node in the slot."""
 
 
+def reject_same_batch_slot(seen: dict[tuple[Any, ...], str], node: Node) -> None:
+    """Raise when this batch already holds a different payload for the slot.
+
+    The check runs before the insert. Postgres aborts the transaction on a
+    unique violation, and a lookup after that rollback cannot see the first
+    row of this batch.
+    """
+    slot = (node.tenant_id, node.trajectory_id, node.step_n, node.seq, node.kind)
+    prior = seen.get(slot)
+    if prior is not None and prior != node.id:
+        raise SlotConflictError(
+            f"slot conflict trajectory={node.trajectory_id!r} step={node.step_n} "
+            f"seq={node.seq} kind={node.kind!r}: different payload already stored"
+        )
+    seen[slot] = node.id
+
+
+def _page_bounds(limit: int | None, offset: int) -> tuple[int | None, int]:
+    if isinstance(limit, bool) or (limit is not None and not isinstance(limit, int)):
+        raise ValueError("limit must be a non-negative integer")
+    if isinstance(offset, bool) or not isinstance(offset, int):
+        raise ValueError("offset must be a non-negative integer")
+    if limit is not None and limit < 0:
+        raise ValueError("limit must be a non-negative integer")
+    if offset < 0:
+        raise ValueError("offset must be a non-negative integer")
+    return limit, offset
+
+
 class NodeLog:
     """Append-only, content-addressed node log backed by SQLite.
 
@@ -87,42 +116,77 @@ class NodeLog:
             payload=payload,
         )
         with self._lock:
-            self._conn.execute(
-                "INSERT OR IGNORE INTO nodes "
-                "(id, trajectory_id, tenant_id, step_n, seq, kind, payload_json, ts) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (
-                    node.id,
-                    node.trajectory_id,
-                    node.tenant_id,
-                    node.step_n,
-                    node.seq,
-                    node.kind,
-                    json.dumps(node.payload),
-                    node.ts,
-                ),
-            )
-            # INSERT OR IGNORE also swallows unique-slot conflicts. Detect a
-            # different payload occupying this logical slot and fail closed.
-            cur = self._conn.execute(
-                "SELECT id FROM nodes WHERE tenant_id = ? AND trajectory_id = ? "
-                "AND IFNULL(step_n, -1) = IFNULL(?, -1) AND seq = ? AND kind = ?",
-                (tenant_id, trajectory_id, step_n, seq, kind),
-            )
-            row = cur.fetchone()
-            if row is None or row[0] != node.id:
+            try:
+                self._insert_open(node)
+                self._conn.commit()
+            except Exception:
                 self._conn.rollback()
-                if row is not None:
-                    raise SlotConflictError(
-                        f"slot conflict trajectory={trajectory_id!r} step={step_n} "
-                        f"seq={seq} kind={kind!r}: different payload already stored"
-                    )
-                raise NodeNotStoredError(
-                    f"node not stored trajectory={trajectory_id!r} step={step_n} "
-                    f"seq={seq} kind={kind!r}"
-                )
-            self._conn.commit()
+                raise
         return node
+
+    def append_many(
+        self,
+        rows: list[tuple[str, int | None, dict, str, str, int]],
+    ) -> None:
+        """Store every row in one transaction. A failure rolls the batch back.
+
+        Two different payloads for one slot in this batch raise
+        SlotConflictError before the insert, and nothing from the batch
+        is kept.
+        """
+        seen: dict[tuple[Any, ...], str] = {}
+        with self._lock:
+            try:
+                for kind, step_n, payload, trajectory_id, tenant_id, seq in rows:
+                    node = Node(
+                        kind=kind,
+                        trajectory_id=trajectory_id,
+                        tenant_id=tenant_id,
+                        step_n=step_n,
+                        seq=seq,
+                        payload=payload,
+                    )
+                    reject_same_batch_slot(seen, node)
+                    self._insert_open(node)
+                self._conn.commit()
+            except Exception:
+                self._conn.rollback()
+                raise
+
+    def _insert_open(self, node: Node) -> None:
+        self._conn.execute(
+            "INSERT OR IGNORE INTO nodes "
+            "(id, trajectory_id, tenant_id, step_n, seq, kind, payload_json, ts) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                node.id,
+                node.trajectory_id,
+                node.tenant_id,
+                node.step_n,
+                node.seq,
+                node.kind,
+                json.dumps(node.payload),
+                node.ts,
+            ),
+        )
+        # INSERT OR IGNORE also swallows unique-slot conflicts. Detect a
+        # different payload occupying this logical slot and fail closed.
+        cur = self._conn.execute(
+            "SELECT id FROM nodes WHERE tenant_id = ? AND trajectory_id = ? "
+            "AND IFNULL(step_n, -1) = IFNULL(?, -1) AND seq = ? AND kind = ?",
+            (node.tenant_id, node.trajectory_id, node.step_n, node.seq, node.kind),
+        )
+        row = cur.fetchone()
+        if row is None or row[0] != node.id:
+            if row is not None:
+                raise SlotConflictError(
+                    f"slot conflict trajectory={node.trajectory_id!r} step={node.step_n} "
+                    f"seq={node.seq} kind={node.kind!r}: different payload already stored"
+                )
+            raise NodeNotStoredError(
+                f"node not stored trajectory={node.trajectory_id!r} step={node.step_n} "
+                f"seq={node.seq} kind={node.kind!r}"
+            )
 
     def claim_tool_call(
         self,
@@ -245,6 +309,38 @@ class NodeLog:
             cur = self._conn.execute("SELECT COUNT(*) FROM nodes WHERE id = ?", (node_id,))
             return int(cur.fetchone()[0])
 
+    def has_trajectory(self, trajectory_id: str, *, tenant_id: str) -> bool:
+        """True when this tenant has any node on the trajectory."""
+        if not tenant_id:
+            raise ValueError("tenant_id must be a non-empty string")
+        with self._lock:
+            cur = self._conn.execute(
+                "SELECT 1 FROM nodes WHERE trajectory_id = ? AND tenant_id = ? LIMIT 1",
+                (trajectory_id, tenant_id),
+            )
+            return cur.fetchone() is not None
+
+    def get_kind_payload(
+        self,
+        trajectory_id: str,
+        tenant_id: str,
+        step_n: int,
+        kind: str,
+    ) -> dict | None:
+        """Payload of the lowest-seq node of ``kind`` at ``step_n``, or None."""
+        if not tenant_id:
+            raise ValueError("tenant_id must be a non-empty string")
+        if not kind:
+            raise ValueError("kind must be a non-empty string")
+        with self._lock:
+            cur = self._conn.execute(
+                "SELECT payload_json FROM nodes WHERE trajectory_id = ? AND tenant_id = ? "
+                "AND step_n = ? AND kind = ? ORDER BY seq LIMIT 1",
+                (trajectory_id, tenant_id, step_n, kind),
+            )
+            row = cur.fetchone()
+        return json.loads(row[0]) if row is not None else None
+
     def get_node_payload(
         self,
         trajectory_id: str,
@@ -274,6 +370,8 @@ class NodeLog:
         trajectory_id: str,
         *,
         tenant_id: str,
+        limit: int | None = None,
+        offset: int = 0,
     ) -> list[dict[str, Any]]:
         """Return stored nodes for a trajectory ordered by step then seq.
 
@@ -281,10 +379,14 @@ class NodeLog:
         isolation at the read path. Callers that genuinely need rows across
         tenants (e.g. ``export_tir``'s own mixed-tenant check) must use
         ``list_nodes_all_tenants`` explicitly instead.
+
+        ``limit`` and ``offset`` page that order. Omit ``limit`` to read the
+        whole trajectory.
         """
         if not tenant_id:
             raise ValueError("tenant_id must be a non-empty string")
-        return self._list_nodes(trajectory_id, tenant_id=tenant_id)
+        limit, offset = _page_bounds(limit, offset)
+        return self._list_nodes(trajectory_id, tenant_id=tenant_id, limit=limit, offset=offset)
 
     def list_nodes_all_tenants(self, trajectory_id: str) -> list[dict[str, Any]]:
         """Return stored nodes for a trajectory across all tenants.
@@ -300,6 +402,8 @@ class NodeLog:
         trajectory_id: str,
         *,
         tenant_id: str | None,
+        limit: int | None = None,
+        offset: int = 0,
     ) -> list[dict[str, Any]]:
         sql = """
             SELECT id, trajectory_id, tenant_id, step_n, seq, kind, payload_json, ts
@@ -311,6 +415,12 @@ class NodeLog:
             sql += " AND tenant_id = ?"
             params.append(tenant_id)
         sql += " ORDER BY COALESCE(step_n, -1), seq"
+        if limit is not None:
+            sql += " LIMIT ? OFFSET ?"
+            params.extend([limit, offset])
+        elif offset:
+            sql += " LIMIT -1 OFFSET ?"
+            params.append(offset)
         with self._lock:
             cur = self._conn.execute(sql, params)
             rows: list[dict[str, Any]] = []

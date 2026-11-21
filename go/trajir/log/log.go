@@ -69,6 +69,21 @@ ON nodes (trajectory_id, tenant_id);
 	return &NodeLog{db: db}, nil
 }
 
+// AppendItem is one node for AppendMany.
+type AppendItem struct {
+	Kind         string
+	StepN        *int
+	Payload      map[string]any
+	TrajectoryID string
+	TenantID     string
+	Seq          int
+}
+
+type rowQuery interface {
+	Exec(query string, args ...any) (sql.Result, error)
+	QueryRow(query string, args ...any) *sql.Row
+}
+
 // Append builds a node via trajir/nodes and stores it. Same content id is
 // ignored (idempotent replay). Different payload at the same logical slot
 // returns ErrSlotConflict. A missed insert returns ErrNotStored.
@@ -79,25 +94,78 @@ func (l *NodeLog) Append(
 	trajectoryID, tenantID string,
 	seq int,
 ) (*nodes.Node, error) {
-	n, err := nodes.NewNode(kind, trajectoryID, tenantID, stepN, seq, payload)
+	n, payloadJSON, step, err := prepareNode(kind, stepN, payload, trajectoryID, tenantID, seq)
 	if err != nil {
 		return nil, err
 	}
 
-	payloadJSON, err := nodes.MarshalJSON(n.Payload)
-	if err != nil {
-		return nil, fmt.Errorf("marshal payload: %w", err)
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if err := insertNode(l.db, n, payloadJSON, step); err != nil {
+		return nil, err
 	}
+	return n, nil
+}
 
-	var step any
-	if n.StepN != nil {
-		step = *n.StepN
+// AppendMany stores every item in one transaction. If any item fails, the
+// whole batch is rolled back.
+func (l *NodeLog) AppendMany(items []AppendItem) error {
+	if len(items) == 0 {
+		return nil
+	}
+	type ready struct {
+		n           *nodes.Node
+		payloadJSON []byte
+		step        any
+	}
+	built := make([]ready, 0, len(items))
+	for _, it := range items {
+		n, payloadJSON, step, err := prepareNode(it.Kind, it.StepN, it.Payload, it.TrajectoryID, it.TenantID, it.Seq)
+		if err != nil {
+			return err
+		}
+		built = append(built, ready{n: n, payloadJSON: payloadJSON, step: step})
 	}
 
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	tx, err := l.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	for _, item := range built {
+		if err := insertNode(tx, item.n, item.payloadJSON, item.step); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
 
-	res, err := l.db.Exec(
+func prepareNode(
+	kind string,
+	stepN *int,
+	payload map[string]any,
+	trajectoryID, tenantID string,
+	seq int,
+) (*nodes.Node, []byte, any, error) {
+	n, err := nodes.NewNode(kind, trajectoryID, tenantID, stepN, seq, payload)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	payloadJSON, err := nodes.MarshalJSON(n.Payload)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("marshal payload: %w", err)
+	}
+	var step any
+	if n.StepN != nil {
+		step = *n.StepN
+	}
+	return n, payloadJSON, step, nil
+}
+
+func insertNode(q rowQuery, n *nodes.Node, payloadJSON []byte, step any) error {
+	res, err := q.Exec(
 		`INSERT OR IGNORE INTO nodes
 		 (id, trajectory_id, tenant_id, step_n, seq, kind, payload_json, ts)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -111,35 +179,33 @@ func (l *NodeLog) Append(
 		n.TS,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("insert node: %w", err)
+		return fmt.Errorf("insert node: %w", err)
 	}
-
 	rowsAffected, err := res.RowsAffected()
 	if err != nil {
-		return nil, fmt.Errorf("rows affected: %w", err)
+		return fmt.Errorf("rows affected: %w", err)
 	}
 	if rowsAffected == 1 {
-		return n, nil
+		return nil
 	}
-
-	owner, err := l.slotOwner(tenantID, trajectoryID, step, seq, kind)
+	owner, err := slotOwner(q, n.TenantID, n.TrajectoryID, step, n.Seq, n.Kind)
 	if err != nil {
-		return nil, fmt.Errorf("slot owner: %w", err)
+		return fmt.Errorf("slot owner: %w", err)
 	}
 	if owner == n.ID {
-		return n, nil
+		return nil
 	}
 	if owner != "" {
-		return nil, fmt.Errorf("%w: trajectory=%s step=%v seq=%d kind=%s",
-			ErrSlotConflict, trajectoryID, step, seq, kind)
+		return fmt.Errorf("%w: trajectory=%s step=%v seq=%d kind=%s",
+			ErrSlotConflict, n.TrajectoryID, step, n.Seq, n.Kind)
 	}
-	return nil, fmt.Errorf("%w: trajectory=%s step=%v seq=%d kind=%s",
-		ErrNotStored, trajectoryID, step, seq, kind)
+	return fmt.Errorf("%w: trajectory=%s step=%v seq=%d kind=%s",
+		ErrNotStored, n.TrajectoryID, step, n.Seq, n.Kind)
 }
 
-func (l *NodeLog) slotOwner(tenantID, trajectoryID string, step any, seq int, kind string) (string, error) {
+func slotOwner(q rowQuery, tenantID, trajectoryID string, step any, seq int, kind string) (string, error) {
 	var id string
-	err := l.db.QueryRow(
+	err := q.QueryRow(
 		`SELECT id FROM nodes
 		 WHERE tenant_id = ? AND trajectory_id = ?
 		   AND IFNULL(step_n, -1) = IFNULL(?, -1)
@@ -332,12 +398,110 @@ func (l *NodeLog) Count(nodeID string) (int, error) {
 	return n, err
 }
 
+// HasTrajectory reports whether this tenant has any node on the trajectory.
+func (l *NodeLog) HasTrajectory(trajectoryID, tenantID string) (bool, error) {
+	if tenantID == "" {
+		return false, fmt.Errorf("tenantID must be a non-empty string")
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	var one int
+	err := l.db.QueryRow(
+		`SELECT 1 FROM nodes WHERE trajectory_id = ? AND tenant_id = ? LIMIT 1`,
+		trajectoryID, tenantID,
+	).Scan(&one)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// GetKindPayload returns the payload of the lowest-seq node of kind at stepN.
+// found is false when that step has no such node.
+func (l *NodeLog) GetKindPayload(trajectoryID, tenantID string, stepN int, kind string) (map[string]any, bool, error) {
+	if tenantID == "" {
+		return nil, false, fmt.Errorf("tenantID must be a non-empty string")
+	}
+	if kind == "" {
+		return nil, false, fmt.Errorf("kind must be a non-empty string")
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	var payloadJSON string
+	err := l.db.QueryRow(
+		`SELECT payload_json FROM nodes
+		 WHERE trajectory_id = ? AND tenant_id = ? AND step_n = ? AND kind = ?
+		 ORDER BY seq LIMIT 1`,
+		trajectoryID, tenantID, stepN, kind,
+	).Scan(&payloadJSON)
+	if err == sql.ErrNoRows {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	payload, err := nodes.DecodePayloadJSON(payloadJSON)
+	if err != nil {
+		return nil, false, err
+	}
+	return payload, true, nil
+}
+
+// CountByKind returns how many nodes of each kind this tenant has on the trajectory.
+func (l *NodeLog) CountByKind(trajectoryID, tenantID string) (map[string]int, error) {
+	if tenantID == "" {
+		return nil, fmt.Errorf("tenantID must be a non-empty string")
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	rows, err := l.db.Query(
+		`SELECT kind, COUNT(*) FROM nodes WHERE trajectory_id = ? AND tenant_id = ? GROUP BY kind`,
+		trajectoryID, tenantID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := map[string]int{}
+	for rows.Next() {
+		var kind string
+		var n int
+		if err := rows.Scan(&kind, &n); err != nil {
+			return nil, err
+		}
+		out[kind] = n
+	}
+	return out, rows.Err()
+}
+
 // ListNodes returns nodes for a trajectory scoped to tenantID. tenantID is
 // required so this method always enforces tenant isolation at the read path.
 // Callers that genuinely need rows across tenants (e.g. tir.Export's own
 // mixed-tenant check) must use ListNodesAllTenants explicitly instead.
 func (l *NodeLog) ListNodes(trajectoryID, tenantID string) ([]map[string]any, error) {
-	return l.listNodes(trajectoryID, &tenantID)
+	return l.listNodes(trajectoryID, &tenantID, nil, 0)
+}
+
+// ListNodesPage returns one page of ListNodes. limit and offset follow the
+// same step-then-seq order. limit 0 is an empty page.
+func (l *NodeLog) ListNodesPage(trajectoryID, tenantID string, limit, offset int) ([]map[string]any, error) {
+	if tenantID == "" {
+		return nil, fmt.Errorf("tenantID must be a non-empty string")
+	}
+	if limit < 0 {
+		return nil, fmt.Errorf("limit must be a non-negative integer")
+	}
+	if offset < 0 {
+		return nil, fmt.Errorf("offset must be a non-negative integer")
+	}
+	return l.listNodes(trajectoryID, &tenantID, &limit, offset)
 }
 
 // ListNodesAllTenants returns nodes for a trajectory across all tenants.
@@ -345,10 +509,10 @@ func (l *NodeLog) ListNodes(trajectoryID, tenantID string) ([]map[string]any, er
 // performs its own tenant-scoping check on the result, such as tir.Export
 // detecting a trajectory with mixed tenant_id values.
 func (l *NodeLog) ListNodesAllTenants(trajectoryID string) ([]map[string]any, error) {
-	return l.listNodes(trajectoryID, nil)
+	return l.listNodes(trajectoryID, nil, nil, 0)
 }
 
-func (l *NodeLog) listNodes(trajectoryID string, tenantID *string) ([]map[string]any, error) {
+func (l *NodeLog) listNodes(trajectoryID string, tenantID *string, limit *int, offset int) ([]map[string]any, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -360,6 +524,13 @@ func (l *NodeLog) listNodes(trajectoryID string, tenantID *string) ([]map[string
 		args = append(args, *tenantID)
 	}
 	q += ` ORDER BY COALESCE(step_n, -1), seq`
+	if limit != nil {
+		q += ` LIMIT ? OFFSET ?`
+		args = append(args, *limit, offset)
+	} else if offset > 0 {
+		q += ` LIMIT -1 OFFSET ?`
+		args = append(args, offset)
+	}
 
 	rows, err := l.db.Query(q, args...)
 	if err != nil {

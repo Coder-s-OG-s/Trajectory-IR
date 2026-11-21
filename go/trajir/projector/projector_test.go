@@ -24,6 +24,47 @@ func node(id, kind string, payload map[string]any, seq int) map[string]any {
 	}
 }
 
+func TestNodeSizeUnitsRemembersSHA256ID(t *testing.T) {
+	id := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	record := map[string]any{
+		"id":      id,
+		"kind":    "THOUGHT",
+		"payload": map[string]any{"text": "a"},
+	}
+	first, err := projector.NodeSizeUnits(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	record["payload"] = map[string]any{"text": strings.Repeat("b", 80)}
+	second, err := projector.NodeSizeUnits(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second != first {
+		t.Fatalf("cached %d, got %d", first, second)
+	}
+}
+
+func TestNodeSizeUnitsMeasuresFixtureIDsAgain(t *testing.T) {
+	record := map[string]any{
+		"id":      "c1",
+		"kind":    "THOUGHT",
+		"payload": map[string]any{"text": "a"},
+	}
+	first, err := projector.NodeSizeUnits(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	record["payload"] = map[string]any{"text": strings.Repeat("b", 80)}
+	second, err := projector.NodeSizeUnits(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second == first {
+		t.Fatal("fixture id was cached")
+	}
+}
+
 func TestConstraintsIncludedUnderBudget(t *testing.T) {
 	nodes := []map[string]any{
 		node("c1", "CONSTRAINT", map[string]any{"rule": "a"}, 0),

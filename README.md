@@ -53,6 +53,8 @@ Trajectory IR is a small library that keeps that record properly. It:
 > [!NOTE]
 > Trajectory IR sits **on top of** durable execution engines such as Temporal, DBOS, and Restate. It does not replace them, and it is not another agent framework.
 
+New here? The [audit walkthrough](docs/AUDIT_WALKTHROUGH.md) records an agent run, verifies it offline, and shows an edited copy failing. About ten minutes, no API key.
+
 ## Why it exists
 
 Crash replay is already the job of Temporal, DBOS, and Restate. What they do not give you is a portable, hash-verifiable record of what the agent decided and invoked, with agent-shaped policy on top. Three gaps keep showing up in production agent stacks:
@@ -277,6 +279,7 @@ website/        MkDocs docs site and demo runbook
 | [USERS.md](USERS.md) | Setup and daily use: install, agents, MCP, console, storage |
 | [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) | Host and backend integration notes |
 | [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) | What stays stable across releases (proposal) |
+| [docs/AUDIT_WALKTHROUGH.md](docs/AUDIT_WALKTHROUGH.md) | Record a run, verify it, tamper with it, sign it |
 | [docs/PERFORMANCE.md](docs/PERFORMANCE.md) | Benchmarks and how to rerun them |
 | [docs/ROADMAP.md](docs/ROADMAP.md) · [CHANGELOG.md](CHANGELOG.md) · [docs/RELEASE.md](docs/RELEASE.md) | Where the project is going, what shipped, how releases are cut |
 | [website/](website/README.md) | Docs site source, demos, and the speaker runbook |

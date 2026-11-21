@@ -397,12 +397,12 @@ def resume(
         mode=normalize_run_mode(mode),
     )
     try:
-        nodes = traj._log.list_nodes(trajectory_id, tenant_id=tenant_id)
+        found = traj._log.has_trajectory(trajectory_id, tenant_id=tenant_id)
     except Exception:
         traj.close()
         raise
 
-    if not nodes:
+    if not found:
         traj.close()
         raise ValueError(
             f"cannot resume trajectory_id={trajectory_id!r}: no existing nodes "

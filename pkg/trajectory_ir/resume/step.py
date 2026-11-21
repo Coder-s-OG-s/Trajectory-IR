@@ -115,7 +115,15 @@ def _tool_calls_from_plan(plan: dict) -> list[tuple[str, dict]]:
     return calls
 
 
-def _storable_model_call(model_call):
+def _executable_calls(plan: dict, tool_registry) -> list[tuple[str, dict]]:
+    calls = _tool_calls_from_plan(plan)
+    for name, _args in calls:
+        if name not in tool_registry:
+            raise ValueError(f'resume: unknown tool "{name}"')
+    return calls
+
+
+def _storable_model_call(model_call, tool_registry):
     def call(context):
         plan = model_call(context)
         if not isinstance(plan, dict):
@@ -124,6 +132,7 @@ def _storable_model_call(model_call):
             reject_unsafe_integers(decision_payload(plan))
         except UnsafeInteger as exc:
             raise UnsafePlan(str(exc)) from None
+        _executable_calls(plan, tool_registry)
         return plan
 
     call.__name__ = getattr(model_call, "__name__", "model_call")
@@ -184,8 +193,9 @@ def make_run_step(
         # durable_infer here, a crash after this line but before the DECISION
         # is sealed would cause the backend to re-invoke model_call on resume even
         # though its output would be discarded once replay reaches DECISION.
-        infer = durable_infer(_storable_model_call(model_call))
+        infer = durable_infer(_storable_model_call(model_call, tool_registry))
         plan = _require_plan_object(infer(context))
+        calls = _executable_calls(plan, tool_registry)
 
         # append() is idempotent by content, so this doubles as the "seal":
         # replaying it after a crash produces the same node id and is a no-op
@@ -221,11 +231,8 @@ def make_run_step(
                 observe_world(),
             )
 
-        calls = _tool_calls_from_plan(plan)
         results = []
         for i, (name, args) in enumerate(calls):
-            if name not in tool_registry:
-                raise ValueError(f'resume: unknown tool "{name}"')
             tool = tool_registry[name]
             # Two slots per tool call: TOOL_CALL at `seq`, its outcome
             # (TOOL_RESULT or ABORT) at `seq + 1`. Stride 1 would make tool i's
