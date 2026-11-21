@@ -47,6 +47,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `SlotConflictError` on both Python logs, including when the second row
   is only in the same batch. This covers the Go SQLite log and both
   Python logs (#534).
+- `trajectory_export_tir` treats `dest` as a path relative to `work_dir`.
+  The tool description says so and gives `out.tir` as the example. A dest
+  that repeats `work_dir`, such as `sub/agent/out.tir` when `work_dir` is
+  `sub/agent`, is rejected and the error says to pass `out.tir`. When dest
+  is exactly the work_dir path, the example is `out.tir` as well, so the
+  caller is not told to retry the same path. A missing parent directory
+  inside `work_dir` is created. A longer name such as `sub/agent-extra`
+  is left alone (#535).
 - A plan whose `tool_calls` cannot run is rejected before `DECISION` is
   appended, and the infer memo does not keep that plan. Missing
   `tool_calls`, a non-list, a call with no name, args that are not an
