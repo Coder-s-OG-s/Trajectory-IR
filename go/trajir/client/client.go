@@ -342,9 +342,6 @@ func (t *Trajectory) RunStep(
 // Log exposes the underlying NodeLog for advanced tests.
 func (t *Trajectory) Log() *nodelog.NodeLog { return t.log }
 
-// Backend exposes the durable backend for advanced tests.
-func (t *Trajectory) Backend() durable.Backend { return t.backend }
-
 // checkSQLitePath refuses a sqlite file, or one of the sidecars SQLite creates
 // beside it, that is a symlink: SQLite would otherwise write through the link.
 // A path derived from workDir must also resolve inside it. An explicit override
