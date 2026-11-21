@@ -1037,6 +1037,7 @@ func ImportWithOptions(path string, nodeLog *nodelog.NodeLog, opts ImportOptions
 	if err != nil {
 		return nil, err
 	}
+	items := make([]nodelog.AppendItem, 0, len(pkg.Nodes))
 	for _, n := range pkg.Nodes {
 		kind, _ := asString(n["kind"])
 		traj, _ := asString(n["trajectory_id"])
@@ -1064,9 +1065,17 @@ func ImportWithOptions(path string, nodeLog *nodelog.NodeLog, opts ImportOptions
 				ErrVerification, node.ID, wantID,
 			)
 		}
-		if _, err := nodeLog.Append(kind, stepN, payload, traj, tenant, seq); err != nil {
-			return nil, err
-		}
+		items = append(items, nodelog.AppendItem{
+			Kind:         kind,
+			StepN:        stepN,
+			Payload:      payload,
+			TrajectoryID: traj,
+			TenantID:     tenant,
+			Seq:          seq,
+		})
+	}
+	if err := nodeLog.AppendMany(items); err != nil {
+		return nil, err
 	}
 	return pkg, nil
 }
