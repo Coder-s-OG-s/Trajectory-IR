@@ -18,6 +18,17 @@ def log():
     os.remove(path)
 
 
+def test_append_many_same_batch_is_slot_conflict(log):
+    with pytest.raises(SlotConflictError):
+        log.append_many(
+            [
+                ("DECISION", 1, {"plan": "a"}, "t1", "demo", 1),
+                ("DECISION", 1, {"plan": "b"}, "t1", "demo", 1),
+            ]
+        )
+    assert log.list_nodes("t1", tenant_id="demo") == []
+
+
 def test_append_then_has(log):
     log.append(
         "DECISION",
