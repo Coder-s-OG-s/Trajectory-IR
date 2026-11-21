@@ -48,6 +48,8 @@ _logger = logging.getLogger("trajectory_ir.package.tir")
 PackageMode = Literal["thin", "fat"]
 
 PACKAGE_FORMAT_VERSION = "0.1"
+# This reader. Keep it equal to the version in pyproject.toml.
+RUNTIME_VERSION = "0.3.0"
 COMPAT = {
     "package_format": PACKAGE_FORMAT_VERSION,
     "min_runtime": "0.1.0",
@@ -88,6 +90,10 @@ class TirFormatError(TirError):
     """Raised when a package names a package_format this reader does not implement."""
 
 
+class TirRuntimeError(TirError):
+    """Raised when COMPAT.json min_runtime is newer than this reader."""
+
+
 def _format_major(value: str) -> int | None:
     """Return MAJOR from a ``"MAJOR.MINOR"`` string of ASCII digits, else None."""
     major, sep, minor = value.partition(".")
@@ -126,6 +132,42 @@ def _check_package_format(manifest: Any, compat_raw: bytes) -> None:
         raise TirFormatError(
             f"package_format {from_compat}, this reader implements {PACKAGE_FORMAT_VERSION}"
         )
+    if isinstance(compat, dict):
+        _check_min_runtime(compat)
+
+
+def _runtime_parts(value: str) -> tuple[int, int, int] | None:
+    """Return MAJOR, MINOR, PATCH from ASCII digits, else None."""
+    parts = value.split(".")
+    if len(parts) != 3:
+        return None
+    nums: list[int] = []
+    for part in parts:
+        if not part or len(part) > 9 or not all("0" <= c <= "9" for c in part):
+            return None
+        nums.append(int(part))
+    return nums[0], nums[1], nums[2]
+
+
+def _check_min_runtime(compat: dict[str, Any]) -> None:
+    """Reject a min_runtime newer than this reader.
+
+    A missing field still loads. A present value must be MAJOR.MINOR.PATCH.
+    The error names both versions.
+    """
+    if "min_runtime" not in compat or compat["min_runtime"] is None:
+        return
+    raw = compat["min_runtime"]
+    got = _runtime_parts(raw) if isinstance(raw, str) else None
+    reader = _runtime_parts(RUNTIME_VERSION)
+    if reader is None:
+        raise TirRuntimeError(f"reader version {RUNTIME_VERSION!r} is not MAJOR.MINOR.PATCH")
+    if got is None:
+        raise TirRuntimeError(
+            f"min_runtime {raw!r} is not MAJOR.MINOR.PATCH, this reader is {RUNTIME_VERSION}"
+        )
+    if got > reader:
+        raise TirRuntimeError(f"min_runtime {raw}, this reader is {RUNTIME_VERSION}")
 
 
 @dataclass(frozen=True)
@@ -722,6 +764,7 @@ def import_tir(
         ensure_artifacts_in_cas(cas, list(pkg.artifacts_manifest))
         if rehydrate:
             pkg.artifact_bytes = rehydrate_artifacts(cas, list(pkg.artifacts_manifest))
+    pending: list[tuple[Any, ...]] = []
     for n in pkg.nodes:
         node = Node(
             kind=n["kind"],
@@ -734,14 +777,22 @@ def import_tir(
         )
         if node.id != n["id"]:
             raise TirVerificationError(f"rebuilt node id {node.id} != package id {n['id']}")
-        node_log.append(
-            node.kind,
-            node.step_n,
-            node.payload,
-            node.trajectory_id,
-            node.tenant_id,
-            node.seq,
+        pending.append(
+            (
+                node.kind,
+                node.step_n,
+                node.payload,
+                node.trajectory_id,
+                node.tenant_id,
+                node.seq,
+            )
         )
+    write_many = getattr(node_log, "append_many", None)
+    if write_many is not None:
+        write_many(pending)
+    else:
+        for kind, step_n, payload, trajectory_id, tenant_id, seq in pending:
+            node_log.append(kind, step_n, payload, trajectory_id, tenant_id, seq)
     if on_imported is not None:
         member_count = 0
         size = 0
