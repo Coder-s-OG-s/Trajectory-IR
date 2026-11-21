@@ -105,7 +105,7 @@ A missing class or an unknown tool name is `NON_IDEMPOTENT_WRITE`. So are open-w
 
 ## Quick start
 
-**You need:** Go 1.26.11 and Git. No services, no API keys.
+**You need:** Go 1.26.0 or newer and Git. No services, no API keys. With the default `GOTOOLCHAIN=auto`, the first build downloads the pinned 1.26.11 toolchain once.
 
 ```bash
 git clone https://github.com/Coder-s-OG-s/Trajectory-IR.git

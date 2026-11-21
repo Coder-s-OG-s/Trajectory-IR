@@ -8,7 +8,7 @@ Phase 1B default path is **Go**. Full detail lives in the repo:
 
 ## Prerequisites
 
-- Go 1.22+ (repo CI tracks current stable)
+- Go 1.26.0 or newer (`go/go.mod` pins `toolchain go1.26.11`, downloaded on first build with the default `GOTOOLCHAIN=auto`)
 - Git clone of [Coder-s-OG-s/Trajectory-IR](https://github.com/Coder-s-OG-s/Trajectory-IR)
 
 ## First success (under 15 minutes)
