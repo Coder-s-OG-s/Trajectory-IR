@@ -5,7 +5,7 @@ The current release is v0.3.0.
 
 ## Prerequisites
 
-- Go **1.26.11** (see `go/go.mod`)
+- Go **1.26.0** or newer. `go/go.mod` says `go 1.26.0` and pins `toolchain go1.26.11`; with the default `GOTOOLCHAIN=auto` Go downloads that toolchain on the first build. CI builds on 1.26.11.
 - Git
 
 Optional later: Docker Postgres/MinIO/Temporal for live drivers

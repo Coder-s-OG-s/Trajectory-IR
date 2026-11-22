@@ -13,7 +13,7 @@ to field map is [ARTICLE_12_FIELD_MAP.md](ARTICLE_12_FIELD_MAP.md).
 
 ## 1. Set up
 
-You need Git, Go 1.26 and Python 3.11+.
+You need Git, Go 1.26.0 or newer and Python 3.11+.
 
 ```bash
 git clone https://github.com/Coder-s-OG-s/Trajectory-IR.git
@@ -187,9 +187,10 @@ with `BLOCKED_NEEDS_GATE` instead of running again.
 The one-step attach in [EVIDENCE_SIDECAR.md](EVIDENCE_SIDECAR.md#one-step-claude-attach-local)
 sets up the hooks and the `trajectory-ir` MCP server for a worktree. After a
 session, export with the MCP tool `trajectory_export_tir`. Pass `dest` as a
-path relative to `work_dir`; a path that repeats `work_dir` currently fails
-([#535](https://github.com/Coder-s-OG-s/Trajectory-IR/issues/535)). Then run
-`trajir verify` on the result as in step 3.
+path relative to `work_dir`, for example `out.tir`. A missing parent folder
+inside `work_dir` is created. A `dest` that repeats `work_dir` is rejected,
+and the error says what to pass instead. Then run `trajir verify` on the
+result as in step 3.
 
 ## What this does not prove
 
