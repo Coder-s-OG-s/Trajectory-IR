@@ -14,13 +14,28 @@ go test ./trajir/client -run '^$' -bench Step -benchmem -benchtime=1000x -count=
 go test ./trajir/tir    -run '^$' -bench .    -benchmem -count=3
 ```
 
+Postgres NodeLog, with the live stack from
+[LIVE_INTEGRATION_DOCKER.md](LIVE_INTEGRATION_DOCKER.md) running:
+
+```bash
+export TRAJIR_DATABASE_URL=postgresql://trajir:trajir@127.0.0.1:5432/trajir
+go test ./trajir/postgres -run '^$' -bench . -benchmem -benchtime=1000x -count=4
+```
+
+Without `TRAJIR_DATABASE_URL` the Postgres benchmarks skip. With `1000x` the
+1,000 step read takes a few minutes per count.
+
 Use a fixed `-benchtime` for `BenchmarkStep`. Every step syncs SQLite to
 disk, and with Go's automatic iteration ramp the result swung between 8 ms and
 26 ms per step across three runs on the machine below. With `1000x` it stayed
 between 4.5 and 5.0 ms.
 
-The benchmarks live in `go/trajir/client/bench_test.go` and
-`go/trajir/tir/bench_test.go`.
+The benchmarks live in `go/trajir/client/bench_test.go`,
+`go/trajir/tir/bench_test.go` and `go/trajir/postgres/bench_test.go`.
+
+Close Docker Desktop and other heavy programs before the SQLite runs. With
+the Docker VM running on the machine below, export and verify came out up to
+three times slower and swung a lot between runs.
 
 ## What one step is
 
@@ -31,18 +46,18 @@ repeated string.
 
 ## Results
 
-Measured 2026-11-15 on `main` at `0454488`, Go 1.26.11.
+Measured 2026-11-22 on `main` at `96bee7b`, Go 1.26.11, Docker stopped.
 
 Machine: Intel Core i7-13650HX, 16 GB RAM, SSD, Windows 11. Median of the
 runs.
 
 | Benchmark | 100 steps | 1,000 steps |
 |---|---|---|
-| Step (one full step, any length) | 4.6 ms | 4.6 ms |
-| Export (thin) | 21 ms | 156 ms |
+| Step (one full step, any length) | 4.7 ms | 4.7 ms |
+| Export (thin) | 25 ms | 167 ms |
 | Package size | 96 KB | 938 KB |
-| Verify (what `trajir verify` runs) | 9.3 ms | 80 ms |
-| Import | 480 ms | 4.6 s |
+| Verify (what `trajir verify` runs) | 12 ms | 89 ms |
+| Import | 28 ms | 223 ms |
 
 Step cost does not grow with trajectory length: 100 and 1,000 step runs give
 the same per step time. Next to a model call that takes seconds, recording is
@@ -50,17 +65,40 @@ small.
 
 Export and verify scale roughly linearly.
 
-Import is the slow part on `main`. It commits each node separately, about
-1 ms per node on this machine (five nodes per step). Pull request
-[#554](https://github.com/Coder-s-OG-s/Trajectory-IR/pull/554) writes the
-whole package in one transaction. The same import benchmark on that branch
-(`85f2cbd`) gave 25 ms for 100 steps and 218 ms for 1,000. Update this table
-when it merges.
+Import writes the whole package in one transaction since
+[#554](https://github.com/Coder-s-OG-s/Trajectory-IR/pull/554). Before that
+it committed each node separately and took 480 ms for 100 steps and 4.6 s
+for 1,000 on this machine (`0454488`).
+
+### Postgres NodeLog
+
+Measured 2026-11-22 at `96bee7b` against `postgres:16.6` from
+`docker-compose.live.yml`, in Docker Desktop on the same Windows machine.
+Median of four runs, `-benchtime=1000x`.
+
+| Benchmark | Result |
+|---|---|
+| Append, one node | 4.7 ms |
+| The five nodes of one step | 21.5 ms |
+| Read a 100 step trajectory (`ListNodes`, 500 rows) | 5.6 ms |
+| Read a 1,000 step trajectory (5,000 rows) | 49 ms |
+
+One of the four 1,000 step read runs is left out. It reported 29 s per read
+because the machine went to sleep during it.
+
+These are NodeLog calls only. The Go client and `tir.Import` still run on the
+SQLite log, so there is no Postgres step, export or import number yet. Each
+Go `Append` is its own transaction (begin, savepoint, insert, slot check,
+commit), so one node is about five round trips and a step about 25. The
+connection goes through Docker Desktop's VM, which adds latency to each round
+trip, so expect different numbers from a Postgres on a Linux host. Do not
+compare these directly with the SQLite table.
 
 ## Not measured yet
 
-- Postgres NodeLog and S3 CAS. They need the live Docker stack from
-  [LIVE_INTEGRATION_DOCKER.md](LIVE_INTEGRATION_DOCKER.md).
+- Postgres step, export and import, and S3 CAS. They need the live Docker
+  stack from [LIVE_INTEGRATION_DOCKER.md](LIVE_INTEGRATION_DOCKER.md).
+- Postgres on a Linux host instead of Docker Desktop.
 - Temporal backend.
 - Linux and macOS. SQLite sync cost differs a lot between filesystems.
 - Fat packages with artifact bytes.
