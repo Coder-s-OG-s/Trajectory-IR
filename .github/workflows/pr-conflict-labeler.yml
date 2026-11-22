@@ -1,0 +1,108 @@
+name: PR Conflict Labeler
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches:
+      - main
+  pull_request_target:
+    types: [opened, reopened, synchronize]
+
+concurrency:
+  group: ${{ github.event_name == 'push' && 'pr-conflict-main' || format('pr-conflict-{0}', github.event.pull_request.number) }}
+  cancel-in-progress: true
+
+jobs:
+  label-conflicts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Re-evaluate merge conflicts
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const CONFLICT_LABEL = 'Merge conflict';
+            const { owner, repo } = context.repo;
+            const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+            async function evaluatePR(pullNumber) {
+              let prData = null;
+
+              for (let attempt = 1; attempt <= 3; attempt++) {
+                const { data } = await github.rest.pulls.get({
+                  owner,
+                  repo,
+                  pull_number: pullNumber,
+                });
+                prData = data;
+                if (prData.mergeable !== null) {
+                  break;
+                }
+                core.info(`PR #${pullNumber} mergeable status is pending; waiting 5s (attempt ${attempt}/3)...`);
+                await sleep(5000);
+              }
+
+              if (prData.state !== 'open') {
+                core.info(`PR #${pullNumber} is no longer open (state: ${prData.state}). Skipping.`);
+                return;
+              }
+
+              if (prData.mergeable === null) {
+                core.warning(`PR #${pullNumber} mergeability could not be resolved. Skipping.`);
+                return;
+              }
+
+              const hasConflict = prData.mergeable === false || prData.mergeable_state === 'dirty';
+              const hasLabel = (prData.labels || []).some((l) => l.name === CONFLICT_LABEL);
+
+              if (hasConflict && !hasLabel) {
+                core.info(`Adding '${CONFLICT_LABEL}' to PR #${pullNumber}.`);
+                await github.rest.issues.addLabels({
+                  owner,
+                  repo,
+                  issue_number: pullNumber,
+                  labels: [CONFLICT_LABEL],
+                });
+              } else if (!hasConflict && hasLabel) {
+                core.info(`Removing '${CONFLICT_LABEL}' from PR #${pullNumber}.`);
+                try {
+                  await github.rest.issues.removeLabel({
+                    owner,
+                    repo,
+                    issue_number: pullNumber,
+                    name: CONFLICT_LABEL,
+                  });
+                } catch (err) {
+                  if (err.status !== 404) throw err;
+                }
+              } else {
+                core.info(`PR #${pullNumber} label state is accurate (conflict=${hasConflict}, labeled=${hasLabel}).`);
+              }
+            }
+
+            if (context.eventName === 'pull_request_target') {
+              const pullNumber = context.payload.pull_request.number;
+              core.info(`Triggered by PR #${pullNumber} (${context.payload.action}).`);
+              await evaluatePR(pullNumber);
+            } else {
+              core.info("Triggered by push to main. Checking all open PRs targeting main...");
+              const pulls = await github.paginate(github.rest.pulls.list, {
+                owner,
+                repo,
+                state: 'open',
+                base: 'main',
+                per_page: 50,
+              });
+
+              core.info(`Found ${pulls.length} open PR(s) targeting main.`);
+              for (const pull of pulls) {
+                await evaluatePR(pull.number);
+                await sleep(250); // Throttle API calls against secondary rate limits
+              }
+            }
