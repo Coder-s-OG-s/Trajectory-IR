@@ -11,7 +11,7 @@ on:
     types: [opened, reopened, synchronize]
 
 concurrency:
-  group: ${{ github.event_name == 'push' && 'pr-conflict-main' || format('pr-conflict-{0}', github.event.pull_request.number) }}
+  group: pr-conflict-${{ github.event_name == 'push' && 'main' || github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
@@ -44,8 +44,10 @@ jobs:
                 if (prData.mergeable !== null) {
                   break;
                 }
-                core.info(`PR #${pullNumber} mergeable status is pending; waiting 5s (attempt ${attempt}/3)...`);
-                await sleep(5000);
+                if (attempt < 3) {
+                  core.info(`PR #${pullNumber} mergeable status is pending; waiting 5s (attempt ${attempt}/3)...`);
+                  await sleep(5000);
+                }
               }
 
               if (prData.state !== 'open') {
