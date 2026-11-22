@@ -141,9 +141,9 @@ Fill the right column offline; paste into the GitHub form when ready.
 | **Why CNCF?** | Neutral home for a portable agent IR; alignment with cloud native AI / storage white paper themes; durable execution + K8s ecosystems already live in CNCF-adjacent space; need vendor-neutral format for audit and multi-runtime handoff. |
 | **Benefit to landscape** | Adds **portable semantics** layer missing from engines (Temporal/etc.) and frameworks (checkpoints locked to one runtime). Enables export/import of agent runs (`.tir`) with effect-class safety. |
 | **Cloud native fit** | Stateless libraries + portable packages; integrates with cloud-native durable backends; ops-friendly audit artifact; works in multi-service / multi-cluster agent deployments. |
-| **Cloud native integration** | Complements Temporal (Go durable), DBOS (Python reference), optional Restate; maps MCP tool annotations into effect classes; potential OTel correlation later (trace IDs in nodes—roadmap, not claim as shipped). |
-| **Cloud native overlap** | Overlap is **complementary**: engines provide durability; we do not reimplement crash detection/retry/leases. No claim to replace OTel as telemetry standard. |
-| **Similar projects** | Temporal, Restate, DBOS (engines); LangGraph/CrewAI/ADK checkpoints (framework-local); MCP annotations (tool hints only); Mem0/Zep (memory quality, not trajectory IR). |
+| **Cloud native integration** | Be exact about CNCF projects. Shipped today: OpenTelemetry only, as optional span correlation in the Python integrations (`integrations/otel`), applied after the seal. Temporal, DBOS and Restate are not CNCF projects; say they are backends we run on, not CNCF integrations. Maps MCP tool annotations into effect classes. Candidates, not shipped: a Dapr Workflow backend, and exporting nodes as OpenTelemetry GenAI spans (§7). |
+| **Cloud native overlap** | Name the CNCF projects: **Dapr** (Workflow is a durable execution engine; Dapr Agents is an agent framework built on it) and **OpenTelemetry** (the GenAI semantic conventions define `invoke_agent` and `execute_tool` spans). Overlap is **complementary**: engines provide durability; we do not reimplement crash detection/retry/leases. Telemetry describes a run after the fact; we seal the plan before a tool runs and export a hash-verified package. No claim to replace OTel. See §7. |
+| **Similar projects** | Temporal, Restate, DBOS, Dapr Workflow (engines); Dapr Agents, LangGraph/CrewAI/ADK checkpoints (framework-local); OpenTelemetry GenAI conventions (telemetry, not a verifiable record); MCP annotations (tool hints only); Mem0/Zep (memory quality, not trajectory IR). |
 | **Landscape** | Not listed yet (expected answer until accepted). |
 | **LFX Insights** | Not listed yet unless already enrolled. |
 
@@ -215,7 +215,9 @@ integration paths for Postgres NodeLog and S3-compatible CAS.
 | Temporal / Restate / DBOS | Durability, retry, leases | Reimplement crash engines | Agent seal semantics + portable export |
 | LangGraph / CrewAI / ADK | Framework checkpointing | Be “the” agent framework | Format that can leave the framework |
 | MCP annotations | Tool safety hints | Rival annotation standard | Map into effect classes + resume matrix |
-| OpenTelemetry | Traces/metrics/logs | Replace OTel | Optional correlation of IR nodes later |
+| Dapr Workflow (CNCF, graduated) | Durable workflows: each completed step is persisted and the workflow resumes after a crash | Reimplement Dapr Workflow | Same as for Temporal: seal semantics, effect classes and a portable `.tir` on top. A Dapr Workflow backend is not built yet |
+| Dapr Agents (CNCF, part of Dapr; Python, in development) | Agent framework whose tasks run on Dapr Workflow | Be another agent framework | Format that can leave the framework, as for LangGraph and ADK. No adapter yet |
+| OpenTelemetry, including the GenAI semantic conventions (status: Development) | Traces, metrics, logs; spans for agent and tool calls (`invoke_agent`, `execute_tool`, `gen_ai.tool.call.id`) | Replace OTel or define a rival span schema | A record sealed before the tool runs and checked by hash, which a collector cannot give after the fact. Today the Python integrations only copy OTel span labels after the seal; exporting nodes as GenAI spans is not built |
 | Mem0 / Zep | Long-term memory quality | Compete on recall | Optional LTM node shapes only |
 
 ---
@@ -261,7 +263,7 @@ Optional but strong:
 ### Month 2 — Narrative and TAG touch
 
 - [x] Freeze one-line + 200-word description  
-- [ ] Complete similar/overlap tables with maintainers  
+- [ ] Complete similar/overlap tables with maintainers (Dapr and OpenTelemetry GenAI rows added in §7; maintainers still need to agree them)  
 - [ ] Optional: present to a relevant TAG / Project Reviews voluntary GTR Day 0  
 - [ ] Collect 1–2 adopter or design-partner quotes  
 - [ ] Identify Contribution Agreement signatory  
