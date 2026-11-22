@@ -109,11 +109,10 @@ jobs:
           pip install ".[postgres,s3]"
 
       # CNCF allowlist: permissive licenses only. psycopg/psycopg-binary are
-      # LGPL-3.0-only -- an optional extra, imported as an unmodified library
-      # (never statically linked), which is the standard basis on which
-      # CNCF/ASF-style policy treats LGPL as acceptable. Documented exception,
-      # see docs/THIRD_PARTY_LICENSES.md. Anything else outside this list
-      # (e.g. a future GPL/AGPL/SSPL transitive dependency) fails the build.
+      # LGPL-3.0-only, which is not on the allowlist and has no CNCF
+      # exception yet. They are only in the optional postgres extra and are
+      # skipped here on purpose; docs/THIRD_PARTY_LICENSES.md says how that
+      # is disclosed. Anything else outside this list fails the build.
       - name: Check licenses against CNCF allowlist
         run: |
           pip-licenses \
@@ -146,7 +145,7 @@ jobs:
         working-directory: go
         run: |
           "$(go env GOPATH)/bin/go-licenses" check ./... \
-            --disallowed_types=forbidden \
+            --disallowed_types=forbidden,restricted,reciprocal,unknown \
             --ignore github.com/Coder-s-OG-s/Trajectory-IR/go \
             --ignore modernc.org/mathutil \
             --ignore github.com/nexus-rpc/nexus-proto-annotations
