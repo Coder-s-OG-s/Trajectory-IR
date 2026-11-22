@@ -7,11 +7,14 @@ on:
   push:
     branches:
       - main
+  schedule:
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
   pull_request_target:
     types: [opened, reopened, synchronize]
 
 concurrency:
-  group: pr-conflict-${{ github.event_name == 'push' && 'main' || github.event.pull_request.number }}
+  group: pr-conflict-${{ github.event.pull_request.number || 'main' }}
   cancel-in-progress: true
 
 jobs:
@@ -21,7 +24,6 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
-      issues: write
     steps:
       - name: Re-evaluate merge conflicts
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
@@ -93,7 +95,7 @@ jobs:
               core.info(`Triggered by PR #${pullNumber} (${context.payload.action}).`);
               await evaluatePR(pullNumber);
             } else {
-              core.info("Triggered by push to main. Checking all open PRs targeting main...");
+              core.info(`Triggered by ${context.eventName}. Checking all open PRs targeting main...`);
               const pulls = await github.paginate(github.rest.pulls.list, {
                 owner,
                 repo,
@@ -103,8 +105,18 @@ jobs:
               });
 
               core.info(`Found ${pulls.length} open PR(s) targeting main.`);
+              const failed = [];
               for (const pull of pulls) {
-                await evaluatePR(pull.number);
+                try {
+                  await evaluatePR(pull.number);
+                } catch (err) {
+                  failed.push(pull.number);
+                  core.warning(`PR #${pull.number}: ${err.message}`);
+                }
                 await sleep(250); // Throttle API calls against secondary rate limits
+              }
+
+              if (failed.length > 0) {
+                core.setFailed(`Could not evaluate PR(s): ${failed.join(', ')}`);
               }
             }
