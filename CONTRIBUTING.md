@@ -226,6 +226,24 @@ Community issues (opened by non-maintainers) are automatically labeled with `nee
 Security issues go through private vulnerability reporting (`SECURITY.md`),
 not public issues.
 
+### Picking up a starter issue
+
+1. Look at the
+   [good first issue](https://github.com/Coder-s-OG-s/Trajectory-IR/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
+   and
+   [help wanted](https://github.com/Coder-s-OG-s/Trajectory-IR/issues?q=is%3Aissue+is%3Aopen+label%3A%22help+wanted%22)
+   lists. Skip any issue that already has an assignee.
+2. Comment that you want to take it, and wait for a maintainer to assign it
+   to you before you open a pull request. That way two people do not do the
+   same work.
+3. Ask questions on the issue if the scope is unclear. Keep the change to
+   what the issue asks for.
+4. Open the pull request with `Closes #N`, sign off every commit (section 2),
+   and fill in the AI assistance part of the template if a tool wrote a
+   meaningful share of the change ([AI_POLICY.md](AI_POLICY.md)).
+
+Larger, multi-week ideas are in [docs/MENTORSHIP.md](docs/MENTORSHIP.md).
+
 ## 7. Maintainer note
 
 Enable branch protection on `main` as described in
