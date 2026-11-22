@@ -13,7 +13,7 @@ to field map is [ARTICLE_12_FIELD_MAP.md](ARTICLE_12_FIELD_MAP.md).
 
 ## 1. Set up
 
-You need Git, Go 1.26 and Python 3.11+.
+You need Git, Go 1.26.0 or newer and Python 3.11+.
 
 ```bash
 git clone https://github.com/Coder-s-OG-s/Trajectory-IR.git
