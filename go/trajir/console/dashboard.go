@@ -9,6 +9,7 @@ type DashboardView struct {
 // RunCard is a short, human-facing summary of one trajectory.
 type RunCard struct {
 	TrajectoryID                 string `json:"trajectory_id"`
+	Runtime                      string `json:"runtime,omitempty"`
 	EventCount                   int    `json:"event_count"`
 	NodeCount                    int    `json:"node_count"`
 	LastTS                       string `json:"last_ts,omitempty"`
@@ -46,6 +47,7 @@ func (s *Store) Dashboard() (DashboardView, error) {
 func runCardFrom(sum Summary) RunCard {
 	return RunCard{
 		TrajectoryID:                 sum.TrajectoryID,
+		Runtime:                      sum.Runtime,
 		EventCount:                   sum.EventCount,
 		NodeCount:                    sum.NodeCount,
 		LastTS:                       sum.LastTS,

@@ -8,9 +8,12 @@ import (
 // Summary is the reader rollup for one trajectory (CONSOLE_EVENTS.md §3–§4).
 type Summary struct {
 	TrajectoryID string `json:"trajectory_id"`
-	EventCount   int    `json:"event_count"`
-	NodeCount    int    `json:"node_count"`
-	LastTS       string `json:"last_ts,omitempty"`
+	// Runtime is the host that recorded the run (claude-code, codex, ...),
+	// taken from node and seal events. Export and verify do not relabel it.
+	Runtime    string `json:"runtime,omitempty"`
+	EventCount int    `json:"event_count"`
+	NodeCount  int    `json:"node_count"`
+	LastTS     string `json:"last_ts,omitempty"`
 
 	SealCreatedCount int `json:"seal_created_count"`
 	SealVerifiedOK   int `json:"seal_verified_ok"`
@@ -72,6 +75,10 @@ func Summarize(trajectoryID string, events []Event) Summary {
 		}
 
 		applyProviderUsage(&s, e.Payload)
+
+		if e.Runtime != "" && (e.Kind == KindNodeAppended || e.Kind == KindSealCreated) {
+			s.Runtime = e.Runtime
+		}
 
 		switch e.Kind {
 		case KindNodeAppended:
