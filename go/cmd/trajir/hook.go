@@ -28,6 +28,7 @@ func cmdHook(args []string, c cliIO) int {
 	fs := flag.NewFlagSet("hook", flag.ContinueOnError)
 	fs.SetOutput(c.stderr)
 	host := fs.String("host", "", "agent host: "+fmt.Sprint(hosts.Names()))
+	owner := fs.String("owner", "", "names this hook registration (plugin, project, user) so two registrations of one call are not a replay")
 	if err := fs.Parse(args[1:]); err != nil {
 		return failCode(phase)
 	}
@@ -62,7 +63,7 @@ func cmdHook(args []string, c cliIO) int {
 		WorkDir:      id.WorkDir,
 		TenantID:     id.TenantID,
 		TrajectoryID: id.TrajectoryID,
-		Owner:        c.getenv("TRAJIR_HOOK_OWNER"),
+		Owner:        hookOwner(*owner, c.getenv),
 		Sink:         sink,
 		Runtime:      adapter.Runtime(),
 	}
@@ -117,6 +118,14 @@ func record(s hosthook.Session, phase hosthook.Phase, ev hosthook.Event) error {
 		_, err = s.RecordMatchedResult(ev.ToolName, ev.Args, ev.Result)
 	}
 	return err
+}
+
+// hookOwner is --owner, else TRAJIR_HOOK_OWNER (the Python hooks' variable).
+func hookOwner(flagValue string, getenv func(string) string) string {
+	if flagValue != "" {
+		return flagValue
+	}
+	return getenv("TRAJIR_HOOK_OWNER")
 }
 
 func failCode(phase hosthook.Phase) int {

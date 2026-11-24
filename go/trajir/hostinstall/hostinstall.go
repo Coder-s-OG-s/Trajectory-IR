@@ -104,9 +104,15 @@ func Install(o Options) ([]string, error) {
 	return paths, nil
 }
 
-// hookCommand is the shell command for one phase.
+// hookCommand is the shell command for one phase. --owner names the
+// scope, so a project install, a user install and the Claude Code plugin
+// can all be registered without the second hook looking like a replay.
 func hookCommand(o Options, phase string) string {
-	return quote(o.Command) + " hook " + phase + " --host " + o.Host
+	owner := "project"
+	if o.User {
+		owner = "user"
+	}
+	return quote(o.Command) + " hook " + phase + " --host " + o.Host + " --owner " + owner
 }
 
 func quote(cmd string) string {
@@ -116,9 +122,18 @@ func quote(cmd string) string {
 	return cmd
 }
 
-// ours reports whether a hook command is one this installer wrote.
+// ours reports whether a hook command is one this installer wrote, with or
+// without an --owner.
 func ours(cmd, host string) bool {
-	return strings.Contains(cmd, "trajir") && strings.Contains(cmd, " hook ") && strings.HasSuffix(strings.TrimSpace(cmd), "--host "+host)
+	if !strings.Contains(cmd, "trajir") || !strings.Contains(cmd, " hook ") {
+		return false
+	}
+	for _, field := range strings.Split(cmd, " --host ")[1:] {
+		if name, _, _ := strings.Cut(field, " "); name == host {
+			return true
+		}
+	}
+	return false
 }
 
 func readObject(path string) (map[string]any, error) {

@@ -70,10 +70,10 @@ func TestInstallCodexWritesHooksAndMCP(t *testing.T) {
 	dir := t.TempDir()
 	install(t, hostinstall.Options{Host: "codex", Target: dir})
 	hooks := readJSON(t, filepath.Join(dir, ".codex", "hooks.json"))
-	if got := commands(t, hooks, "PreToolUse"); len(got) != 1 || got[0] != "trajir hook pre --host codex" {
+	if got := commands(t, hooks, "PreToolUse"); len(got) != 1 || got[0] != "trajir hook pre --host codex --owner project" {
 		t.Fatalf("PreToolUse = %v", got)
 	}
-	if got := commands(t, hooks, "PostToolUse"); len(got) != 1 || got[0] != "trajir hook post --host codex" {
+	if got := commands(t, hooks, "PostToolUse"); len(got) != 1 || got[0] != "trajir hook post --host codex --owner project" {
 		t.Fatalf("PostToolUse = %v", got)
 	}
 	toml, err := os.ReadFile(filepath.Join(dir, ".codex", "config.toml"))
@@ -103,7 +103,7 @@ func TestMergeKeepsUserHooks(t *testing.T) {
 		t.Fatalf("other settings lost: %v", cfg)
 	}
 	got := commands(t, cfg, "PreToolUse")
-	if len(got) != 2 || got[0] != "lint.sh" || got[1] != "trajir hook pre --host claude" {
+	if len(got) != 2 || got[0] != "lint.sh" || got[1] != "trajir hook pre --host claude --owner project" {
 		t.Fatalf("PreToolUse = %v", got)
 	}
 	if got := commands(t, cfg, "PostToolUseFailure"); len(got) != 1 {
@@ -121,7 +121,7 @@ func TestRefreshesOwnEntry(t *testing.T) {
 	install(t, hostinstall.Options{Host: "claude", Target: dir, Command: "/old/trajir"})
 	install(t, hostinstall.Options{Host: "claude", Target: dir, Command: "/new path/trajir"})
 	got := commands(t, readJSON(t, filepath.Join(dir, ".claude", "settings.local.json")), "PreToolUse")
-	if len(got) != 1 || got[0] != `"/new path/trajir" hook pre --host claude` {
+	if len(got) != 1 || got[0] != `"/new path/trajir" hook pre --host claude --owner project` {
 		t.Fatalf("PreToolUse = %v", got)
 	}
 }
@@ -145,7 +145,7 @@ func TestCursorShape(t *testing.T) {
 		t.Fatalf("version = %v", cfg["version"])
 	}
 	pre := cfg["hooks"].(map[string]any)["preToolUse"].([]any)[0].(map[string]any)
-	if pre["command"] != "trajir hook pre --host cursor" || pre["failClosed"] != true {
+	if pre["command"] != "trajir hook pre --host cursor --owner project" || pre["failClosed"] != true {
 		t.Fatalf("preToolUse = %v", pre)
 	}
 	if got := commands(t, cfg, "postToolUseFailure"); len(got) != 1 {
@@ -158,7 +158,7 @@ func TestCopilotShape(t *testing.T) {
 	install(t, hostinstall.Options{Host: "copilot", Target: dir})
 	cfg := readJSON(t, filepath.Join(dir, ".github", "hooks", "trajir.json"))
 	pre := cfg["hooks"].(map[string]any)["preToolUse"].([]any)[0].(map[string]any)
-	if pre["bash"] != "trajir hook pre --host copilot" || pre["powershell"] != "& trajir hook pre --host copilot" || pre["type"] != "command" {
+	if pre["bash"] != "trajir hook pre --host copilot --owner project" || pre["powershell"] != "& trajir hook pre --host copilot --owner project" || pre["type"] != "command" {
 		t.Fatalf("preToolUse = %v", pre)
 	}
 }
@@ -168,7 +168,7 @@ func TestGeminiShape(t *testing.T) {
 	write(t, filepath.Join(dir, ".gemini", "settings.json"), `{"mcpServers":{"other":{"command":"x"}}}`)
 	install(t, hostinstall.Options{Host: "gemini", Target: dir})
 	cfg := readJSON(t, filepath.Join(dir, ".gemini", "settings.json"))
-	if got := commands(t, cfg, "BeforeTool"); len(got) != 1 || got[0] != "trajir hook pre --host gemini" {
+	if got := commands(t, cfg, "BeforeTool"); len(got) != 1 || got[0] != "trajir hook pre --host gemini --owner project" {
 		t.Fatalf("BeforeTool = %v", got)
 	}
 	servers := cfg["mcpServers"].(map[string]any)
@@ -199,5 +199,28 @@ func TestUserScopeUsesHome(t *testing.T) {
 func TestUnknownHost(t *testing.T) {
 	if _, err := hostinstall.Install(hostinstall.Options{Host: "nope", Target: t.TempDir(), Command: "trajir"}); err == nil {
 		t.Fatal("unknown host accepted")
+	}
+}
+
+func TestOwnerNamesScope(t *testing.T) {
+	dir := t.TempDir()
+	install(t, hostinstall.Options{Host: "codex", Target: dir})
+	if got := commands(t, readJSON(t, filepath.Join(dir, ".codex", "hooks.json")), "PreToolUse"); got[0] != "trajir hook pre --host codex --owner project" {
+		t.Fatalf("project command = %v", got)
+	}
+	home := t.TempDir()
+	install(t, hostinstall.Options{Host: "codex", User: true, Home: home})
+	if got := commands(t, readJSON(t, filepath.Join(home, ".codex", "hooks.json")), "PreToolUse"); got[0] != "trajir hook pre --host codex --owner user" {
+		t.Fatalf("user command = %v", got)
+	}
+}
+
+func TestRefreshesEntryWrittenWithoutOwner(t *testing.T) {
+	dir := t.TempDir()
+	write(t, filepath.Join(dir, ".codex", "hooks.json"),
+		`{"hooks":{"PreToolUse":[{"matcher":"*","hooks":[{"type":"command","command":"trajir hook pre --host codex"}]}]}}`)
+	install(t, hostinstall.Options{Host: "codex", Target: dir})
+	if got := commands(t, readJSON(t, filepath.Join(dir, ".codex", "hooks.json")), "PreToolUse"); len(got) != 1 {
+		t.Fatalf("PreToolUse = %v", got)
 	}
 }

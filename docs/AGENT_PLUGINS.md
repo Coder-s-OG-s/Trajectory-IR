@@ -44,7 +44,10 @@ file that is not a JSON object stops the install before anything is written.
 Claude Code can also use `trajir install claude` if you would rather not use
 the plugin.
 
-The hooks run `trajir hook <phase> --host <agent>`. When `trajir` is on your
+The hooks run `trajir hook <phase> --host <agent> --owner <scope>`. The owner
+(`plugin`, `project` or `user`) keeps two registrations of the same agent from
+blocking each other: only the same owner asking again for an unfinished call
+counts as a replay. When `trajir` is on your
 `PATH`, the config says `trajir`. Otherwise it holds the absolute path of the
 binary you ran, so don't commit that file.
 
@@ -112,6 +115,10 @@ Override per project in `.trajir/effects.json`:
 Open-world tools (`Bash`, `shell`, `python`, `sql`, `browser`...) cannot be
 made safer here. Trying is an error that blocks tool calls until you fix the
 file.
+
+`effects.json` belongs to the project, so a repo you clone can ship one. It
+can only change replay gating for tools that are not open-world. It never
+skips a seal. Read it before you trust a cloned repo's replay behavior.
 
 ### Agents without a call id
 

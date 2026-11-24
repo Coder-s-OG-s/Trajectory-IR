@@ -322,3 +322,25 @@ func TestInstallCommand(t *testing.T) {
 		t.Fatalf("bare install exit %d", code)
 	}
 }
+
+// The plugin and a project install can both be registered. Each passes its
+// own --owner, so the second pre hook is a duplicate, not a replay.
+func TestTwoRegistrationsDoNotBlock(t *testing.T) {
+	h := newHarness(t)
+	ev := claudeEvent(h, "t1", "Bash", map[string]any{"command": "deploy"}, nil)
+	h.mustRun(ev, "hook", "pre", "--host", "claude", "--owner", "plugin")
+	if code, _, errOut := h.run(ev, "hook", "pre", "--host", "claude", "--owner", "project"); code != 0 {
+		t.Fatalf("second registration blocked: exit %d %s", code, errOut)
+	}
+	if code, _, _ := h.run(ev, "hook", "pre", "--host", "claude", "--owner", "plugin"); code != 2 {
+		t.Fatalf("same owner repeat not blocked: exit %d", code)
+	}
+	post := claudeEvent(h, "t1", "Bash", map[string]any{"command": "deploy"}, map[string]any{"tool_response": "ok"})
+	h.mustRun(post, "hook", "post", "--host", "claude", "--owner", "plugin")
+	if code, _, errOut := h.run(post, "hook", "post", "--host", "claude", "--owner", "project"); code != 0 || errOut != "" {
+		t.Fatalf("second post: exit %d %q", code, errOut)
+	}
+	if c := h.counts("claude", "claude-abc123"); c["TOOL_RESULT"] != 1 || c["DECISION"] != 1 {
+		t.Fatalf("counts = %v", c)
+	}
+}
