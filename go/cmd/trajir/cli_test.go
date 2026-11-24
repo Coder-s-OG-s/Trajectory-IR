@@ -14,13 +14,13 @@ import (
 )
 
 type harness struct {
-	t       *testing.T
+	t       testing.TB
 	project string
 	data    string
 	env     map[string]string
 }
 
-func newHarness(t *testing.T) *harness {
+func newHarness(t testing.TB) *harness {
 	t.Helper()
 	root := t.TempDir()
 	h := &harness{t: t, project: filepath.Join(root, "proj"), data: filepath.Join(root, "console-data")}
