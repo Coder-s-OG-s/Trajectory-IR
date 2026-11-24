@@ -199,7 +199,10 @@
 
   function visibleRuns() {
     const q = (state.query || "").toLowerCase();
-    return (state.runs || []).filter((r) => !q || String(r.trajectory_id).toLowerCase().includes(q));
+    // The search also matches the agent (runtime), so "codex" lists Codex runs.
+    return (state.runs || []).filter(
+      (r) => !q || String(r.trajectory_id).toLowerCase().includes(q) || String(r.runtime || "").toLowerCase().includes(q)
+    );
   }
 
   function pageSizeNow() {
@@ -319,7 +322,8 @@
       btn.dataset.id = run.trajectory_id;
       if (run.trajectory_id === state.id) btn.setAttribute("aria-current", "true");
       const saved = run.tokens_avoided_estimated;
-      btn.innerHTML = `<span class="name">${esc(run.trajectory_id)}</span><span class="meta">${esc(fmt(run.event_count))} events, saved ${esc(fmt(saved))}</span>`;
+      const agent = run.runtime ? `${run.runtime}, ` : "";
+      btn.innerHTML = `<span class="name">${esc(run.trajectory_id)}</span><span class="meta">${esc(agent)}${esc(fmt(run.event_count))} events, saved ${esc(fmt(saved))}</span>`;
       btn.addEventListener("click", () => selectTrajectory(run.trajectory_id));
       list.appendChild(btn);
     });

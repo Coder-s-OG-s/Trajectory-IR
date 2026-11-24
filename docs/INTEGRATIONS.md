@@ -1,6 +1,6 @@
 # Integrations
 
-Trajectory IR connects to hosts two ways:
+Trajectory IR connects to hosts three ways:
 
 1. **Evidence sidecar** — in-process wrap of `execute_tool` (LangGraph reference)
    so a `DECISION` is sealed **before** the world changes, then `trajir verify`
@@ -8,6 +8,10 @@ Trajectory IR connects to hosts two ways:
 2. **MCP server** — stdio tools for status / export / import / signature verify
    (below). Project-local MCP config is written by the one-step installer.
    Those entries do not seal the host's own tools and do not reimplement IR.
+3. **Agent hooks** — `trajir hook` seals each tool call of Claude Code, Codex,
+   Gemini CLI, Cursor and Copilot CLI before it runs and records its result.
+   The Claude Code plugin and `trajir install <agent>` wire it up. Guide:
+   [AGENT_PLUGINS.md](AGENT_PLUGINS.md).
 
 ---
 
@@ -31,7 +35,8 @@ Trajectory IR exposes agent hosts through a **Model Context Protocol (MCP)**
 server. `scripts/install_claude.ps1` and `scripts/install_claude.sh` write
 project-local config for Claude Code, Cursor, VS Code, Gemini CLI, and Codex.
 Those entries start `trajir-mcp`. They do not seal the host's own tools.
-Skill files and UI that are not that config stay out of this repo.
+Sealing the host's tools is the hook path in [AGENT_PLUGINS.md](AGENT_PLUGINS.md).
+`trajir mcp` runs the same server from the single `trajir` binary.
 
 ## Architecture
 
@@ -48,7 +53,7 @@ AI host (Claude Code, Cursor, …)
 | Layer | Repository | Role |
 |-------|------------|------|
 | IR core + MCP server | **Trajectory-IR** (this repo) | Semantics, tools, releases |
-| Host plugins / configs | Separate repo (later) | Install snippets, skills, UI only |
+| Host plugins / configs | **Trajectory-IR** (`plugins/`, `trajir install`) | Hooks, install config, skills. Kept here so hook payloads and the IR are tested together |
 
 ## Binary
 
