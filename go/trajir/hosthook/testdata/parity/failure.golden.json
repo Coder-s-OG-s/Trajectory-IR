@@ -1,0 +1,62 @@
+[
+  {
+    "kind": "PROJECT_CONTEXT",
+    "step_n": 1,
+    "seq": 0,
+    "id": "c37041f0717d47bc67c56326f9fe6073dfd642f998cb2a92cb1f651671e55f2c"
+  },
+  {
+    "kind": "DECISION",
+    "step_n": 1,
+    "seq": 1,
+    "id": "c5c133d47f37433fbe53b90381d1dc6eae0c4b329bf4540d8de45a3976598d22"
+  },
+  {
+    "kind": "TOOL_CALL",
+    "step_n": 1,
+    "seq": 2,
+    "id": "d2d60fddb5df6aba42d64faf9a4e90fc3a3c853fc4dc61a32ca9212eb09a0050"
+  },
+  {
+    "kind": "ABORT",
+    "step_n": 1,
+    "seq": 3,
+    "id": "128b367d336293366d1cf1094c8efa9810b314c41bf7077b3c0146d6aa52cb2a"
+  },
+  {
+    "kind": "COMMIT_STEP",
+    "step_n": 1,
+    "seq": 4,
+    "id": "33641a5e66e6b97996c3ed8303218a3dfd0eff9c8d2038a2a8e904c83dbb154e"
+  },
+  {
+    "kind": "PROJECT_CONTEXT",
+    "step_n": 2,
+    "seq": 0,
+    "id": "b014c450076df6a370d435f5139224ddc0a0f1b75839769d5818a867263f4757"
+  },
+  {
+    "kind": "DECISION",
+    "step_n": 2,
+    "seq": 1,
+    "id": "a5af99e9db2fc8ce2ee6f735014fa26702476a0e8983e70e5c4eff5a032bf0d4"
+  },
+  {
+    "kind": "TOOL_CALL",
+    "step_n": 2,
+    "seq": 2,
+    "id": "5215355ce44892b4b18b1d3d3f7f8c1515c29343b6e2664970816f220f1ff665"
+  },
+  {
+    "kind": "ABORT",
+    "step_n": 2,
+    "seq": 3,
+    "id": "215ecfc506cc7bfe830df2fc95597b369d4d688f7079a121876bd4e154b744d3"
+  },
+  {
+    "kind": "COMMIT_STEP",
+    "step_n": 2,
+    "seq": 4,
+    "id": "3e5dafcff7eb71b4e0232c04d8ac50b94b0acd420e45ce17f43bb81256533b38"
+  }
+]
