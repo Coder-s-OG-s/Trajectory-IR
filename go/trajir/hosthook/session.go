@@ -17,12 +17,15 @@ package hosthook
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"unicode/utf16"
 	"unicode/utf8"
@@ -79,13 +82,7 @@ func ReplayBlocked(r Record) bool {
 }
 
 func retryBlocked(r Record) bool {
-	switch r.EffectClass {
-	case effects.PURE, effects.READ_ONLY, effects.IDEMPOTENT_WRITE,
-		effects.NON_IDEMPOTENT_WRITE, effects.AGENT_SPAWN, effects.SENSITIVE:
-		return effects.RequiresBlockAndGate(r.EffectClass)
-	default:
-		return true
-	}
+	return !knownClass(r.EffectClass) || effects.RequiresBlockAndGate(r.EffectClass)
 }
 
 func (s Session) classify(name string, annotations map[string]any) effects.EffectClass {
@@ -106,11 +103,11 @@ func (s Session) openLog() (*nodelog.NodeLog, error) {
 	return nodelog.Open(filepath.Join(s.WorkDir, "nodes.sqlite"))
 }
 
-// SealBeforeTool seals one tool call. It does not run the tool.
+// SealBeforeTool seals one tool call. It does not run the tool. An empty
+// toolUseID (a host that sends none) gets a derived id, and the post hook
+// finds the call again with RecordMatchedResult or RecordMatchedFailure.
+// A derived id cannot detect a replay: each call is a new step.
 func (s Session) SealBeforeTool(name string, args map[string]any, toolUseID string, annotations map[string]any) (Record, error) {
-	if toolUseID == "" {
-		return Record{}, errors.New("hosthook: tool_use_id is required")
-	}
 	safeArgs, err := jsonableMap(args)
 	if err != nil {
 		return Record{}, err
@@ -124,6 +121,9 @@ func (s Session) SealBeforeTool(name string, args map[string]any, toolUseID stri
 	st, err := s.loadState()
 	if err != nil {
 		return Record{}, err
+	}
+	if toolUseID == "" {
+		toolUseID = "d-" + callKey(name, safeArgs) + "-" + strconv.Itoa(st.NextStep)
 	}
 	if done, ok := st.Done[toolUseID]; ok {
 		done.Replay = true
@@ -181,13 +181,58 @@ func (s Session) writeSeal(step int, name string, args map[string]any) error {
 	return nil
 }
 
+// resolver picks which tool_use_id a post hook is about.
+type resolver func(st *state) (string, error)
+
+func byID(id string) resolver {
+	return func(*state) (string, error) {
+		if id == "" {
+			return "", errors.New("hosthook: tool_use_id is required")
+		}
+		return id, nil
+	}
+}
+
+// byCall picks the oldest pending call with this tool name and args. Hosts
+// that send no id on the post hook are matched this way.
+func byCall(name string, args map[string]any) resolver {
+	return func(st *state) (string, error) {
+		safeArgs, err := jsonableMap(args)
+		if err != nil {
+			return "", err
+		}
+		key := callKey(name, safeArgs)
+		best, bestStep := "", 0
+		for id, rec := range st.Pending {
+			if rec.ToolName != name || callKey(rec.ToolName, rec.Args) != key {
+				continue
+			}
+			if best == "" || rec.StepN < bestStep {
+				best, bestStep = id, rec.StepN
+			}
+		}
+		if best == "" {
+			return "", fmt.Errorf("%w %s (matched by name and args)", ErrNoSeal, name)
+		}
+		return best, nil
+	}
+}
+
+// callKey identifies a call by tool name and canonical args.
+func callKey(name string, args map[string]any) string {
+	raw, _ := json.Marshal(map[string]any{"name": name, "args": args})
+	sum := sha256.Sum256(raw)
+	return hex.EncodeToString(sum[:])[:16]
+}
+
 // pendingFor loads state under the caller's lock and returns the pending
 // record. A done record comes back with done=true.
-func (s Session) pendingFor(toolUseID string) (*state, Record, bool, error) {
-	if toolUseID == "" {
-		return nil, Record{}, false, errors.New("hosthook: tool_use_id is required")
-	}
+func (s Session) pendingFor(resolve resolver) (*state, Record, bool, error) {
 	st, err := s.loadState()
+	if err != nil {
+		return nil, Record{}, false, err
+	}
+	toolUseID, err := resolve(st)
 	if err != nil {
 		return nil, Record{}, false, err
 	}
@@ -213,6 +258,15 @@ func (s Session) closePending(st *state, toolUseID string, done Record) error {
 // RecordToolResult records the host's result for a call already sealed.
 // The body handed to the recorder returns result. It does not call the tool.
 func (s Session) RecordToolResult(toolUseID string, result any) (Record, error) {
+	return s.recordResult(byID(toolUseID), result)
+}
+
+// RecordMatchedResult is RecordToolResult for a post hook with no id.
+func (s Session) RecordMatchedResult(name string, args map[string]any, result any) (Record, error) {
+	return s.recordResult(byCall(name, args), result)
+}
+
+func (s Session) recordResult(resolve resolver, result any) (Record, error) {
 	safeResult, err := jsonable(result)
 	if err != nil {
 		return Record{}, err
@@ -222,7 +276,7 @@ func (s Session) RecordToolResult(toolUseID string, result any) (Record, error) 
 		return Record{}, err
 	}
 	defer release()
-	st, pending, done, err := s.pendingFor(toolUseID)
+	st, pending, done, err := s.pendingFor(resolve)
 	if err != nil || done {
 		return pending, err
 	}
@@ -230,7 +284,7 @@ func (s Session) RecordToolResult(toolUseID string, result any) (Record, error) 
 		return Record{}, err
 	}
 	pending.Recorded = true
-	if err := s.closePending(st, toolUseID, pending); err != nil {
+	if err := s.closePending(st, pending.ToolUseID, pending); err != nil {
 		return Record{}, err
 	}
 	return pending, nil
@@ -264,6 +318,15 @@ func (s Session) writeResult(rec Record, result any) error {
 // row. It writes TOOL_CALL, ABORT HOST_REPORTED_FAILURE, then COMMIT_STEP.
 // When an outcome is already stored it writes nothing more.
 func (s Session) RecordToolFailure(toolUseID string, errVal any) (Record, error) {
+	return s.recordFailure(byID(toolUseID), errVal)
+}
+
+// RecordMatchedFailure is RecordToolFailure for a post hook with no id.
+func (s Session) RecordMatchedFailure(name string, args map[string]any, errVal any) (Record, error) {
+	return s.recordFailure(byCall(name, args), errVal)
+}
+
+func (s Session) recordFailure(resolve resolver, errVal any) (Record, error) {
 	text, err := errorText(errVal)
 	if err != nil {
 		return Record{}, err
@@ -273,7 +336,7 @@ func (s Session) RecordToolFailure(toolUseID string, errVal any) (Record, error)
 		return Record{}, err
 	}
 	defer release()
-	st, pending, done, err := s.pendingFor(toolUseID)
+	st, pending, done, err := s.pendingFor(resolve)
 	if err != nil || done {
 		return pending, err
 	}
@@ -284,7 +347,7 @@ func (s Session) RecordToolFailure(toolUseID string, errVal any) (Record, error)
 	pending.Failed = true
 	pending.Recorded = !claimed
 	pending.AlreadyClaimed = claimed
-	if err := s.closePending(st, toolUseID, pending); err != nil {
+	if err := s.closePending(st, pending.ToolUseID, pending); err != nil {
 		return Record{}, err
 	}
 	return pending, nil

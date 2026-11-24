@@ -301,9 +301,9 @@ func TestResultWithoutSealIsErrNoSeal(t *testing.T) {
 	}
 }
 
-func TestEmptyToolUseIDRejected(t *testing.T) {
+func TestEmptyToolUseIDRejectedOnResult(t *testing.T) {
 	s := newSession(t)
-	if _, err := s.SealBeforeTool("echo", nil, "", nil); err == nil {
+	if _, err := s.RecordToolResult("", "x"); err == nil {
 		t.Fatal("want error for empty tool_use_id")
 	}
 }

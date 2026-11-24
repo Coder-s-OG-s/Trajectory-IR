@@ -1,0 +1,1 @@
+{"session_id":"019a-codex","transcript_path":null,"cwd":"/proj","hook_event_name":"PostToolUse","model":"gpt-5","turn_id":"t1","tool_name":"Bash","tool_input":{"command":"ls -la"},"tool_response":"total 0"}

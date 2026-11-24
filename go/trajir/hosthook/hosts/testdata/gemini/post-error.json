@@ -1,0 +1,1 @@
+{"session_id":"g-55","transcript_path":"/tmp/g.json","cwd":"/proj","hook_event_name":"AfterTool","timestamp":"2026-11-24T10:00:01Z","tool_name":"read_file","tool_input":{"absolute_path":"/proj/a.txt"},"tool_response":{"llmContent":"","returnDisplay":"","error":"File not found"}}

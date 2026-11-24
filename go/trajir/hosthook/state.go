@@ -1,6 +1,7 @@
 package hosthook
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -43,7 +44,11 @@ func (s Session) loadState() (*state, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := json.Unmarshal(raw, st); err != nil {
+	// UseNumber keeps stored args exact. As float64, an integer above 2^53
+	// would change between the seal and the TOOL_CALL.
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.UseNumber()
+	if err := dec.Decode(st); err != nil {
 		return nil, fmt.Errorf("hosthook: %s: %w", s.statePath(), err)
 	}
 	if st.NextStep < 1 {
