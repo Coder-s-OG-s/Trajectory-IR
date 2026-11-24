@@ -28,6 +28,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/effects"
+	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/emit"
 	nodelog "github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/log"
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/resume"
 )
@@ -45,10 +46,13 @@ var ErrNoSeal = errors.New("hosthook: no sealed call for tool_use_id")
 
 // Session is one trajectory in one work dir. Owner names the hook
 // registration. Classify picks the effect class. Nil means
-// effects.ClassifyTool.
+// effects.ClassifyTool. Sink receives console (dashboard) events. Nil sends
+// none. Runtime labels those events with the host, for example "claude-code".
 type Session struct {
 	WorkDir, TenantID, TrajectoryID, Owner string
 	Classify                               func(name string, annotations map[string]any) effects.EffectClass
+	Sink                                   emit.Sink
+	Runtime                                string
 }
 
 // Record is one tool call in the hook state. Replay and Duplicate are
@@ -162,14 +166,19 @@ func (s Session) writeSeal(step int, name string, args map[string]any) error {
 		return err
 	}
 	defer log.Close()
-	if _, err := log.Append("PROJECT_CONTEXT", &step,
+	ctx, err := log.Append("PROJECT_CONTEXT", &step,
 		map[string]any{"goal": "host-hook", "tool": name},
-		s.TrajectoryID, s.TenantID, 0); err != nil {
+		s.TrajectoryID, s.TenantID, 0)
+	if err != nil {
 		return err
 	}
 	plan := map[string]any{"tool_calls": []any{map[string]any{"name": name, "args": args}}}
-	_, err = log.Append("DECISION", &step, resume.DecisionPayload(plan, nil), s.TrajectoryID, s.TenantID, 1)
-	return err
+	decision, err := log.Append("DECISION", &step, resume.DecisionPayload(plan, nil), s.TrajectoryID, s.TenantID, 1)
+	if err != nil {
+		return err
+	}
+	s.emitSeal(step, name, ctx, decision)
+	return nil
 }
 
 // pendingFor loads state under the caller's lock and returns the pending
@@ -244,8 +253,11 @@ func (s Session) writeResult(rec Record, result any) error {
 		return err
 	}
 	step := rec.StepN
-	_, err = log.Append("COMMIT_STEP", &step, map[string]any{}, s.TrajectoryID, s.TenantID, commitSeq)
-	return err
+	if _, err := log.Append("COMMIT_STEP", &step, map[string]any{}, s.TrajectoryID, s.TenantID, commitSeq); err != nil {
+		return err
+	}
+	s.emitOutcome(log, rec)
+	return nil
 }
 
 // RecordToolFailure records a host-reported failure and clears the pending
@@ -318,8 +330,11 @@ func (s Session) writeFailure(rec Record, text string) (bool, error) {
 	if _, err := log.Append("ABORT", &step, abort, s.TrajectoryID, s.TenantID, outcomeSeq); err != nil {
 		return false, err
 	}
-	_, err = log.Append("COMMIT_STEP", &step, map[string]any{}, s.TrajectoryID, s.TenantID, commitSeq)
-	return false, err
+	if _, err := log.Append("COMMIT_STEP", &step, map[string]any{}, s.TrajectoryID, s.TenantID, commitSeq); err != nil {
+		return false, err
+	}
+	s.emitOutcome(log, rec)
+	return false, nil
 }
 
 // jsonable round-trips v through JSON so it holds only JSON types. Numbers

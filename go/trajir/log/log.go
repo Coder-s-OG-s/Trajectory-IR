@@ -486,7 +486,7 @@ func (l *NodeLog) CountByKind(trajectoryID, tenantID string) (map[string]int, er
 // Callers that genuinely need rows across tenants (e.g. tir.Export's own
 // mixed-tenant check) must use ListNodesAllTenants explicitly instead.
 func (l *NodeLog) ListNodes(trajectoryID, tenantID string) ([]map[string]any, error) {
-	return l.listNodes(trajectoryID, &tenantID, nil, 0)
+	return l.listNodes(trajectoryID, &tenantID, nil, nil, 0)
 }
 
 // ListNodesPage returns one page of ListNodes. limit and offset follow the
@@ -501,7 +501,7 @@ func (l *NodeLog) ListNodesPage(trajectoryID, tenantID string, limit, offset int
 	if offset < 0 {
 		return nil, fmt.Errorf("offset must be a non-negative integer")
 	}
-	return l.listNodes(trajectoryID, &tenantID, &limit, offset)
+	return l.listNodes(trajectoryID, &tenantID, nil, &limit, offset)
 }
 
 // ListNodesAllTenants returns nodes for a trajectory across all tenants.
@@ -509,10 +509,17 @@ func (l *NodeLog) ListNodesPage(trajectoryID, tenantID string, limit, offset int
 // performs its own tenant-scoping check on the result, such as tir.Export
 // detecting a trajectory with mixed tenant_id values.
 func (l *NodeLog) ListNodesAllTenants(trajectoryID string) ([]map[string]any, error) {
-	return l.listNodes(trajectoryID, nil, nil, 0)
+	return l.listNodes(trajectoryID, nil, nil, nil, 0)
 }
 
-func (l *NodeLog) listNodes(trajectoryID string, tenantID *string, limit *int, offset int) ([]map[string]any, error) {
+// ListStepNodes returns one step of a trajectory for one tenant, in seq
+// order. Hooks use it to report what a step just wrote without reading the
+// whole trajectory.
+func (l *NodeLog) ListStepNodes(trajectoryID, tenantID string, stepN int) ([]map[string]any, error) {
+	return l.listNodes(trajectoryID, &tenantID, &stepN, nil, 0)
+}
+
+func (l *NodeLog) listNodes(trajectoryID string, tenantID *string, stepN *int, limit *int, offset int) ([]map[string]any, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -522,6 +529,10 @@ func (l *NodeLog) listNodes(trajectoryID string, tenantID *string, limit *int, o
 	if tenantID != nil {
 		q += ` AND tenant_id = ?`
 		args = append(args, *tenantID)
+	}
+	if stepN != nil {
+		q += ` AND step_n = ?`
+		args = append(args, *stepN)
 	}
 	q += ` ORDER BY COALESCE(step_n, -1), seq`
 	if limit != nil {
