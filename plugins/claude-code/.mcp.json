@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "trajectory-ir": {
+      "command": "sh",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/bin/trajir-run", "mcp"]
+    }
+  }
+}
