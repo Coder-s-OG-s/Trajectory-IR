@@ -583,6 +583,39 @@ func (l *NodeLog) listNodes(trajectoryID string, tenantID *string, stepN *int, l
 	return out, rows.Err()
 }
 
+// TrajectorySummary is one trajectory in a log: node and DECISION counts and
+// the newest node time (Unix seconds).
+type TrajectorySummary struct {
+	TrajectoryID string  `json:"trajectory_id"`
+	TenantID     string  `json:"tenant_id"`
+	NodeCount    int     `json:"node_count"`
+	SealCount    int     `json:"seal_count"`
+	LastTS       float64 `json:"last_ts"`
+}
+
+// ListTrajectories lists every trajectory and tenant pair in the log,
+// sorted by trajectory then tenant.
+func (l *NodeLog) ListTrajectories() ([]TrajectorySummary, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	rows, err := l.db.Query(`SELECT trajectory_id, tenant_id, COUNT(*),
+	        SUM(CASE WHEN kind = 'DECISION' THEN 1 ELSE 0 END), MAX(ts)
+	      FROM nodes GROUP BY trajectory_id, tenant_id ORDER BY trajectory_id, tenant_id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []TrajectorySummary{}
+	for rows.Next() {
+		var s TrajectorySummary
+		if err := rows.Scan(&s.TrajectoryID, &s.TenantID, &s.NodeCount, &s.SealCount, &s.LastTS); err != nil {
+			return nil, err
+		}
+		out = append(out, s)
+	}
+	return out, rows.Err()
+}
+
 // Close releases the database handle.
 func (l *NodeLog) Close() error {
 	l.mu.Lock()
