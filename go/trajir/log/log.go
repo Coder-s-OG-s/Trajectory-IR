@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/logerr"
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/nodes"
@@ -33,14 +34,18 @@ type NodeLog struct {
 
 // Open creates or opens a SQLite database at path and ensures the schema exists.
 func Open(path string) (*NodeLog, error) {
-	db, err := sql.Open("sqlite", path+"?_busy_timeout=5000")
+	// _txlock=immediate makes Begin take the write lock up front, as the
+	// Python log does with BEGIN IMMEDIATE. A deferred transaction that reads
+	// and then writes cannot wait for another process: SQLite returns
+	// SQLITE_BUSY at once and ignores the busy timeout.
+	db, err := sql.Open("sqlite", path+"?_busy_timeout=5000&_txlock=immediate")
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
 	}
 	// One connection is enough for the local profile and keeps write order simple.
 	db.SetMaxOpenConns(1)
 
-	if _, err := db.Exec(`PRAGMA journal_mode=WAL;`); err != nil {
+	if err := setWAL(db); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("set wal: %w", err)
 	}
@@ -67,6 +72,30 @@ ON nodes (trajectory_id, tenant_id);
 	}
 
 	return &NodeLog{db: db}, nil
+}
+
+// walWait bounds how long Open retries switching a new file to WAL.
+const walWait = 5 * time.Second
+
+// setWAL switches the database to WAL. When two processes open a new file
+// at the same moment, both try to switch it and SQLite answers one of them
+// SQLITE_BUSY without waiting, so that is retried. The mode is stored in the
+// file, so the retry finds it already set.
+func setWAL(db *sql.DB) error {
+	deadline := time.Now().Add(walWait)
+	for {
+		_, err := db.Exec(`PRAGMA journal_mode=WAL;`)
+		if err == nil || !isBusy(err) || time.Now().After(deadline) {
+			return err
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func isBusy(err error) bool {
+	var sqliteErr *sqlite.Error
+	// SQLITE_BUSY is 5. Extended codes keep it in the low byte.
+	return errors.As(err, &sqliteErr) && sqliteErr.Code()&0xff == 5
 }
 
 // AppendItem is one node for AppendMany.
