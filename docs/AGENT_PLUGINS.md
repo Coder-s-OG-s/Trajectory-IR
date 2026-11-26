@@ -95,6 +95,7 @@ The trajectory id is `<agent>-<session id>`, for example `claude-8f2c...`.
 | `TRAJIR_TENANT_ID` | `local` | Tenant id |
 | `TRAJIR_TRAJECTORY_ID` | `<agent>-<session>` | Pin one trajectory id |
 | `TRAJIR_BIN` | `trajir` on `PATH` | Binary the Claude Code plugin runs |
+| `TRAJIR_MCP_ROOT` | the project | Folder the MCP tools may read and write under. The plugin and project installs set it. `--user` installs for Codex, Gemini CLI and Cursor do not, so set it yourself there |
 | `TRAJIR_CONSOLE_SINK` | file | `off` sends nothing to the dashboard. `http` posts to `TRAJIR_CONSOLE_URL` |
 | `TRAJIR_CONSOLE_DATA` | `~/.trajir/console-data` | Dashboard data folder |
 
