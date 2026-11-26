@@ -126,6 +126,8 @@ Gemini CLI and Copilot CLI send no tool call id, and Codex may leave it out
 after the call. Their post hook is matched to the oldest open call with the
 same tool name and arguments. A repeat of such a call after a crash cannot be
 told apart from a new call, so it is recorded as a new step and not blocked.
+With a project and a user install both on, the second hook joins the call the
+first one sealed, so each call is still recorded once.
 
 Codex has no failure hook. A failed command is recorded as its result.
 
