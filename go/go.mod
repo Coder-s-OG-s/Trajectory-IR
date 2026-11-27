@@ -15,7 +15,7 @@ require (
 	github.com/jackc/pgx/v5 v5.13.0
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	go.temporal.io/api v1.64.3
-	go.temporal.io/sdk v1.50.0
+	go.temporal.io/sdk v1.51.0
 	modernc.org/sqlite v1.63.0
 )
 
