@@ -8,9 +8,9 @@ Trajectory IR connects to hosts three ways:
 2. **MCP server** — stdio tools for status / export / import / signature verify
    (below). Project-local MCP config is written by the one-step installer.
    Those entries do not seal the host's own tools and do not reimplement IR.
-3. **Agent hooks** — `trajir hook` seals each tool call of Claude Code, Codex,
-   Gemini CLI, Cursor and Copilot CLI before it runs and records its result.
-   The Claude Code plugin and `trajir install <agent>` wire it up. Guide:
+3. **Agent hooks.** `trajir hook` seals each tool call of Claude Code, Grok CLI,
+   Codex, Gemini CLI, Cursor and Copilot CLI before it runs and records its result.
+   The Claude Code and Grok CLI plugins and `trajir install <agent>` wire it up. Guide:
    [AGENT_PLUGINS.md](AGENT_PLUGINS.md).
 
 ---

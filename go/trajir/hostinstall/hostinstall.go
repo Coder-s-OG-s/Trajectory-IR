@@ -23,7 +23,7 @@ import (
 
 // Options says where to install and what command to write.
 type Options struct {
-	Host    string // claude, codex, gemini, cursor, copilot
+	Host    string // claude, codex, gemini, cursor, copilot, grok
 	Target  string // project dir (ignored with User)
 	User    bool   // write the user-level files under Home
 	Home    string // default: os.UserHomeDir
@@ -55,6 +55,7 @@ var planners = map[string]planner{
 	"gemini":  planGemini,
 	"cursor":  planCursor,
 	"copilot": planCopilot,
+	"grok":    planGrok,
 }
 
 // Install writes the host's config and returns the paths it wrote (or would
@@ -361,6 +362,122 @@ func planCursor(o Options, base string) ([]file, error) {
 		return nil, err
 	}
 	return []file{hooks, mcp}, nil
+}
+
+// planGrok writes matcher groups under .grok/hooks/trajir.json. The command
+// is the trajir binary and the phase is an args list, so the host starts
+// trajir with no shell. failClosed is set only on PreToolUse. A project
+// install appends the MCP server to .grok/config.toml and pins
+// TRAJIR_MCP_ROOT to that project. A user install does not pin a root.
+func planGrok(o Options, base string) ([]file, error) {
+	path := filepath.Join(base, ".grok", "hooks", "trajir.json")
+	cfg, err := readObject(path)
+	if err != nil {
+		return nil, err
+	}
+	owner := "project"
+	if o.User {
+		owner = "user"
+	}
+	for _, e := range [][2]string{
+		{"PreToolUse", "pre"}, {"PostToolUse", "post"},
+		{"PostToolUseFailure", "post-failure"}, {"SessionStart", "session-start"},
+	} {
+		extra := map[string]any{"timeout": 60}
+		switch e[1] {
+		case "pre":
+			extra["timeout"] = 30
+			extra["failClosed"] = true
+		case "session-start":
+			extra["timeout"] = 30
+		}
+		mergeGrok(cfg, e[0], o.Command, owner, e[1], extra)
+	}
+	hooks, err := jsonFile(path, cfg)
+	if err != nil {
+		return nil, err
+	}
+	tomlPath := filepath.Join(base, ".grok", "config.toml")
+	current, err := os.ReadFile(tomlPath)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return nil, err
+	}
+	body := string(current)
+	if !strings.Contains(body, "[mcp_servers.trajectory-ir]") {
+		if body != "" && !strings.HasSuffix(body, "\n") {
+			body += "\n"
+		}
+		body += "\n[mcp_servers.trajectory-ir]\n" +
+			"command = " + tomlString(o.Command) + "\n" +
+			"args = [\"mcp\"]\n"
+		if !o.User {
+			body += "\n[mcp_servers.trajectory-ir.env]\nTRAJIR_MCP_ROOT = " + tomlString(base) + "\n"
+		}
+	}
+	return []file{hooks, {path: tomlPath, body: []byte(body)}}, nil
+}
+
+// mergeGrok refreshes our hook in Grok's matcher-group shape. The command is
+// the binary alone. args carries the hook phase, so a path with spaces is
+// not passed through a shell.
+func mergeGrok(cfg map[string]any, event, command, owner, phase string, extra map[string]any) {
+	hooks := childObject(cfg, "hooks")
+	groups, _ := hooks[event].([]any)
+	entry := map[string]any{
+		"type":    "command",
+		"command": command,
+		"args":    []any{"hook", phase, "--host", "grok", "--owner", owner},
+	}
+	for k, v := range extra {
+		entry[k] = v
+	}
+	replaced := false
+	for _, g := range groups {
+		gm, ok := g.(map[string]any)
+		if !ok {
+			continue
+		}
+		inner, _ := gm["hooks"].([]any)
+		for i, h := range inner {
+			hm, ok := h.(map[string]any)
+			if !ok {
+				continue
+			}
+			if grokOurs(hm) {
+				inner[i] = entry
+				replaced = true
+			}
+		}
+	}
+	if !replaced {
+		groups = append(groups, map[string]any{"matcher": "*", "hooks": []any{entry}})
+	}
+	hooks[event] = groups
+}
+
+// grokOurs reports whether a handler is one this installer wrote for grok.
+// The command may be a bare binary, with the host named in args.
+func grokOurs(hm map[string]any) bool {
+	cmd, _ := hm["command"].(string)
+	if !strings.Contains(strings.ToLower(cmd), "trajir") {
+		return false
+	}
+	if ours(cmd, "grok") {
+		return true
+	}
+	return argHost(hm["args"]) == "grok"
+}
+
+func argHost(v any) string {
+	args, _ := v.([]any)
+	for i, a := range args {
+		s, _ := a.(string)
+		if s == "--host" && i+1 < len(args) {
+			host, _ := args[i+1].(string)
+			return host
+		}
+	}
+	return ""
 }
 
 // planCopilot owns its own file, so it is written whole.

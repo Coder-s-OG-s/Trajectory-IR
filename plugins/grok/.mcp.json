@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "trajectory-ir": {
+      "command": "trajir",
+      "args": ["mcp"],
+      "env": {
+        "TRAJIR_MCP_ROOT": "${GROK_WORKSPACE_ROOT}"
+      }
+    }
+  }
+}

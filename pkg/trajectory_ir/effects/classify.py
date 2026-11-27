@@ -56,6 +56,7 @@ OPEN_WORLD_PRIMITIVES = frozenset(
         "zsh",
         "terminal",
         "execute",
+        "run_terminal_command",
         "python",
         "python_interpreter",
         "code_interpreter",

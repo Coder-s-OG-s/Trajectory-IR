@@ -37,7 +37,7 @@ func num(v any) string {
 }
 
 func TestLookupKnownHosts(t *testing.T) {
-	for _, name := range []string{"claude", "codex", "gemini", "cursor", "copilot"} {
+	for _, name := range []string{"claude", "codex", "gemini", "cursor", "copilot", "grok"} {
 		a, err := hosts.Lookup(name)
 		if err != nil || a.Name() != name || a.Runtime() == "" {
 			t.Fatalf("%s: %v %v", name, a, err)
@@ -139,6 +139,53 @@ func TestCopilotFailedResultType(t *testing.T) {
 	}
 }
 
+func TestGrokParse(t *testing.T) {
+	a, err := hosts.Lookup("grok")
+	if err != nil || a.Runtime() != "grok-cli" {
+		t.Fatalf("lookup = %v %v", a, err)
+	}
+	pre := parse(t, "grok", hosthook.PhasePre, "pre.json")
+	if pre.SessionID != "g-1" || pre.ToolUseID != "call_1" || pre.ToolName != "run_terminal_command" || pre.Cwd != "/proj" || pre.Args["command"] != "echo ok" {
+		t.Fatalf("pre = %+v", pre)
+	}
+	snake := parse(t, "grok", hosthook.PhasePre, "pre-snake.json")
+	if snake.SessionID != "g-2" || snake.ToolUseID != "call_2" || snake.ToolName != "read_file" || snake.Args["file_path"] != "a.txt" {
+		t.Fatalf("snake pre = %+v", snake)
+	}
+	post := parse(t, "grok", hosthook.PhasePost, "post.json")
+	if post.Failed || post.Result.(map[string]any)["output"] != "ok" || post.ToolUseID != "call_1" {
+		t.Fatalf("post = %+v", post)
+	}
+	fail := parse(t, "grok", hosthook.PhasePostFailure, "post-failure.json")
+	if fail.Error != "exit status 1" || fail.ToolUseID != "call_1" {
+		t.Fatalf("failure = %+v", fail)
+	}
+}
+
+func TestGrokCwdFallsBackToWorkspaceRoot(t *testing.T) {
+	a, _ := hosts.Lookup("grok")
+	ev, err := a.Parse(hosthook.PhasePre, []byte(`{"sessionId":"s","workspaceRoot":"/root","toolName":"read_file","toolInput":{},"toolUseId":"1"}`))
+	if err != nil || ev.Cwd != "/root" || ev.ToolUseID != "1" {
+		t.Fatalf("ev = %+v, %v", ev, err)
+	}
+}
+
+func TestGrokTruncatedInputIsRefusedOnPre(t *testing.T) {
+	a, _ := hosts.Lookup("grok")
+	_, err := a.Parse(hosthook.PhasePre, []byte(`{"sessionId":"s","toolName":"run_terminal_command","toolInput":{"command":"echo"},"toolInputTruncated":true,"toolUseId":"1"}`))
+	if err == nil || !strings.Contains(err.Error(), "truncated") {
+		t.Fatalf("err = %v", err)
+	}
+	_, err = a.Parse(hosthook.PhasePre, []byte(`{"sessionId":"s","toolName":"read_file","toolInput":{},"tool_input_truncated":"yes","toolUseId":"1"}`))
+	if err == nil || !strings.Contains(err.Error(), "truncated") {
+		t.Fatalf("non-bool flag err = %v", err)
+	}
+	ev, err := a.Parse(hosthook.PhasePost, []byte(`{"sessionId":"s","toolName":"read_file","toolInput":{},"toolResponse":"ok","toolInputTruncated":true,"toolUseId":"1"}`))
+	if err != nil || ev.ToolUseID != "1" {
+		t.Fatalf("post should still parse, ev = %+v, %v", ev, err)
+	}
+}
+
 func TestNonObjectInputIsWrapped(t *testing.T) {
 	a, _ := hosts.Lookup("claude")
 	ev, err := a.Parse(hosthook.PhasePre, []byte(`{"session_id":"s","tool_name":"x","tool_input":"raw","tool_use_id":"1"}`))
@@ -148,7 +195,7 @@ func TestNonObjectInputIsWrapped(t *testing.T) {
 }
 
 func TestBadJSONIsError(t *testing.T) {
-	for _, name := range []string{"claude", "codex", "gemini", "cursor", "copilot"} {
+	for _, name := range []string{"claude", "codex", "gemini", "cursor", "copilot", "grok"} {
 		a, _ := hosts.Lookup(name)
 		if _, err := a.Parse(hosthook.PhasePre, []byte("{nope")); err == nil {
 			t.Fatalf("%s accepted bad json", name)
@@ -163,6 +210,7 @@ func TestBlockResponses(t *testing.T) {
 		"gemini":  "",
 		"cursor":  `{"agent_message":"no","permission":"deny","user_message":"no"}`,
 		"copilot": `{"permissionDecision":"deny","permissionDecisionReason":"no"}`,
+		"grok":    `{"decision":"deny","reason":"no"}`,
 	}
 	for name, wantOut := range cases {
 		a, _ := hosts.Lookup(name)

@@ -47,21 +47,22 @@ func IsForbiddenInSandbox(e EffectClass) bool {
 // Static MCP hints on the tool definition cannot classify them. This is not
 // an AST analyzer.
 var OpenWorldPrimitives = map[string]struct{}{
-	"bash":               {},
-	"shell":              {},
-	"sh":                 {},
-	"zsh":                {},
-	"terminal":           {},
-	"execute":            {},
-	"python":             {},
-	"python_interpreter": {},
-	"code_interpreter":   {},
-	"sql":                {},
-	"sql_query":          {},
-	"execute_sql":        {},
-	"browser":            {},
-	"browser_action":     {},
-	"computer":           {},
+	"bash":                 {},
+	"shell":                {},
+	"sh":                   {},
+	"zsh":                  {},
+	"terminal":             {},
+	"execute":              {},
+	"run_terminal_command": {},
+	"python":               {},
+	"python_interpreter":   {},
+	"code_interpreter":     {},
+	"sql":                  {},
+	"sql_query":            {},
+	"execute_sql":          {},
+	"browser":              {},
+	"browser_action":       {},
+	"computer":             {},
 }
 
 // IsOpenWorldPrimitive reports whether name is a known arbitrary-execution tool.

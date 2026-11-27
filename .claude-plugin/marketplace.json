@@ -5,7 +5,7 @@
     "url": "https://github.com/Coder-s-OG-s/Trajectory-IR"
   },
   "metadata": {
-    "description": "Record every tool call Claude Code makes as a sealed, verifiable Trajectory IR run."
+    "description": "Record every tool call Claude Code or Grok CLI makes as a sealed, verifiable Trajectory IR run."
   },
   "plugins": [
     {
@@ -16,6 +16,15 @@
       "license": "Apache-2.0",
       "category": "security",
       "keywords": ["audit", "evidence", "tool-calls", "trajectory", "flight-recorder"]
+    },
+    {
+      "name": "trajectory-ir-grok",
+      "source": "./plugins/grok",
+      "description": "Seal every Grok CLI tool call before it runs, record its result, and see the session on the trajir dashboard. Export it as a .tir anyone can verify.",
+      "version": "0.1.0",
+      "license": "Apache-2.0",
+      "category": "security",
+      "keywords": ["audit", "evidence", "tool-calls", "trajectory", "flight-recorder", "grok"]
     }
   ]
 }

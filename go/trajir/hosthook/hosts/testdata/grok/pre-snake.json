@@ -1,0 +1,1 @@
+{"hook_event_name":"PreToolUse","session_id":"g-2","tool_name":"read_file","tool_input":{"file_path":"a.txt"},"tool_use_id":"call_2"}

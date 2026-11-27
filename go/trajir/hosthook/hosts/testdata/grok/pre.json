@@ -1,0 +1,1 @@
+{"hookEventName":"pre_tool_use","sessionId":"g-1","cwd":"/proj","workspaceRoot":"/elsewhere","toolName":"run_terminal_command","toolInput":{"command":"echo ok"},"toolUseId":"call_1","toolInputTruncated":false}

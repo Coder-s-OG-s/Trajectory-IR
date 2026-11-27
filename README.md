@@ -165,6 +165,7 @@ More in **[QUICKSTART.md](QUICKSTART.md)** and the [kill-mid-deploy demo](exampl
 | Host | How it attaches | Seals the host's tool calls? |
 |---|---|---|
 | **Claude Code** | [Plugin](docs/AGENT_PLUGINS.md) (`/plugin marketplace add Coder-s-OG-s/Trajectory-IR`) | Yes |
+| **Grok CLI** | [Plugin](docs/AGENT_PLUGINS.md) (`grok plugin marketplace add Coder-s-OG-s/Trajectory-IR`, then `grok plugin install trajectory-ir-grok --trust`) | Yes |
 | **Codex, Gemini CLI, Cursor, Copilot CLI** | [`trajir install <agent>`](docs/AGENT_PLUGINS.md) writes their hooks | Yes |
 | **LangGraph** | `TrajIRToolGuard` wraps the tool node | Yes, and it gates the tool body |
 | **Google ADK** | `AdkToolGuard` callbacks | Yes. The callbacks do not call the tool |
