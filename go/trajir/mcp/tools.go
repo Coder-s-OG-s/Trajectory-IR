@@ -20,7 +20,7 @@ import (
 
 // Common path args for tools that touch a local workdir NodeLog.
 type workdirArgs struct {
-	WorkDir      string `json:"work_dir" jsonschema:"directory under TRAJIR_MCP_ROOT (or cwd) holding nodes.sqlite"`
+	WorkDir      string `json:"work_dir" jsonschema:"directory under the approved workspace root holding nodes.sqlite"`
 	TenantID     string `json:"tenant_id" jsonschema:"tenant id for the trajectory"`
 	TrajectoryID string `json:"trajectory_id" jsonschema:"trajectory id"`
 }
@@ -36,17 +36,20 @@ type statusOut struct {
 	Kinds        []string       `json:"kinds"`
 }
 
-func toolStatus(ctx context.Context, _ *mcp.CallToolRequest, in workdirArgs) (*mcp.CallToolResult, statusOut, error) {
-	_ = ctx
+func toolStatus(ctx context.Context, req *mcp.CallToolRequest, in workdirArgs) (*mcp.CallToolResult, statusOut, error) {
 	var zero statusOut
+	ctx, ask, err := bindWorkspace(ctx, req)
+	if ask != nil || err != nil {
+		return ask, zero, err
+	}
 	if err := requireIDs(in.TenantID, in.TrajectoryID); err != nil {
 		return nil, zero, err
 	}
-	workDir, err := requireBoundedWorkDir(in.WorkDir)
+	workDir, err := requireBoundedWorkDir(ctx, in.WorkDir)
 	if err != nil {
 		return nil, zero, err
 	}
-	nodesPath, _, err := workdirSQLitePaths(workDir)
+	nodesPath, _, err := workdirSQLitePaths(ctx, workDir)
 	if err != nil {
 		return nil, zero, err
 	}
@@ -97,9 +100,12 @@ type exportOut struct {
 	NodeCount    int    `json:"node_count"`
 }
 
-func toolExportTIR(ctx context.Context, _ *mcp.CallToolRequest, in exportIn) (*mcp.CallToolResult, exportOut, error) {
-	_ = ctx
+func toolExportTIR(ctx context.Context, req *mcp.CallToolRequest, in exportIn) (*mcp.CallToolResult, exportOut, error) {
 	var zero exportOut
+	ctx, ask, err := bindWorkspace(ctx, req)
+	if ask != nil || err != nil {
+		return ask, zero, err
+	}
 	if err := requireIDs(in.TenantID, in.TrajectoryID); err != nil {
 		return nil, zero, err
 	}
@@ -116,16 +122,16 @@ func toolExportTIR(ctx context.Context, _ *mcp.CallToolRequest, in exportIn) (*m
 		return nil, zero, fmt.Errorf("mcp: unsupported mode %q (use thin or fat)", in.Mode)
 	}
 
-	workDir, err := requireBoundedWorkDir(in.WorkDir)
+	workDir, err := requireBoundedWorkDir(ctx, in.WorkDir)
 	if err != nil {
 		return nil, zero, err
 	}
-	dest, err := requireBoundedPath(in.Dest, workDir)
+	dest, err := requireBoundedPath(ctx, in.Dest, workDir)
 	if err != nil {
 		return nil, zero, err
 	}
 	if !filepath.IsAbs(in.Dest) {
-		root, err := approvedRoot()
+		root, err := approvedRoot(ctx)
 		if err != nil {
 			return nil, zero, err
 		}
@@ -145,7 +151,7 @@ func toolExportTIR(ctx context.Context, _ *mcp.CallToolRequest, in exportIn) (*m
 			return nil, zero, fmt.Errorf("mcp: create dest directory: %w", err)
 		}
 	}
-	nodesPath, memoPath, err := workdirSQLitePaths(workDir)
+	nodesPath, memoPath, err := workdirSQLitePaths(ctx, workDir)
 	if err != nil {
 		return nil, zero, err
 	}
@@ -246,11 +252,11 @@ type importOut struct {
 // followed by os.Open, this eliminates the time-of-check to time-of-use
 // (TOCTOU / CWE-367) race where a file or directory component could be swapped
 // for a malicious symlink pointing outside the boundary between check and open.
-func openBoundedTIR(rawPath string) (*os.File, error) {
+func openBoundedTIR(ctx context.Context, rawPath string) (*os.File, error) {
 	if strings.TrimSpace(rawPath) == "" {
 		return nil, fmt.Errorf("mcp: path is required")
 	}
-	root, err := approvedRoot()
+	root, err := approvedRoot(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -298,13 +304,16 @@ func openBoundedTIR(rawPath string) (*os.File, error) {
 	return f, nil
 }
 
-func toolImportTIR(ctx context.Context, _ *mcp.CallToolRequest, in pathIn) (*mcp.CallToolResult, importOut, error) {
-	_ = ctx
+func toolImportTIR(ctx context.Context, req *mcp.CallToolRequest, in pathIn) (*mcp.CallToolResult, importOut, error) {
 	var zero importOut
+	ctx, ask, err := bindWorkspace(ctx, req)
+	if ask != nil || err != nil {
+		return ask, zero, err
+	}
 	if strings.TrimSpace(in.Path) == "" {
 		return nil, zero, fmt.Errorf("mcp: path is required")
 	}
-	f, err := openBoundedTIR(in.Path)
+	f, err := openBoundedTIR(ctx, in.Path)
 	if err != nil {
 		return nil, zero, err
 	}
@@ -384,13 +393,16 @@ type verifyOut struct {
 	Message    string `json:"message"`
 }
 
-func toolVerifySignature(ctx context.Context, _ *mcp.CallToolRequest, in verifyIn) (*mcp.CallToolResult, verifyOut, error) {
-	_ = ctx
+func toolVerifySignature(ctx context.Context, req *mcp.CallToolRequest, in verifyIn) (*mcp.CallToolResult, verifyOut, error) {
 	var zero verifyOut
+	ctx, ask, err := bindWorkspace(ctx, req)
+	if ask != nil || err != nil {
+		return ask, zero, err
+	}
 	if strings.TrimSpace(in.Path) == "" {
 		return nil, zero, fmt.Errorf("mcp: path is required")
 	}
-	f, err := openBoundedTIR(in.Path)
+	f, err := openBoundedTIR(ctx, in.Path)
 	if err != nil {
 		return nil, zero, err
 	}

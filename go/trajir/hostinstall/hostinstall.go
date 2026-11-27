@@ -231,6 +231,11 @@ func mergeFlat(cfg map[string]any, event string, entry map[string]any, host stri
 
 func mcpServer(o Options, base string) map[string]any {
 	server := map[string]any{"command": o.Command, "args": []any{"mcp"}}
+	// A user-level file is shared by every project. Pinning the root to the
+	// home directory would let tool paths leave the project that is open.
+	// Leave the variable unset there. The server then uses CLAUDE_PROJECT_DIR,
+	// or the single workspace directory the client reports, and fails closed
+	// when neither exists.
 	if !o.User {
 		server["env"] = map[string]any{"TRAJIR_MCP_ROOT": base}
 	}

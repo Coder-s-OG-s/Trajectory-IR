@@ -515,3 +515,157 @@ func intFromAny(v any) int {
 		return 0
 	}
 }
+
+func fileURI(abs string) string {
+	slash := filepath.ToSlash(abs)
+	if !strings.HasPrefix(slash, "/") {
+		slash = "/" + slash
+	}
+	return "file://" + slash
+}
+
+func connectWithRoots(t *testing.T, roots ...string) *mcp.ClientSession {
+	t.Helper()
+	ctx := context.Background()
+	server := trajirmcp.NewServer()
+	left, right := mcp.NewInMemoryTransports()
+	serverSession, err := server.Connect(ctx, left, nil)
+	if err != nil {
+		t.Fatalf("server connect: %v", err)
+	}
+	t.Cleanup(func() { serverSession.Close() })
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "v0.0.1"}, nil)
+	for _, root := range roots {
+		client.AddRoots(&mcp.Root{URI: fileURI(root)})
+	}
+	clientSession, err := client.Connect(ctx, right, nil)
+	if err != nil {
+		t.Fatalf("client connect: %v", err)
+	}
+	t.Cleanup(func() { clientSession.Close() })
+	return clientSession
+}
+
+func statusCall(t *testing.T, session *mcp.ClientSession, work string) *mcp.CallToolResult {
+	t.Helper()
+	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "trajectory_status",
+		Arguments: map[string]any{
+			"work_dir":      work,
+			"tenant_id":     "demo",
+			"trajectory_id": "mcp-traj",
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return res
+}
+
+func TestStatusUsesSingleClientRoot(t *testing.T) {
+	work := t.TempDir()
+	t.Setenv("TRAJIR_MCP_ROOT", "")
+	t.Setenv("CLAUDE_PROJECT_DIR", "")
+	seedTrajectory(t, work)
+
+	res := statusCall(t, connectWithRoots(t, work), work)
+	if res.IsError {
+		t.Fatalf("status error: %+v", res)
+	}
+	if intFromAny(asMap(t, res)["node_count"]) < 1 {
+		t.Fatalf("node_count=%v", res.StructuredContent)
+	}
+}
+
+func TestStatusFailsClosedWithoutARoot(t *testing.T) {
+	work := t.TempDir()
+	t.Chdir(work)
+	t.Setenv("TRAJIR_MCP_ROOT", "")
+	t.Setenv("CLAUDE_PROJECT_DIR", "")
+	seedTrajectory(t, work)
+
+	res := statusCall(t, connectWithRoots(t), work)
+	if !res.IsError {
+		t.Fatal("expected failure when no workspace root is configured")
+	}
+	if !strings.Contains(toolText(res), "TRAJIR_MCP_ROOT") {
+		t.Fatalf("error = %s", toolText(res))
+	}
+}
+
+func TestConfiguredRootWinsOverClientRoots(t *testing.T) {
+	work := t.TempDir()
+	other := t.TempDir()
+	t.Setenv("TRAJIR_MCP_ROOT", work)
+	t.Setenv("CLAUDE_PROJECT_DIR", other)
+	seedTrajectory(t, work)
+	seedTrajectory(t, other)
+
+	session := connectWithRoots(t, other)
+	outside := statusCall(t, session, other)
+	if !outside.IsError {
+		t.Fatal("client root must not widen past TRAJIR_MCP_ROOT")
+	}
+	inside := statusCall(t, session, work)
+	if inside.IsError {
+		t.Fatalf("status inside configured root: %+v", inside)
+	}
+}
+
+func TestClaudeProjectDirIsTheRootWhenUnset(t *testing.T) {
+	work := t.TempDir()
+	other := t.TempDir()
+	t.Setenv("TRAJIR_MCP_ROOT", "")
+	t.Setenv("CLAUDE_PROJECT_DIR", work)
+	seedTrajectory(t, work)
+
+	session := connectWithRoots(t, other)
+	outside := statusCall(t, session, other)
+	if !outside.IsError {
+		t.Fatal("a client root must not replace CLAUDE_PROJECT_DIR")
+	}
+	inside := statusCall(t, session, work)
+	if inside.IsError {
+		t.Fatalf("status under CLAUDE_PROJECT_DIR: %+v", inside)
+	}
+}
+
+func TestTwoClientRootsFailClosed(t *testing.T) {
+	work := t.TempDir()
+	other := t.TempDir()
+	t.Setenv("TRAJIR_MCP_ROOT", "")
+	t.Setenv("CLAUDE_PROJECT_DIR", "")
+	seedTrajectory(t, work)
+
+	res := statusCall(t, connectWithRoots(t, work, other), work)
+	if !res.IsError || !strings.Contains(toolText(res), "exactly one workspace directory") {
+		t.Fatalf("error = %s", toolText(res))
+	}
+}
+
+func asMap(t *testing.T, res *mcp.CallToolResult) map[string]any {
+	t.Helper()
+	if m, ok := res.StructuredContent.(map[string]any); ok {
+		return m
+	}
+	var m map[string]any
+	raw, ok := res.StructuredContent.(json.RawMessage)
+	if !ok {
+		t.Fatalf("status content: %T", res.StructuredContent)
+	}
+	if err := json.Unmarshal(raw, &m); err != nil {
+		t.Fatal(err)
+	}
+	return m
+}
+
+func toolText(res *mcp.CallToolResult) string {
+	var b strings.Builder
+	for _, c := range res.Content {
+		if text, ok := c.(*mcp.TextContent); ok {
+			b.WriteString(text.Text)
+		}
+	}
+	return b.String()
+}

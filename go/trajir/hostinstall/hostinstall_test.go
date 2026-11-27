@@ -196,6 +196,92 @@ func TestUserScopeUsesHome(t *testing.T) {
 	}
 }
 
+func TestProjectInstallPinsWorkspaceRoot(t *testing.T) {
+	dir := t.TempDir()
+	install(t, hostinstall.Options{Host: "claude", Target: dir})
+	claude := readJSON(t, filepath.Join(dir, ".mcp.json"))
+	if got := mcpRoot(t, claude["mcpServers"].(map[string]any)["trajectory-ir"].(map[string]any)); got != dir {
+		t.Fatalf("claude root = %q", got)
+	}
+
+	install(t, hostinstall.Options{Host: "cursor", Target: dir})
+	cursor := readJSON(t, filepath.Join(dir, ".cursor", "mcp.json"))
+	if got := mcpRoot(t, cursor["mcpServers"].(map[string]any)["trajectory-ir"].(map[string]any)); got != dir {
+		t.Fatalf("cursor root = %q", got)
+	}
+
+	install(t, hostinstall.Options{Host: "gemini", Target: dir})
+	gemini := readJSON(t, filepath.Join(dir, ".gemini", "settings.json"))
+	if got := mcpRoot(t, gemini["mcpServers"].(map[string]any)["trajectory-ir"].(map[string]any)); got != dir {
+		t.Fatalf("gemini root = %q", got)
+	}
+
+	install(t, hostinstall.Options{Host: "codex", Target: dir})
+	raw, err := os.ReadFile(filepath.Join(dir, ".codex", "config.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := json.Marshal(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), "TRAJIR_MCP_ROOT = "+string(want)) {
+		t.Fatalf("codex config = %s", raw)
+	}
+}
+
+func mcpRoot(t *testing.T, server map[string]any) string {
+	t.Helper()
+	env, _ := server["env"].(map[string]any)
+	root, _ := env["TRAJIR_MCP_ROOT"].(string)
+	return root
+}
+
+func TestUserInstallDoesNotPinHome(t *testing.T) {
+	for _, host := range []string{"cursor", "gemini", "codex", "claude"} {
+		t.Run(host, func(t *testing.T) {
+			home := t.TempDir()
+			install(t, hostinstall.Options{Host: host, User: true, Home: home})
+			switch host {
+			case "cursor":
+				cfg := readJSON(t, filepath.Join(home, ".cursor", "mcp.json"))
+				server := cfg["mcpServers"].(map[string]any)["trajectory-ir"].(map[string]any)
+				if root := mcpRoot(t, server); root != "" {
+					t.Fatalf("user cursor root = %q", root)
+				}
+			case "gemini":
+				cfg := readJSON(t, filepath.Join(home, ".gemini", "settings.json"))
+				server := cfg["mcpServers"].(map[string]any)["trajectory-ir"].(map[string]any)
+				if root := mcpRoot(t, server); root != "" {
+					t.Fatalf("user gemini root = %q", root)
+				}
+			case "codex":
+				raw, err := os.ReadFile(filepath.Join(home, ".codex", "config.toml"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				if strings.Contains(string(raw), "TRAJIR_MCP_ROOT") {
+					t.Fatalf("user codex pinned a root:\n%s", raw)
+				}
+				if !strings.Contains(string(raw), "[mcp_servers.trajectory-ir]") {
+					t.Fatalf("user codex missing the server:\n%s", raw)
+				}
+			case "claude":
+				if _, err := os.Stat(filepath.Join(home, ".mcp.json")); !os.IsNotExist(err) {
+					t.Fatalf("claude user install wrote .mcp.json: %v", err)
+				}
+				raw, err := os.ReadFile(filepath.Join(home, ".claude", "settings.json"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				if strings.Contains(string(raw), "TRAJIR_MCP_ROOT") {
+					t.Fatalf("claude user settings pinned a root: %s", raw)
+				}
+			}
+		})
+	}
+}
+
 func TestUnknownHost(t *testing.T) {
 	if _, err := hostinstall.Install(hostinstall.Options{Host: "nope", Target: t.TempDir(), Command: "trajir"}); err == nil {
 		t.Fatal("unknown host accepted")
