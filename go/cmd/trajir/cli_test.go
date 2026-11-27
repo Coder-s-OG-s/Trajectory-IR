@@ -199,6 +199,23 @@ func TestLargeResultRecorded(t *testing.T) {
 	}
 }
 
+// A payload over the limit says so. Cut short, it would fail as broken JSON.
+func TestHookPayloadOverLimit(t *testing.T) {
+	old := maxPayload
+	maxPayload = 1 << 10
+	t.Cleanup(func() { maxPayload = old })
+	h := newHarness(t)
+	big := map[string]any{"command": strings.Repeat("x", 2<<10)}
+	code, _, errOut := h.run(claudeEvent(h, "t1", "Bash", big, nil), "hook", "pre", "--host", "claude")
+	if code != 2 || !strings.Contains(errOut, "too large to record") {
+		t.Fatalf("pre: exit %d %q", code, errOut)
+	}
+	code, _, errOut = h.run(claudeEvent(h, "t1", "Bash", big, map[string]any{"tool_response": "ok"}), "hook", "post", "--host", "claude")
+	if code != 0 || !strings.Contains(errOut, "too large to record") {
+		t.Fatalf("post: exit %d %q", code, errOut)
+	}
+}
+
 func TestCopilotRoundTripWithoutIDs(t *testing.T) {
 	h := newHarness(t)
 	pre := h.payload(map[string]any{"sessionId": "cp1", "toolName": "bash", "toolArgs": `{"command":"make"}`})

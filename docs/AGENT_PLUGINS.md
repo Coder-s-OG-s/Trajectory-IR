@@ -155,6 +155,10 @@ trajir verify session.tir
 Both export and verify show up on the dashboard next to the run, and the
 exported package is copied into the dashboard's packages panel.
 
+A package holds at most 32 MiB of nodes, which every tool call's arguments and
+result count toward. A longer session cannot be exported as one package yet:
+export stops with a `tir limit` error instead of writing a file verify rejects.
+
 ## Uninstall
 
 - Claude Code: `/plugin uninstall trajectory-ir`.

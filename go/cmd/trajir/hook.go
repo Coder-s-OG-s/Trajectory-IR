@@ -10,8 +10,8 @@ import (
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/hosthook/hosts"
 )
 
-// maxPayload bounds what a hook reads from stdin.
-const maxPayload = 256 << 20
+// maxPayload bounds what a hook reads from stdin. A var so tests can lower it.
+var maxPayload = 256 << 20
 
 // cmdHook is what host hooks run: trajir hook <phase> --host <name>.
 //
@@ -43,9 +43,13 @@ func cmdHook(args []string, c cliIO) int {
 		fmt.Fprintf(c.stderr, "trajir hook: %v\n", err)
 		return failCode(phase)
 	}
-	raw, err := io.ReadAll(io.LimitReader(c.stdin, maxPayload))
+	raw, err := io.ReadAll(io.LimitReader(c.stdin, int64(maxPayload)+1))
 	if err != nil {
 		return fail(c, adapter, phase, "could not read the hook payload: "+err.Error())
+	}
+	if len(raw) > maxPayload {
+		// Cut short, it would only fail later as broken JSON.
+		return fail(c, adapter, phase, fmt.Sprintf("the hook payload is over %d bytes, too large to record", maxPayload))
 	}
 	ev, err := adapter.Parse(phase, raw)
 	if err != nil {
