@@ -2,7 +2,10 @@
   "mcpServers": {
     "trajectory-ir": {
       "command": "trajir",
-      "args": ["mcp"]
+      "args": ["mcp"],
+      "env": {
+        "TRAJIR_MCP_ROOT": "${CLAUDE_PROJECT_DIR}"
+      }
     }
   }
 }
