@@ -19,8 +19,9 @@ go build -o trajir-mcp ./cmd/trajir-mcp
 ## Host plugins
 
 Host packaging lives in this repo: the Claude Code plugin is under
-[`plugins/claude-code`](../../plugins/claude-code), and `trajir install <agent>`
-writes hooks and this MCP server for Codex, Gemini CLI, Cursor and Copilot CLI.
+[`plugins/claude-code`](../../plugins/claude-code), the Grok CLI plugin is under
+[`plugins/grok`](../../plugins/grok), and `trajir install <agent>`
+writes hooks and this MCP server for Codex, Gemini CLI, Cursor, Copilot CLI and Grok CLI.
 See [docs/AGENT_PLUGINS.md](../../docs/AGENT_PLUGINS.md). `trajir mcp` runs the
 same server as `trajir-mcp`.
 

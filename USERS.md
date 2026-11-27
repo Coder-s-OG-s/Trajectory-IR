@@ -239,7 +239,7 @@ The hooks do not seal tools that belong to Cursor, VS Code, Gemini CLI, or Codex
 
 ## MCP servers
 
-`go/trajir-mcp.exe` speaks MCP on stdio until the client disconnects. The installer starts it with `TRAJIR_MCP_ROOT` set to the absolute target path. Every `work_dir`, `dest`, and `path` has to stay under that root. If you run the binary yourself and leave `TRAJIR_MCP_ROOT` unset, the process current directory is the root.
+`go/trajir-mcp.exe` speaks MCP on stdio until the client disconnects. The installer starts it with `TRAJIR_MCP_ROOT` set to the absolute target path. Every `work_dir`, `dest`, and `path` has to stay under that root. If you run the binary yourself and leave `TRAJIR_MCP_ROOT` unset, the MCP tools refuse to run. Set it to the absolute project directory. A value that is not a real directory is refused too.
 
 `nodes.sqlite` and `memo.sqlite` inside a work directory must not be symlinks.
 
@@ -274,9 +274,18 @@ Do not put signing keys in that file.
 
 ## Plugins
 
-There is no plugin marketplace in this repository. The installer is the plugin step that exists today: it writes the project MCP config and the two `.trajir` snippets. Skill files and a separate host UI are not shipped here. [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) keeps host plugin packaging as a later repository of config only.
+Claude Code and Grok CLI install from this repository's marketplace. The other agents use `trajir install`. Copilot CLI is in that installer. The guide is [docs/AGENT_PLUGINS.md](docs/AGENT_PLUGINS.md).
 
-Copilot is not in the installer. If your editor is not Claude Code, Cursor, VS Code, Gemini CLI, or Codex, use the MCP JSON above or the Python and Go libraries.
+For Grok CLI, put `trajir` on your PATH, then run:
+
+```bash
+grok plugin marketplace add Coder-s-OG-s/Trajectory-IR
+grok plugin install trajectory-ir-grok --trust
+```
+
+Trust the project folder before the hooks run (`/hooks-trust`, or start Grok with `--trust`). Until the folder is trusted, the plugin does not seal tool calls, and Grok does not block them. A project install without the marketplace is `trajir install grok` in that project. It writes `.grok/hooks/trajir.json` and a `trajectory-ir` MCP server in `.grok/config.toml`.
+
+The plugin's MCP entry sets `TRAJIR_MCP_ROOT` to `${GROK_WORKSPACE_ROOT}`. This repo does not verify that Grok expands that placeholder inside a plugin `.mcp.json`. If MCP says the root is unset or unusable, run `trajir install grok` in the project. That writes the absolute project directory into `.grok/config.toml`, which outranks `.mcp.json`. Hooks still seal either way. A user-level install does not pin your home directory as the root.
 
 ## The console on your machine
 

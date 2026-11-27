@@ -326,6 +326,24 @@ func TestVersionAndHelp(t *testing.T) {
 	}
 }
 
+func TestGrokTruncatedPreIsBlocked(t *testing.T) {
+	h := newHarness(t)
+	raw := h.payload(map[string]any{
+		"sessionId":          "g1",
+		"toolUseId":          "t1",
+		"toolName":           "run_terminal_command",
+		"toolInput":          map[string]any{"command": "echo hi"},
+		"toolInputTruncated": true,
+	})
+	code, out, errOut := h.run(raw, "hook", "pre", "--host", "grok", "--owner", "plugin")
+	if code != 2 || !strings.Contains(out, `"decision":"deny"`) || !strings.Contains(errOut, "truncated") {
+		t.Fatalf("code %d out %q err %q", code, out, errOut)
+	}
+	if _, err := os.Stat(filepath.Join(h.project, ".trajir")); !os.IsNotExist(err) {
+		t.Fatalf("truncated pre wrote a run: %v", err)
+	}
+}
+
 func TestInstallCommand(t *testing.T) {
 	h := newHarness(t)
 	out := h.mustRun("", "install", "codex", "--target", h.project, "--command", "trajir")

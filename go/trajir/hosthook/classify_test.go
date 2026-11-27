@@ -96,6 +96,44 @@ func TestOverrideCannotSoftenOpenWorldTool(t *testing.T) {
 	}
 }
 
+func TestGrokReadsAreReadOnlyAndSpawnIsASpawn(t *testing.T) {
+	c := classifier(t, "grok", t.TempDir())
+	for _, name := range []string{"read_file", "hashline_read", "grep", "hashline_grep", "list_dir", "web_search", "web_fetch"} {
+		if got := c(name, nil); got != effects.READ_ONLY {
+			t.Fatalf("%s = %s", name, got)
+		}
+	}
+	if got := c("spawn_subagent", nil); got != effects.AGENT_SPAWN {
+		t.Fatalf("spawn_subagent = %s", got)
+	}
+	for _, name := range []string{"search_replace", "write", "hashline_edit", "todo_write", "open_page", "mystery"} {
+		if got := c(name, nil); got != effects.NON_IDEMPOTENT_WRITE {
+			t.Fatalf("%s = %s", name, got)
+		}
+	}
+	if got := c("run_terminal_command", map[string]any{"readOnlyHint": true}); got != effects.NON_IDEMPOTENT_WRITE {
+		t.Fatalf("run_terminal_command = %s", got)
+	}
+}
+
+func TestGrokOverrideCannotSoftenShell(t *testing.T) {
+	proj := t.TempDir()
+	writeEffects(t, proj, `{"tools": {"run_terminal_command": "READ_ONLY"}}`)
+	_, err := hosthook.NewClassifier("grok", proj)
+	if err == nil || !strings.Contains(err.Error(), "run_terminal_command") {
+		t.Fatalf("want error naming run_terminal_command, got %v", err)
+	}
+}
+
+func TestGrokOverrideCanRetagSpawn(t *testing.T) {
+	proj := t.TempDir()
+	writeEffects(t, proj, `{"tools": {"spawn_subagent": "NON_IDEMPOTENT_WRITE"}}`)
+	c := classifier(t, "grok", proj)
+	if got := c("spawn_subagent", nil); got != effects.NON_IDEMPOTENT_WRITE {
+		t.Fatalf("spawn_subagent = %s", got)
+	}
+}
+
 func TestUnknownHostHasNoDefaults(t *testing.T) {
 	if got := classifier(t, "other", t.TempDir())("Read", nil); got != effects.NON_IDEMPOTENT_WRITE {
 		t.Fatalf("Read on unknown host = %s", got)

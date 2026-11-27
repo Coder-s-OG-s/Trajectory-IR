@@ -144,7 +144,7 @@ func TestClassifyToolFailClosesBashEvenIfReadOnlyHint(t *testing.T) {
 	if got := effects.ClassifyFromMCP(readOnly); got != effects.READ_ONLY {
 		t.Fatalf("MCP mapper: got %s", got)
 	}
-	for _, name := range []string{"bash", "BASH", "python_interpreter", "sql_query"} {
+	for _, name := range []string{"bash", "BASH", "python_interpreter", "sql_query", "run_terminal_command"} {
 		if got := effects.ClassifyTool(name, readOnly); got != effects.NON_IDEMPOTENT_WRITE {
 			t.Fatalf("%s: got %s, want NON_IDEMPOTENT_WRITE", name, got)
 		}
@@ -184,10 +184,13 @@ func TestAssertOpenWorldEffect(t *testing.T) {
 	if err := effects.AssertOpenWorldEffect("bash", effects.READ_ONLY, true); err != nil {
 		t.Fatal(err)
 	}
+	if err := effects.AssertOpenWorldEffect("run_terminal_command", effects.READ_ONLY, false); err == nil {
+		t.Fatal("run_terminal_command READ_ONLY must be refused")
+	}
 }
 
 func TestIsOpenWorldPrimitive(t *testing.T) {
-	if !effects.IsOpenWorldPrimitive("bash") || !effects.IsOpenWorldPrimitive(" Shell ") {
+	if !effects.IsOpenWorldPrimitive("bash") || !effects.IsOpenWorldPrimitive(" Shell ") || !effects.IsOpenWorldPrimitive("run_terminal_command") {
 		t.Fatal("expected open-world names")
 	}
 	if effects.IsOpenWorldPrimitive("echo") {

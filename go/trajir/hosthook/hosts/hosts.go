@@ -8,6 +8,7 @@
 //	gemini   https://geminicli.com/docs/hooks/reference/
 //	cursor   https://cursor.com/docs/agent/hooks
 //	copilot  https://docs.github.com/en/copilot/reference/hooks-reference
+//	grok     Grok CLI hook payload: camelCase fields, plus the Claude snake_case aliases
 package hosts
 
 import (
@@ -41,6 +42,7 @@ func init() {
 	register(gemini{})
 	register(cursor{})
 	register(copilot{})
+	register(grok{})
 }
 
 // Lookup returns the adapter for a host name.
@@ -300,5 +302,68 @@ func (copilot) Block(stdout, stderr io.Writer, reason string) int {
 	return jsonBlock(stdout, stderr, map[string]any{
 		"permissionDecision":       "deny",
 		"permissionDecisionReason": reason,
+	}, reason)
+}
+
+// grok sends camelCase (sessionId, toolName, toolInput, toolUseId,
+// toolResponse) and also the Claude snake_case aliases. toolUseId is kept.
+// A truncated tool input on pre is refused: the bytes we would seal are not
+// the call that would run.
+type grok struct{}
+
+func (grok) Name() string    { return "grok" }
+func (grok) Runtime() string { return "grok-cli" }
+func (grok) Parse(phase hosthook.Phase, raw []byte) (hosthook.Event, error) {
+	p, err := decode(raw)
+	if err != nil {
+		return hosthook.Event{}, err
+	}
+	if phase == hosthook.PhasePre && inputTruncated(p) {
+		return hosthook.Event{}, fmt.Errorf("tool input was truncated, so this call is not sealed")
+	}
+	input, ok := p["tool_input"]
+	if !ok {
+		input = p["toolInput"]
+	}
+	var result any
+	if _, ok := p["tool_response"]; ok {
+		result = p["tool_response"]
+	} else {
+		result = p["toolResponse"]
+	}
+	ev := hosthook.Event{
+		Host:        "grok",
+		SessionID:   p.str("session_id", "sessionId"),
+		ToolUseID:   p.str("tool_use_id", "toolUseId"),
+		ToolName:    p.str("tool_name", "toolName"),
+		Cwd:         p.str("cwd", "workspaceRoot"),
+		Args:        args(input),
+		Annotations: annotations(p),
+		Result:      result,
+	}
+	if phase == hosthook.PhasePostFailure {
+		ev.Error = p["error"]
+	}
+	return ev, nil
+}
+
+// inputTruncated reports whether the tool input was cut, or the flag is
+// present but not a boolean. A missing flag means the host sent the input whole.
+func inputTruncated(p payload) bool {
+	for _, key := range []string{"toolInputTruncated", "tool_input_truncated"} {
+		v, ok := p[key]
+		if !ok {
+			continue
+		}
+		b, isBool := v.(bool)
+		return !isBool || b
+	}
+	return false
+}
+
+func (grok) Block(stdout, stderr io.Writer, reason string) int {
+	return jsonBlock(stdout, stderr, map[string]any{
+		"decision": "deny",
+		"reason":   reason,
 	}, reason)
 }

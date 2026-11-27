@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Copilot CLI is sealed before it runs and recorded after, one trajectory per
   session. Claude Code installs a plugin from this repo's marketplace. The
   others use `trajir install <agent>`. See `docs/AGENT_PLUGINS.md` (#610).
+- Grok CLI: the `trajectory-ir-grok` plugin seals each tool call before it runs
+  and records the result. `trajir install grok` writes the same hooks into the
+  project. `run_terminal_command` stays an open-world tool. See
+  `docs/AGENT_PLUGINS.md`.
 - `go/trajir/hosthook`, the Go port of `integrations/hosthook/session.py`.
   A conformance test checks both write the same node ids (#594, #595).
 - `trajir` subcommands `hook`, `install`, `runs`, `export`, `console` and

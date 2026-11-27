@@ -21,7 +21,16 @@ var hostReadOnly = map[string][]string{
 	"gemini": {"read_file", "read_many_files", "list_directory", "glob", "search_file_content", "google_web_search", "web_fetch"},
 	// https://cursor.com/docs/agent/hooks (preToolUse matcher values)
 	"cursor": {"Read", "Grep"},
+	// Grok CLI built-ins that only read. run_terminal_command is open-world
+	// and is not listed. Matcher aliases such as Read are not the payload name.
+	"grok": {"read_file", "hashline_read", "grep", "hashline_grep", "list_dir", "web_search", "web_fetch"},
 	// Codex and Copilot CLI tools are shell and patch based. No defaults.
+}
+
+// hostAgentSpawn lists built-ins that start another agent. effects.json may
+// still name a different class. These names are not open-world primitives.
+var hostAgentSpawn = map[string][]string{
+	"grok": {"spawn_subagent"},
 }
 
 type effectsFile struct {
@@ -36,6 +45,9 @@ func NewClassifier(host, projectDir string) (func(string, map[string]any) effect
 	table := map[string]effects.EffectClass{}
 	for _, name := range hostReadOnly[host] {
 		table[name] = effects.READ_ONLY
+	}
+	for _, name := range hostAgentSpawn[host] {
+		table[name] = effects.AGENT_SPAWN
 	}
 	path := filepath.Join(projectDir, ".trajir", "effects.json")
 	raw, err := os.ReadFile(path)

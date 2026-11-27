@@ -215,6 +215,86 @@ func TestOwnerNamesScope(t *testing.T) {
 	}
 }
 
+func TestGrokShape(t *testing.T) {
+	dir := t.TempDir()
+	install(t, hostinstall.Options{Host: "grok", Target: dir, Command: `C:\Program Files\trajir.exe`})
+	cfg := readJSON(t, filepath.Join(dir, ".grok", "hooks", "trajir.json"))
+	pre := cfg["hooks"].(map[string]any)["PreToolUse"].([]any)[0].(map[string]any)["hooks"].([]any)[0].(map[string]any)
+	if pre["command"] != `C:\Program Files\trajir.exe` || pre["failClosed"] != true || pre["timeout"] != float64(30) {
+		t.Fatalf("pre = %v", pre)
+	}
+	args := pre["args"].([]any)
+	if len(args) != 6 || args[0] != "hook" || args[1] != "pre" || args[2] != "--host" || args[3] != "grok" || args[4] != "--owner" || args[5] != "project" {
+		t.Fatalf("args = %v", args)
+	}
+	post := cfg["hooks"].(map[string]any)["PostToolUse"].([]any)[0].(map[string]any)["hooks"].([]any)[0].(map[string]any)
+	if _, ok := post["failClosed"]; ok || post["timeout"] != float64(60) {
+		t.Fatalf("post = %v", post)
+	}
+	fail := cfg["hooks"].(map[string]any)["PostToolUseFailure"].([]any)[0].(map[string]any)["hooks"].([]any)[0].(map[string]any)
+	if _, ok := fail["failClosed"]; ok || fail["timeout"] != float64(60) {
+		t.Fatalf("post-failure = %v", fail)
+	}
+	start := cfg["hooks"].(map[string]any)["SessionStart"].([]any)[0].(map[string]any)["hooks"].([]any)[0].(map[string]any)
+	if _, ok := start["failClosed"]; ok || start["timeout"] != float64(30) {
+		t.Fatalf("session-start = %v", start)
+	}
+	toml, err := os.ReadFile(filepath.Join(dir, ".grok", "config.toml"))
+	if err != nil || !strings.Contains(string(toml), "[mcp_servers.trajectory-ir]") || !strings.Contains(string(toml), "TRAJIR_MCP_ROOT = ") || !strings.Contains(string(toml), filepath.Base(dir)) {
+		t.Fatalf("config.toml = %q, %v", toml, err)
+	}
+}
+
+func TestGrokUserInstallDoesNotPinHome(t *testing.T) {
+	home := t.TempDir()
+	install(t, hostinstall.Options{Host: "grok", User: true, Home: home})
+	toml, err := os.ReadFile(filepath.Join(home, ".grok", "config.toml"))
+	if err != nil || strings.Contains(string(toml), "TRAJIR_MCP_ROOT") {
+		t.Fatalf("config.toml = %q, %v", toml, err)
+	}
+	cfg := readJSON(t, filepath.Join(home, ".grok", "hooks", "trajir.json"))
+	pre := cfg["hooks"].(map[string]any)["PreToolUse"].([]any)[0].(map[string]any)["hooks"].([]any)[0].(map[string]any)
+	if pre["args"].([]any)[5] != "user" {
+		t.Fatalf("owner args = %v", pre["args"])
+	}
+}
+
+func TestGrokMergeKeepsOtherHooksAndRefreshes(t *testing.T) {
+	dir := t.TempDir()
+	write(t, filepath.Join(dir, ".grok", "hooks", "trajir.json"), `{"hooks":{"PreToolUse":[{"matcher":"read_file","hooks":[{"type":"command","command":"lint.exe","args":[]}]}]}}`)
+	write(t, filepath.Join(dir, ".grok", "config.toml"), "model = \"grok\"\n")
+	install(t, hostinstall.Options{Host: "grok", Target: dir, Command: "trajir"})
+	install(t, hostinstall.Options{Host: "grok", Target: dir, Command: `D:\tools\trajir.exe`})
+	cfg := readJSON(t, filepath.Join(dir, ".grok", "hooks", "trajir.json"))
+	groups := cfg["hooks"].(map[string]any)["PreToolUse"].([]any)
+	if len(groups) != 2 {
+		t.Fatalf("groups = %v", groups)
+	}
+	kept := groups[0].(map[string]any)["hooks"].([]any)[0].(map[string]any)
+	if kept["command"] != "lint.exe" {
+		t.Fatalf("user hook = %v", kept)
+	}
+	ours := groups[1].(map[string]any)["hooks"].([]any)[0].(map[string]any)
+	if ours["command"] != `D:\tools\trajir.exe` {
+		t.Fatalf("refreshed = %v", ours)
+	}
+	raw, _ := os.ReadFile(filepath.Join(dir, ".grok", "config.toml"))
+	if strings.Count(string(raw), "[mcp_servers.trajectory-ir]") != 1 || !strings.HasPrefix(string(raw), "model = \"grok\"") {
+		t.Fatalf("config.toml = %q", raw)
+	}
+}
+
+func TestGrokBadHooksWritesNothing(t *testing.T) {
+	dir := t.TempDir()
+	write(t, filepath.Join(dir, ".grok", "hooks", "trajir.json"), "[]")
+	if _, err := hostinstall.Install(hostinstall.Options{Host: "grok", Target: dir, Command: "trajir"}); err == nil || !strings.Contains(err.Error(), "trajir.json") {
+		t.Fatalf("want error naming trajir.json, got %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".grok", "config.toml")); !os.IsNotExist(err) {
+		t.Fatalf("config.toml written despite error: %v", err)
+	}
+}
+
 func TestRefreshesEntryWrittenWithoutOwner(t *testing.T) {
 	dir := t.TempDir()
 	write(t, filepath.Join(dir, ".codex", "hooks.json"),

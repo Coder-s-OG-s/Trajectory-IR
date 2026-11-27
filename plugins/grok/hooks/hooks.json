@@ -1,0 +1,58 @@
+{
+  "description": "Trajectory IR: seal each Grok CLI tool call before it runs and record its result.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "trajir",
+            "args": ["hook", "pre", "--host", "grok", "--owner", "plugin"],
+            "timeout": 30,
+            "failClosed": true
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "trajir",
+            "args": ["hook", "post", "--host", "grok", "--owner", "plugin"],
+            "timeout": 60
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "trajir",
+            "args": ["hook", "post-failure", "--host", "grok", "--owner", "plugin"],
+            "timeout": 60
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "trajir",
+            "args": ["hook", "session-start", "--host", "grok", "--owner", "plugin"],
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

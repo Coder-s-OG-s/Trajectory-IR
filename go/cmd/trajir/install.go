@@ -62,6 +62,8 @@ func cmdInstall(args []string, c cliIO) int {
 		fmt.Fprintln(c.stdout, "codex: open /hooks in Codex and trust the trajir hooks before they run")
 	case "gemini":
 		fmt.Fprintln(c.stdout, "gemini: run /hooks to check the trajir hooks are enabled")
+	case "grok":
+		fmt.Fprintln(c.stdout, "grok: trust this folder with /hooks-trust or --trust before these hooks run")
 	}
 	fmt.Fprintln(c.stdout, "dashboard: trajir console, then open http://127.0.0.1:8787/")
 	return 0

@@ -1,7 +1,7 @@
 # Agent plugins: record every tool call
 
 Trajectory IR can record every tool call a coding agent makes: Claude Code,
-Codex, Gemini CLI, Cursor and Copilot CLI. Each call is sealed before it runs
+Grok CLI, Codex, Gemini CLI, Cursor and Copilot CLI. Each call is sealed before it runs
 and its result is recorded after, one trajectory per agent session. Every
 session shows up on the dashboard, and you can export it as a `.tir` that
 anyone can check with `trajir verify`.
@@ -32,6 +32,7 @@ Check it with `trajir version`.
 | Agent | How | Command |
 |---|---|---|
 | Claude Code | Plugin | `/plugin marketplace add Coder-s-OG-s/Trajectory-IR`, then `/plugin install trajectory-ir@trajectory-ir` |
+| Grok CLI | Plugin | `grok plugin marketplace add Coder-s-OG-s/Trajectory-IR`, then `grok plugin install trajectory-ir-grok --trust` |
 | Codex | Project hooks | `trajir install codex`, then trust the hooks in `/hooks` |
 | Gemini CLI | Project settings | `trajir install gemini` |
 | Cursor | Project hooks | `trajir install cursor` |
@@ -55,6 +56,36 @@ binary you ran, so don't commit that file.
 > Gemini CLI's docs say it was replaced by Antigravity CLI on 2026-06-18. The
 > Gemini hooks still work where Gemini CLI does. There is no Gemini extension
 > bundle.
+
+Grok CLI can use the plugin above, or `trajir install grok` in a project (add
+`--user` for your user config). Both need `trajir` on `PATH`. The plugin starts
+`trajir` with an argument list, so it does not need `sh` or another shell.
+`failClosed` is set only on PreToolUse: if `trajir` is missing, that tool call
+is blocked. PostToolUse, PostToolUseFailure and SessionStart stay exit 0. A
+post hook cannot undo a tool that already ran.
+
+Project hooks and plugin hooks do not run until you trust the folder
+(`/hooks-trust`, or start with `--trust`). An untrusted plugin seals nothing,
+and Grok then lets the tool run. Headless `grok -p` trusts your user hooks.
+Project hooks still need trust.
+
+The event names the shell tool `run_terminal_command`. Matcher names such as
+`Bash` and `Shell` are aliases. They are not the name in the payload. A tool
+input over 128 KiB can arrive cut (`toolInputTruncated`). The pre hook blocks
+that call instead of sealing a partial command.
+
+Grok sends `toolUseId`. A subagent does not get SessionStart. Tool calls still
+seal when PreToolUse runs. If that call uses another session id, it is a
+separate trajectory.
+
+The plugin MCP entry sets `TRAJIR_MCP_ROOT` to `${GROK_WORKSPACE_ROOT}`.
+Expansion of that placeholder inside a plugin `.mcp.json` is not verified
+here. If MCP reports the root unset or unusable, run `trajir install grok` in
+the project. That writes the absolute directory into `.grok/config.toml`, which
+outranks `.mcp.json`. If that section is already present, install leaves it.
+Delete the `trajectory-ir` section and run install again to pin the directory.
+Hooks still seal either way. `trajir install grok --user` does not pin your
+home directory.
 
 ## 3. Use the agent
 
@@ -103,7 +134,9 @@ The trajectory id is `<agent>-<session id>`, for example `claude-8f2c...`.
 Each call gets an effect class, which decides what happens on a replay. It
 never blocks a first run. Each agent's read-only built-ins (Claude Code
 `Read`, `Grep`, `Glob`, `WebFetch`...; Gemini `read_file`, `glob`...; Cursor
-`Read`, `Grep`) are `READ_ONLY`. MCP tools use their annotations. Everything
+`Read`, `Grep`; Grok CLI `read_file`, `hashline_read`, `grep`, `hashline_grep`,
+`list_dir`, `web_search`, `web_fetch`) are `READ_ONLY`. Grok CLI `spawn_subagent`
+is `AGENT_SPAWN`. MCP tools use their annotations. Everything
 else, including shell and file writes, is `NON_IDEMPOTENT_WRITE`.
 
 Override per project in `.trajir/effects.json`:
@@ -112,9 +145,9 @@ Override per project in `.trajir/effects.json`:
 { "tools": { "mcp__deploy__preview": "IDEMPOTENT_WRITE", "Read": "NON_IDEMPOTENT_WRITE" } }
 ```
 
-Open-world tools (`Bash`, `shell`, `python`, `sql`, `browser`...) cannot be
-made safer here. Trying is an error that blocks tool calls until you fix the
-file.
+Open-world tools (`Bash`, `shell`, `python`, `sql`, `browser`,
+`run_terminal_command`...) cannot be made safer here. Trying is an error that
+blocks tool calls until you fix the file.
 
 `effects.json` belongs to the project, so a repo you clone can ship one. It
 can only change replay gating for tools that are not open-world. It never
@@ -136,12 +169,12 @@ trajir console
 ```
 
 Open <http://127.0.0.1:8787/>. Every session from every agent and project is
-there, with its agent shown next to it. Type `codex` or `claude-code` in the
+there, with its agent shown next to it. Type `codex`, `claude-code`, or `grok-cli` in the
 run search to list one agent's runs. The Evidence tab shows the
 seal-before-execute check, each tool call with its effect class and
 idempotency key, and audit results. New calls show up while it runs.
 
-The Claude Code plugin adds a `trajir-dashboard` skill, so you can ask Claude
+The Claude Code and Grok CLI plugins add a `trajir-dashboard` skill, so you can ask the agent
 to open it.
 
 ## 5. Export and verify
@@ -162,6 +195,9 @@ export stops with a `tir limit` error instead of writing a file verify rejects.
 ## Uninstall
 
 - Claude Code: `/plugin uninstall trajectory-ir`.
+- Grok CLI: `grok plugin uninstall trajectory-ir-grok`. Or delete
+  `.grok/hooks/trajir.json` and the `[mcp_servers.trajectory-ir]` section in
+  `.grok/config.toml`.
 - Others: delete the `trajir` entries from `.codex/hooks.json`,
   `.gemini/settings.json`, `.cursor/hooks.json`, or delete
   `.github/hooks/trajir.json`. The MCP entry is named `trajectory-ir`.

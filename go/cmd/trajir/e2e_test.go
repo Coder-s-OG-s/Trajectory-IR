@@ -36,6 +36,10 @@ var hostCalls = map[string]hostCall{
 		return h.payload(base), h.payload(with(base, "tool_output", `{"ok":true}`)),
 			h.payload(with(with(base, "error_message", "boom"), "failure_type", "error")), "post-failure"
 	},
+	"grok": func(h *harness, id, tool string, in map[string]any) (string, string, string, string) {
+		base := map[string]any{"sessionId": "e2e", "toolUseId": id, "toolName": tool, "toolInput": in}
+		return h.payload(base), h.payload(with(base, "toolResponse", "ok")), h.payload(with(base, "error", "boom")), "post-failure"
+	},
 	"copilot": func(h *harness, _, tool string, in map[string]any) (string, string, string, string) {
 		raw, _ := json.Marshal(in)
 		base := map[string]any{"sessionId": "e2e", "toolName": tool, "toolArgs": string(raw)}
@@ -58,7 +62,7 @@ func with(m map[string]any, k string, v any) map[string]any {
 // Every host: two successful calls and one failed call, then export,
 // verify, and the dashboard shows the run under that host's runtime.
 func TestEveryHostRecordsExportsAndShowsOnDashboard(t *testing.T) {
-	runtimes := map[string]string{"claude": "claude-code", "codex": "codex", "gemini": "gemini-cli", "cursor": "cursor", "copilot": "copilot-cli"}
+	runtimes := map[string]string{"claude": "claude-code", "codex": "codex", "gemini": "gemini-cli", "cursor": "cursor", "copilot": "copilot-cli", "grok": "grok-cli"}
 	for host, call := range hostCalls {
 		t.Run(host, func(t *testing.T) {
 			h := newHarness(t)
