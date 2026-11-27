@@ -228,6 +228,26 @@ func TestCopilotRoundTripWithoutIDs(t *testing.T) {
 	}
 }
 
+// A project and a user install of Gemini CLI or Copilot CLI both hook the
+// same call. Neither sends a tool id, and the call must still be one step.
+func TestTwoRegistrationsWithoutIDsRecordOnce(t *testing.T) {
+	h := newHarness(t)
+	pre := h.payload(map[string]any{"session_id": "g1", "tool_name": "run_shell_command", "tool_input": map[string]any{"command": "ls"}})
+	post := h.payload(map[string]any{"session_id": "g1", "tool_name": "run_shell_command", "tool_input": map[string]any{"command": "ls"},
+		"tool_response": map[string]any{"llmContent": "a.txt"}})
+	for _, owner := range []string{"project", "user"} {
+		h.mustRun(pre, "hook", "pre", "--host", "gemini", "--owner", owner)
+	}
+	for _, owner := range []string{"project", "user"} {
+		if code, _, errOut := h.run(post, "hook", "post", "--host", "gemini", "--owner", owner); code != 0 || errOut != "" {
+			t.Fatalf("%s post: exit %d %q", owner, code, errOut)
+		}
+	}
+	if c := h.counts("gemini", "gemini-g1"); c["DECISION"] != 1 || c["TOOL_RESULT"] != 1 || c["COMMIT_STEP"] != 1 {
+		t.Fatalf("counts = %v", c)
+	}
+}
+
 func TestGeminiErrorResponseWritesAbort(t *testing.T) {
 	h := newHarness(t)
 	base := map[string]any{"session_id": "g1", "tool_name": "read_file", "tool_input": map[string]any{"absolute_path": "a"}}

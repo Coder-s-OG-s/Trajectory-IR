@@ -106,7 +106,9 @@ func (s Session) openLog() (*nodelog.NodeLog, error) {
 // SealBeforeTool seals one tool call. It does not run the tool. An empty
 // toolUseID (a host that sends none) gets a derived id, and the post hook
 // finds the call again with RecordMatchedResult or RecordMatchedFailure.
-// A derived id cannot detect a replay: each call is a new step.
+// A derived id cannot detect a replay: each call is a new step. When another
+// owner has the same call pending, this is a second registration of that
+// call, so it joins it instead of sealing a new step.
 func (s Session) SealBeforeTool(name string, args map[string]any, toolUseID string, annotations map[string]any) (Record, error) {
 	safeArgs, err := jsonableMap(args)
 	if err != nil {
@@ -123,6 +125,10 @@ func (s Session) SealBeforeTool(name string, args map[string]any, toolUseID stri
 		return Record{}, err
 	}
 	if toolUseID == "" {
+		if other, ok := otherOwnerCall(st, name, safeArgs, s.Owner); ok {
+			other.Duplicate = true
+			return other, nil
+		}
 		toolUseID = "d-" + callKey(name, safeArgs) + "-" + strconv.Itoa(st.NextStep)
 	}
 	if done, ok := st.Done[toolUseID]; ok {
@@ -194,7 +200,10 @@ func byID(id string) resolver {
 }
 
 // byCall picks the oldest pending call with this tool name and args. Hosts
-// that send no id on the post hook are matched this way.
+// that send no id on the post hook are matched this way. With none pending,
+// the newest finished call with them is picked, so the post hook of a second
+// registration finds the call the first one already recorded and writes
+// nothing, as it does for a host that sends an id.
 func byCall(name string, args map[string]any) resolver {
 	return func(st *state) (string, error) {
 		safeArgs, err := jsonableMap(args)
@@ -211,11 +220,39 @@ func byCall(name string, args map[string]any) resolver {
 				best, bestStep = id, rec.StepN
 			}
 		}
+		if best != "" {
+			return best, nil
+		}
+		for id, rec := range st.Done {
+			if rec.ToolName != name || callKey(rec.ToolName, rec.Args) != key {
+				continue
+			}
+			if best == "" || rec.StepN > bestStep {
+				best, bestStep = id, rec.StepN
+			}
+		}
 		if best == "" {
 			return "", fmt.Errorf("%w %s (matched by name and args)", ErrNoSeal, name)
 		}
 		return best, nil
 	}
+}
+
+// otherOwnerCall returns the newest pending call with this tool name and
+// args that another owner sealed.
+func otherOwnerCall(st *state, name string, args map[string]any, owner string) (Record, bool) {
+	key := callKey(name, args)
+	var found Record
+	ok := false
+	for _, rec := range st.Pending {
+		if rec.Owner == owner || rec.ToolName != name || callKey(rec.ToolName, rec.Args) != key {
+			continue
+		}
+		if !ok || rec.StepN > found.StepN {
+			found, ok = rec, true
+		}
+	}
+	return found, ok
 }
 
 // callKey identifies a call by tool name and canonical args.
