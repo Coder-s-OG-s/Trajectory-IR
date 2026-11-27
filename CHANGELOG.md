@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-27
+
 ### Added
 
 - Agent plugins: every tool call of Claude Code, Codex, Gemini CLI, Cursor and
@@ -89,7 +91,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `rfc8785_bytes` for a sha256 node id. Resume checks that a trajectory
   has a row, world snapshot reads that step's `DECISION`, and MCP status
   counts kinds in SQL (#517).
-- Readers reject a `COMPAT.json` `min_runtime` newer than `0.3.0`.
+- Readers reject a `COMPAT.json` `min_runtime` newer than `0.4.0`.
   When the field is present it must be `MAJOR.MINOR.PATCH`. Go
   `tir.ErrRuntime` and Python `TirRuntimeError` name both versions.
   `trajir verify` reports `RUNTIME_TOO_OLD`. A package that omits the
@@ -101,7 +103,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   missing it, the two differ, it is not `MAJOR.MINOR`, or the major is not
   `0`. `trajir verify` reports this as `UNSUPPORTED_FORMAT`. Before, a package
   claiming any format loaded and could verify OK. Every package written by
-  0.1.0 through 0.3.0 has `0.1` in both files and still loads (#563).
+  0.1.0 through 0.4.0 has `0.1` in both files and still loads (#563).
 - LangGraph `TrajIRToolGuard.run_sealed` records a tool that raises as
   `ABORT` with reason `HOST_REPORTED_FAILURE`, the tool name and the error
   text, matching the Claude hook path, then raises the error again. Before,

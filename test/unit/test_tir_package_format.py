@@ -124,7 +124,7 @@ def test_runtime_version_matches_pyproject() -> None:
     assert doc["project"]["version"] == RUNTIME_VERSION
 
 
-@pytest.mark.parametrize("value", ["99.0.0", "0.3.1", "0.10.0"])
+@pytest.mark.parametrize("value", ["99.0.0", "0.4.1", "0.10.0"])
 def test_newer_min_runtime_is_rejected(
     package: Path, tmp_path: Path, value: str, monkeypatch
 ) -> None:
@@ -139,7 +139,7 @@ def test_newer_min_runtime_is_rejected(
         load_tir_unverified(bad)
 
 
-@pytest.mark.parametrize("value", [RUNTIME_VERSION, "0.2.10", None])
+@pytest.mark.parametrize("value", [RUNTIME_VERSION, "0.3.1", "0.2.10", None])
 def test_min_runtime_at_or_below_reader_loads(
     package: Path, tmp_path: Path, value: str | None
 ) -> None:

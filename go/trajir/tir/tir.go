@@ -41,7 +41,7 @@ const (
 	PackageFormatVersion = "0.1"
 	// RuntimeVersion is this reader. It matches pyproject.toml. A package
 	// min_runtime may be older than this. It must not be newer.
-	RuntimeVersion = "0.3.0"
+	RuntimeVersion = "0.4.0"
 
 	MaxZipEntries             = 10_000
 	MaxUncompressedEntryBytes = 32 * 1024 * 1024  // 32 MiB
