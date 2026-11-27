@@ -208,7 +208,7 @@ func setMinRuntime(t *testing.T, raw []byte, value *string) []byte {
 
 func TestLoadRejectsNewerMinRuntime(t *testing.T) {
 	src := samplePackage(t)
-	for _, value := range []string{"99.0.0", "0.3.1", "0.10.0"} {
+	for _, value := range []string{"99.0.0", "0.4.1", "0.10.0"} {
 		t.Run(value, func(t *testing.T) {
 			pkg := rewriteMinRuntime(t, src, &value)
 			_, err := tir.Load(pkg)
@@ -236,10 +236,12 @@ func TestLoadAcceptsMinRuntimeAtOrBelowReader(t *testing.T) {
 	}
 	equal := tir.RuntimeVersion
 	older := "0.2.10"
+	previous := "0.3.1"
 	for name, value := range map[string]*string{
-		"equal":       &equal,
-		"older patch": &older,
-		"missing":     nil,
+		"equal":          &equal,
+		"older patch":    &older,
+		"previous minor": &previous,
+		"missing":        nil,
 	} {
 		v := value
 		t.Run(name, func(t *testing.T) {

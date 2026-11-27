@@ -49,7 +49,7 @@ PackageMode = Literal["thin", "fat"]
 
 PACKAGE_FORMAT_VERSION = "0.1"
 # This reader. Keep it equal to the version in pyproject.toml.
-RUNTIME_VERSION = "0.3.0"
+RUNTIME_VERSION = "0.4.0"
 COMPAT = {
     "package_format": PACKAGE_FORMAT_VERSION,
     "min_runtime": "0.1.0",

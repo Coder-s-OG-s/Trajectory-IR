@@ -295,7 +295,7 @@ website/        MkDocs docs site and demo runbook
 
 | | |
 |---|---|
-| **Release** | [v0.3.0](CHANGELOG.md) |
+| **Release** | [v0.4.0](CHANGELOG.md) |
 | **Spec** | `spec-v0.2-draft`, see the [master specification](docs/MASTER_SPECIFICATION.md) |
 | **Phase** | 1C, harden and adopt. Go is primary and Python keeps parity. See the [roadmap](docs/ROADMAP.md) |
 | **OpenSSF** | [Best Practices project 14075](https://www.bestpractices.dev/projects/14075) · [Scorecard report](https://scorecard.dev/viewer/?uri=github.com/Coder-s-OG-s/Trajectory-IR) |

@@ -44,9 +44,9 @@ object exists for the tag (the action creates/updates it) and that
 
 | Surface | Where | Notes |
 |---------|--------|--------|
-| Python package | `pyproject.toml` → `project.version` | Current line: `0.3.0`, same number as tag `v0.3.0` |
-| Git tag | `v0.2.0` Phase 1B; `v0.2.1` Phase 1C harden; `v0.2.2`; **`v0.3.0`** latest release | Prefer `v` prefix. Do not move a tag that was already pushed |
-| Go module | `go/go.mod` | Tag `go/v0.3.0` points at the same commit as `v0.3.0`. `go/v0.2.2` stays where it was |
+| Python package | `pyproject.toml` → `project.version` | Current line: `0.4.0`. Tag `v0.4.0` from the commit that contains this line |
+| Git tag | `v0.2.0` Phase 1B; `v0.2.1` Phase 1C harden; `v0.2.2`; `v0.3.0`; **`v0.4.0`** next | Prefer `v` prefix. Do not move a tag that was already pushed. `v0.3.0` stays on `819fdf66` |
+| Go module | `go/go.mod` | Tag `go/v0.4.0` on the same commit as `v0.4.0`. `go/v0.3.0` stays where it was |
 
 ### Choosing 0.1.0 vs 0.1.1
 
