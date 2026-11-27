@@ -70,6 +70,35 @@ Import writes the whole package in one transaction since
 it committed each node separately and took 480 ms for 100 steps and 4.6 s
 for 1,000 on this machine (`0454488`).
 
+### Agent hooks
+
+Measured 2026-11-24 on the same machine, Go 1.26.11, dashboard sink off.
+
+`BenchmarkHookPrePost` in `go/cmd/trajir` runs one tool call the way a host
+does, the pre hook and then the post hook, in process, on a warm work dir:
+**46 ms per call, so about 23 ms per hook**. That covers reading the payload,
+the lock, the state file and the SQLite writes.
+
+```bash
+cd go && go test -run '^$' -bench HookPrePost -benchtime 200x ./cmd/trajir/
+```
+
+A real host starts `trajir` as a new process for each hook, and on Windows
+that start costs more than the hook work. Timed from Git Bash, 20 runs each:
+
+| Process | Per run |
+|---|---|
+| `true` (no-op) | 55 ms |
+| Empty Go binary | 72 ms |
+| `trajir version` (14.8 MB release build) | 241 ms |
+| `trajir hook pre` (release build) | 302 ms |
+
+The cost follows binary size and is not Go init: `GODEBUG=inittrace=1`
+shows a few milliseconds in total, Defender real-time scanning was off, and a
+build holding only the hook path (10.8 MB) was no faster. Linux and macOS
+were not measured. A tool call that takes the model seconds to plan has room
+for this, but a lighter hook process is open work.
+
 ### Postgres NodeLog
 
 Measured 2026-11-22 at `96bee7b` against `postgres:16.6` from

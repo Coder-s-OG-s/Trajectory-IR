@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Agent plugins: every tool call of Claude Code, Codex, Gemini CLI, Cursor and
+  Copilot CLI is sealed before it runs and recorded after, one trajectory per
+  session. Claude Code installs a plugin from this repo's marketplace. The
+  others use `trajir install <agent>`. See `docs/AGENT_PLUGINS.md` (#610).
+- `go/trajir/hosthook`, the Go port of `integrations/hosthook/session.py`.
+  A conformance test checks both write the same node ids (#594, #595).
+- `trajir` subcommands `hook`, `install`, `runs`, `export`, `console` and
+  `mcp`. `trajir-mcp` and `trajir-console` still work (#596, #598, #606).
+- Hook runs go to the dashboard by default (`~/.trajir/console-data`,
+  `TRAJIR_CONSOLE_SINK=off` to stop). `trajir verify` and `trajir export` now
+  report to it too, and run cards show which agent recorded them (#611, #612).
+- Tag releases attach `trajir` for linux, macOS and Windows on amd64 and arm64
+  with `SHA256SUMS` and provenance (#603).
+- `NodeLog.ListStepNodes` and `NodeLog.ListTrajectories` in Go.
+
 ### Removed
 
 - `load_projector_policy_from_env` had no callers. A policy file still loads

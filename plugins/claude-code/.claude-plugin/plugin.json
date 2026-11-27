@@ -1,0 +1,13 @@
+{
+  "name": "trajectory-ir",
+  "version": "0.1.0",
+  "description": "Seal every tool call before it runs, record its result, and see the session on the trajir dashboard. Export it as a .tir anyone can verify.",
+  "author": {
+    "name": "Trajectory IR maintainers",
+    "url": "https://github.com/Coder-s-OG-s/Trajectory-IR"
+  },
+  "homepage": "https://github.com/Coder-s-OG-s/Trajectory-IR/blob/main/docs/AGENT_PLUGINS.md",
+  "repository": "https://github.com/Coder-s-OG-s/Trajectory-IR",
+  "license": "Apache-2.0",
+  "keywords": ["audit", "evidence", "tool-calls", "trajectory", "flight-recorder"]
+}

@@ -1,0 +1,1 @@
+[{"op":"seal","id":"a","tool":"deploy","args":{},"owner":"one"},{"op":"seal","id":"a","tool":"deploy","args":{},"owner":"two"},{"op":"seal","id":"a","tool":"deploy","args":{},"owner":"one"},{"op":"result","id":"a","result":"ok"},{"op":"seal","id":"a","tool":"deploy","args":{},"owner":"one"}]

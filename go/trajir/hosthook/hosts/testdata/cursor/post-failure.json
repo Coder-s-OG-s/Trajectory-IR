@@ -1,0 +1,1 @@
+{"conversation_id":"conv-7","generation_id":"gen-1","hook_event_name":"postToolUseFailure","workspace_roots":["/proj"],"tool_name":"Shell","tool_input":{"command":"git status"},"tool_use_id":"tu-3","cwd":"/proj","error_message":"command timed out","failure_type":"timeout","duration":30000,"is_interrupt":false}

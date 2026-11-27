@@ -164,15 +164,18 @@ More in **[QUICKSTART.md](QUICKSTART.md)** and the [kill-mid-deploy demo](exampl
 
 | Host | How it attaches | Seals the host's tool calls? |
 |---|---|---|
-| **Claude Code** | Project-local hooks, written by the installer | Yes |
+| **Claude Code** | [Plugin](docs/AGENT_PLUGINS.md) (`/plugin marketplace add Coder-s-OG-s/Trajectory-IR`) | Yes |
+| **Codex, Gemini CLI, Cursor, Copilot CLI** | [`trajir install <agent>`](docs/AGENT_PLUGINS.md) writes their hooks | Yes |
 | **LangGraph** | `TrajIRToolGuard` wraps the tool node | Yes, and it gates the tool body |
 | **Google ADK** | `AdkToolGuard` callbacks | Yes. The callbacks do not call the tool |
-| **Cursor, VS Code, Gemini CLI, Codex** | Project MCP config, written by the installer | No. The MCP tools report status and export or check packs |
+| **VS Code** | Project MCP config, written by the installer | No. The MCP tools report status and export or check packs |
 | **Your own loop** | The [Go](go/QUICKSTART.md) or [Python](QUICKSTART.md) client | Yes |
 
-### One-step install
+Every agent session shows up on the dashboard (`trajir console`) with its seals and tool calls. The [agent plugin guide](docs/AGENT_PLUGINS.md) covers install, where runs live, effect classes, and export.
 
-Run this from a Trajectory IR checkout. With no target it attaches to the checkout itself.
+### One-step install from a checkout
+
+The older Python hook path. Run this from a Trajectory IR checkout. With no target it attaches to the checkout itself.
 
 ```bash
 ./scripts/install_claude.sh --target /path/to/your/project
