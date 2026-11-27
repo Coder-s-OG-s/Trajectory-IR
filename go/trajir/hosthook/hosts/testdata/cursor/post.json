@@ -1,0 +1,1 @@
+{"conversation_id":"conv-7","generation_id":"gen-1","hook_event_name":"postToolUse","workspace_roots":["/proj"],"tool_name":"Shell","tool_input":{"command":"git status"},"tool_output":"{\"exitCode\":0,\"output\":\"clean\"}","tool_use_id":"tu-3","cwd":"/proj","duration":120}

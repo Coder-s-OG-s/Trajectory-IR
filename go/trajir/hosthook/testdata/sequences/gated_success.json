@@ -1,0 +1,1 @@
+[{"op":"seal","id":"a","tool":"deploy","args":{"env":"prod"}},{"op":"result","id":"a","result":"deployed"},{"op":"seal","id":"b","tool":"bash","args":{"command":"rm -rf build"}},{"op":"result","id":"b","result":{"stdout":"","code":0}}]

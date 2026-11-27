@@ -9,14 +9,14 @@ require (
 	github.com/aws/aws-sdk-go-v2 v1.48.0
 	github.com/aws/aws-sdk-go-v2/config v1.33.16
 	github.com/aws/aws-sdk-go-v2/credentials v1.20.17
-	github.com/aws/aws-sdk-go-v2/service/s3 v1.114.10
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.116.0
 	github.com/aws/smithy-go v1.28.9
 	github.com/gowebpki/jcs v1.0.2
 	github.com/jackc/pgx/v5 v5.13.0
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	go.temporal.io/api v1.64.3
-	go.temporal.io/sdk v1.50.0
-	modernc.org/sqlite v1.62.0
+	go.temporal.io/sdk v1.51.0
+	modernc.org/sqlite v1.63.0
 )
 
 require (

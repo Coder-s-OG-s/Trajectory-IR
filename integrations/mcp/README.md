@@ -18,9 +18,11 @@ go build -o trajir-mcp ./cmd/trajir-mcp
 
 ## Host plugins
 
-Host-specific packaging (Claude Code skill files, Cursor config bundles) will
-live in a **separate repository**. This folder only documents the in-tree MCP
-surface.
+Host packaging lives in this repo: the Claude Code plugin is under
+[`plugins/claude-code`](../../plugins/claude-code), and `trajir install <agent>`
+writes hooks and this MCP server for Codex, Gemini CLI, Cursor and Copilot CLI.
+See [docs/AGENT_PLUGINS.md](../../docs/AGENT_PLUGINS.md). `trajir mcp` runs the
+same server as `trajir-mcp`.
 
 ## Tools
 

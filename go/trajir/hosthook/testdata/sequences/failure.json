@@ -1,0 +1,1 @@
+[{"op":"seal","id":"a","tool":"deploy","args":{"env":"stg"}},{"op":"failure","id":"a","error":{"code":5,"msg":"é"}},{"op":"seal","id":"b","tool":"echo","args":{}},{"op":"failure","id":"b","error":""}]

@@ -1,0 +1,25 @@
+#!/bin/sh
+# Run the trajir binary for the Trajectory IR plugin.
+#
+# Uses TRAJIR_BIN when set, else trajir on PATH. When neither is there, a
+# pre hook blocks the tool (an unrecorded tool call is what this plugin
+# exists to prevent) and every other hook only prints how to install.
+# stdin, the hook payload, passes straight through to trajir.
+
+bin="${TRAJIR_BIN:-trajir}"
+
+if [ -f "$bin" ] || command -v "$bin" >/dev/null 2>&1; then
+  exec "$bin" "$@"
+fi
+
+msg="trajir not found. Install a release binary from https://github.com/Coder-s-OG-s/Trajectory-IR/releases (or: go install github.com/Coder-s-OG-s/Trajectory-IR/go/cmd/trajir@latest) and put it on PATH, or set TRAJIR_BIN."
+
+if [ "$1" = "hook" ] && [ "$2" = "pre" ]; then
+  echo "trajir: tool call not recorded, so it is blocked: $msg" >&2
+  exit 2
+fi
+echo "trajir: $msg" >&2
+if [ "$1" = "hook" ]; then
+  exit 0
+fi
+exit 1
