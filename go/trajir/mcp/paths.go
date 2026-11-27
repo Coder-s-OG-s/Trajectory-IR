@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,25 +11,33 @@ import (
 )
 
 // EnvWorkspaceRoot is the environment variable for the approved workspace root.
-// It must be set explicitly: all MCP tool paths must resolve under this root
-// (CWE-73 / prompt-injected path confinement), so silently falling back to the
-// process's cwd when unset would let confinement widen to whatever directory
-// happened to launch the binary. Fail closed instead.
+// Tool paths must resolve under this root (CWE-73). The process working
+// directory is not a root: that would widen confinement to whatever directory
+// launched the binary. When this variable is unset, or still an unexpanded
+// ${...} placeholder, the server uses an absolute CLAUDE_PROJECT_DIR, or the
+// single workspace directory the MCP client reports. Otherwise it fails closed.
 const EnvWorkspaceRoot = "TRAJIR_MCP_ROOT"
 
 // approvedRoot returns the canonical absolute workspace root.
-func approvedRoot() (string, error) {
-	root := strings.TrimSpace(os.Getenv(EnvWorkspaceRoot))
-	if root == "" {
-		return "", fmt.Errorf("mcp: %s must be set to an approved workspace root", EnvWorkspaceRoot)
+func approvedRoot(ctx context.Context) (string, error) {
+	if ctx != nil {
+		if root, ok := ctx.Value(resolvedRootKey{}).(string); ok && root != "" {
+			return root, nil
+		}
 	}
-	return workdir.CanonicalizeDir(root)
+	if root := explicitEnvRoot(); root != "" {
+		return workdir.CanonicalizeDir(root)
+	}
+	if root := claudeProjectDir(); root != "" {
+		return workdir.CanonicalizeDir(root)
+	}
+	return "", errWorkspaceRoot()
 }
 
 // requireBoundedWorkDir validates work_dir under the approved root.
 // Empty work_dir means the root itself. The directory must already exist.
-func requireBoundedWorkDir(workDir string) (string, error) {
-	root, err := approvedRoot()
+func requireBoundedWorkDir(ctx context.Context, workDir string) (string, error) {
+	root, err := approvedRoot(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -40,11 +49,11 @@ func requireBoundedWorkDir(workDir string) (string, error) {
 
 // requireBoundedPath validates path is under root (or under preferredRoot when set).
 // preferRoot is typically the validated work_dir for exports.
-func requireBoundedPath(path, preferRoot string) (string, error) {
+func requireBoundedPath(ctx context.Context, path, preferRoot string) (string, error) {
 	if strings.TrimSpace(path) == "" {
 		return "", fmt.Errorf("mcp: path is required")
 	}
-	root, err := approvedRoot()
+	root, err := approvedRoot(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -96,8 +105,8 @@ func resolveUnderRoot(root, userPath string, requireDir bool) (string, error) {
 }
 
 // workdirSQLitePaths returns validated nodes/memo paths under workDir (no symlink leaves).
-func workdirSQLitePaths(workDir string) (nodesPath, memoPath string, err error) {
-	root, err := approvedRoot()
+func workdirSQLitePaths(ctx context.Context, workDir string) (nodesPath, memoPath string, err error) {
+	root, err := approvedRoot(ctx)
 	if err != nil {
 		return "", "", err
 	}

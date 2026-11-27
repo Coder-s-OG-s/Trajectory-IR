@@ -239,7 +239,7 @@ The hooks do not seal tools that belong to Cursor, VS Code, Gemini CLI, or Codex
 
 ## MCP servers
 
-`go/trajir-mcp.exe` speaks MCP on stdio until the client disconnects. The installer starts it with `TRAJIR_MCP_ROOT` set to the absolute target path. Every `work_dir`, `dest`, and `path` has to stay under that root. If you run the binary yourself and leave `TRAJIR_MCP_ROOT` unset, the process current directory is the root.
+`go/trajir-mcp.exe` speaks MCP on stdio until the client disconnects. The installer starts it with `TRAJIR_MCP_ROOT` set to the absolute target path. Every `work_dir`, `dest`, and `path` has to stay under that root. If you run the binary yourself and leave `TRAJIR_MCP_ROOT` unset, the tool call fails. The process current directory is not the root. Claude Code may set `CLAUDE_PROJECT_DIR`, and a client that reports exactly one workspace directory is accepted in place of the variable.
 
 `nodes.sqlite` and `memo.sqlite` inside a work directory must not be symlinks.
 

@@ -100,10 +100,11 @@ config files; use environment variables when signing tools are added.
 
 | Variable | Meaning |
 |----------|---------|
-| `TRAJIR_MCP_ROOT` | Approved workspace root. All `work_dir`, `dest`, and `path` values must resolve under this directory. When unset, the process **current working directory** is the root. |
+| `TRAJIR_MCP_ROOT` | Approved workspace root. All `work_dir`, `dest`, and `path` values must resolve under this directory. When it is unset, the server uses an absolute `CLAUDE_PROJECT_DIR` if Claude Code set one, or the single workspace directory the client reports. Otherwise the tool call fails. The process working directory is not a root. |
 
 This bounds prompt-injected tool paths (CWE-73). Host configs should set
-`TRAJIR_MCP_ROOT` to the project directory and start the server with that cwd.
+`TRAJIR_MCP_ROOT` to the project directory. The server does not fall back
+to the process working directory.
 
 `nodes.sqlite` and `memo.sqlite` under a work dir must not be **symlinks**
 (CWE-59). Symlinked leaves that point outside the workspace are rejected before open.

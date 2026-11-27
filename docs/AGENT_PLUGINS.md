@@ -51,6 +51,13 @@ counts as a replay. When `trajir` is on your
 `PATH`, the config says `trajir`. Otherwise it holds the absolute path of the
 binary you ran, so don't commit that file.
 
+The install also registers an MCP server named `trajectory-ir` for Codex,
+Gemini CLI, Cursor, and a Claude Code project install. The Claude Code plugin
+registers the same server. Copilot CLI gets hooks only. The tools are
+`trajectory_status`, `trajectory_export_tir`, `trajectory_import_tir`, and
+`trajectory_verify_signature`. They only read and write paths under the
+workspace root.
+
 > [!NOTE]
 > Gemini CLI's docs say it was replaced by Antigravity CLI on 2026-06-18. The
 > Gemini hooks still work where Gemini CLI does. There is no Gemini extension
@@ -97,6 +104,7 @@ The trajectory id is `<agent>-<session id>`, for example `claude-8f2c...`.
 | `TRAJIR_BIN` | `trajir` on `PATH` | Binary the Claude Code plugin runs |
 | `TRAJIR_CONSOLE_SINK` | file | `off` sends nothing to the dashboard. `http` posts to `TRAJIR_CONSOLE_URL` |
 | `TRAJIR_CONSOLE_DATA` | `~/.trajir/console-data` | Dashboard data folder |
+| `TRAJIR_MCP_ROOT` | the project path, or `${CLAUDE_PROJECT_DIR}` in the Claude Code plugin | Workspace root for the MCP tools. A project install writes the absolute project path. A user-level install does not set it, because that one file is shared by every project. The server then uses `CLAUDE_PROJECT_DIR` when Claude Code sets it, or the single workspace directory the client reports. It does not use the process working directory. If none of those is available, the tool call fails. |
 
 ### Effect classes
 
