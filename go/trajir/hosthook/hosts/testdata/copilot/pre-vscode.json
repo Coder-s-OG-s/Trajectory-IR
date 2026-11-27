@@ -1,0 +1,1 @@
+{"hook_event_name":"PreToolUse","session_id":"cp-2","timestamp":"2026-11-24T10:00:00Z","cwd":"/proj","tool_name":"bash","tool_input":{"command":"make"}}

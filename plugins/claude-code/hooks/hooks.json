@@ -1,0 +1,36 @@
+{
+  "description": "Trajectory IR: seal each tool call before it runs and record its result.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          { "type": "command", "command": "sh \"${CLAUDE_PLUGIN_ROOT}/bin/trajir-run\" hook pre --host claude --owner plugin", "timeout": 30 }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          { "type": "command", "command": "sh \"${CLAUDE_PLUGIN_ROOT}/bin/trajir-run\" hook post --host claude --owner plugin", "timeout": 60 }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "*",
+        "hooks": [
+          { "type": "command", "command": "sh \"${CLAUDE_PLUGIN_ROOT}/bin/trajir-run\" hook post-failure --host claude --owner plugin", "timeout": 60 }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "sh \"${CLAUDE_PLUGIN_ROOT}/bin/trajir-run\" hook session-start --host claude --owner plugin", "timeout": 30 }
+        ]
+      }
+    ]
+  }
+}

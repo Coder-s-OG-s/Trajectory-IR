@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/logerr"
 	"github.com/Coder-s-OG-s/Trajectory-IR/go/trajir/nodes"
@@ -33,14 +34,18 @@ type NodeLog struct {
 
 // Open creates or opens a SQLite database at path and ensures the schema exists.
 func Open(path string) (*NodeLog, error) {
-	db, err := sql.Open("sqlite", path+"?_busy_timeout=5000")
+	// _txlock=immediate makes Begin take the write lock up front, as the
+	// Python log does with BEGIN IMMEDIATE. A deferred transaction that reads
+	// and then writes cannot wait for another process: SQLite returns
+	// SQLITE_BUSY at once and ignores the busy timeout.
+	db, err := sql.Open("sqlite", path+"?_busy_timeout=5000&_txlock=immediate")
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
 	}
 	// One connection is enough for the local profile and keeps write order simple.
 	db.SetMaxOpenConns(1)
 
-	if _, err := db.Exec(`PRAGMA journal_mode=WAL;`); err != nil {
+	if err := setWAL(db); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("set wal: %w", err)
 	}
@@ -67,6 +72,30 @@ ON nodes (trajectory_id, tenant_id);
 	}
 
 	return &NodeLog{db: db}, nil
+}
+
+// walWait bounds how long Open retries switching a new file to WAL.
+const walWait = 5 * time.Second
+
+// setWAL switches the database to WAL. When two processes open a new file
+// at the same moment, both try to switch it and SQLite answers one of them
+// SQLITE_BUSY without waiting, so that is retried. The mode is stored in the
+// file, so the retry finds it already set.
+func setWAL(db *sql.DB) error {
+	deadline := time.Now().Add(walWait)
+	for {
+		_, err := db.Exec(`PRAGMA journal_mode=WAL;`)
+		if err == nil || !isBusy(err) || time.Now().After(deadline) {
+			return err
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func isBusy(err error) bool {
+	var sqliteErr *sqlite.Error
+	// SQLITE_BUSY is 5. Extended codes keep it in the low byte.
+	return errors.As(err, &sqliteErr) && sqliteErr.Code()&0xff == 5
 }
 
 // AppendItem is one node for AppendMany.
@@ -486,7 +515,7 @@ func (l *NodeLog) CountByKind(trajectoryID, tenantID string) (map[string]int, er
 // Callers that genuinely need rows across tenants (e.g. tir.Export's own
 // mixed-tenant check) must use ListNodesAllTenants explicitly instead.
 func (l *NodeLog) ListNodes(trajectoryID, tenantID string) ([]map[string]any, error) {
-	return l.listNodes(trajectoryID, &tenantID, nil, 0)
+	return l.listNodes(trajectoryID, &tenantID, nil, nil, 0)
 }
 
 // ListNodesPage returns one page of ListNodes. limit and offset follow the
@@ -501,7 +530,7 @@ func (l *NodeLog) ListNodesPage(trajectoryID, tenantID string, limit, offset int
 	if offset < 0 {
 		return nil, fmt.Errorf("offset must be a non-negative integer")
 	}
-	return l.listNodes(trajectoryID, &tenantID, &limit, offset)
+	return l.listNodes(trajectoryID, &tenantID, nil, &limit, offset)
 }
 
 // ListNodesAllTenants returns nodes for a trajectory across all tenants.
@@ -509,10 +538,17 @@ func (l *NodeLog) ListNodesPage(trajectoryID, tenantID string, limit, offset int
 // performs its own tenant-scoping check on the result, such as tir.Export
 // detecting a trajectory with mixed tenant_id values.
 func (l *NodeLog) ListNodesAllTenants(trajectoryID string) ([]map[string]any, error) {
-	return l.listNodes(trajectoryID, nil, nil, 0)
+	return l.listNodes(trajectoryID, nil, nil, nil, 0)
 }
 
-func (l *NodeLog) listNodes(trajectoryID string, tenantID *string, limit *int, offset int) ([]map[string]any, error) {
+// ListStepNodes returns one step of a trajectory for one tenant, in seq
+// order. Hooks use it to report what a step just wrote without reading the
+// whole trajectory.
+func (l *NodeLog) ListStepNodes(trajectoryID, tenantID string, stepN int) ([]map[string]any, error) {
+	return l.listNodes(trajectoryID, &tenantID, &stepN, nil, 0)
+}
+
+func (l *NodeLog) listNodes(trajectoryID string, tenantID *string, stepN *int, limit *int, offset int) ([]map[string]any, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -522,6 +558,10 @@ func (l *NodeLog) listNodes(trajectoryID string, tenantID *string, limit *int, o
 	if tenantID != nil {
 		q += ` AND tenant_id = ?`
 		args = append(args, *tenantID)
+	}
+	if stepN != nil {
+		q += ` AND step_n = ?`
+		args = append(args, *stepN)
 	}
 	q += ` ORDER BY COALESCE(step_n, -1), seq`
 	if limit != nil {
@@ -568,6 +608,39 @@ func (l *NodeLog) listNodes(trajectoryID string, tenantID *string, limit *int, o
 			rec["step_n"] = nil
 		}
 		out = append(out, rec)
+	}
+	return out, rows.Err()
+}
+
+// TrajectorySummary is one trajectory in a log: node and DECISION counts and
+// the newest node time (Unix seconds).
+type TrajectorySummary struct {
+	TrajectoryID string  `json:"trajectory_id"`
+	TenantID     string  `json:"tenant_id"`
+	NodeCount    int     `json:"node_count"`
+	SealCount    int     `json:"seal_count"`
+	LastTS       float64 `json:"last_ts"`
+}
+
+// ListTrajectories lists every trajectory and tenant pair in the log,
+// sorted by trajectory then tenant.
+func (l *NodeLog) ListTrajectories() ([]TrajectorySummary, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	rows, err := l.db.Query(`SELECT trajectory_id, tenant_id, COUNT(*),
+	        SUM(CASE WHEN kind = 'DECISION' THEN 1 ELSE 0 END), MAX(ts)
+	      FROM nodes GROUP BY trajectory_id, tenant_id ORDER BY trajectory_id, tenant_id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []TrajectorySummary{}
+	for rows.Next() {
+		var s TrajectorySummary
+		if err := rows.Scan(&s.TrajectoryID, &s.TenantID, &s.NodeCount, &s.SealCount, &s.LastTS); err != nil {
+			return nil, err
+		}
+		out = append(out, s)
 	}
 	return out, rows.Err()
 }

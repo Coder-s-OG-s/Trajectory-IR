@@ -117,3 +117,6 @@ go/_demo_capture*/
 
 # trajir CLI built by docs/AUDIT_WALKTHROUGH.md
 /bin/
+
+# trajir release binaries built by scripts/release_binaries.sh
+/dist-go/

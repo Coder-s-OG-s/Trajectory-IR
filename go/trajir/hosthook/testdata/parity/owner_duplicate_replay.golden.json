@@ -1,0 +1,32 @@
+[
+  {
+    "kind": "PROJECT_CONTEXT",
+    "step_n": 1,
+    "seq": 0,
+    "id": "c37041f0717d47bc67c56326f9fe6073dfd642f998cb2a92cb1f651671e55f2c"
+  },
+  {
+    "kind": "DECISION",
+    "step_n": 1,
+    "seq": 1,
+    "id": "bd3d0b11545abb0dfb5eeee4669d9690d9d26d8777d350b27703e1480bd2d080"
+  },
+  {
+    "kind": "TOOL_CALL",
+    "step_n": 1,
+    "seq": 2,
+    "id": "bde21c27dc8af67faadfb41522b798d946e9756c391c7939acebef251d862327"
+  },
+  {
+    "kind": "TOOL_RESULT",
+    "step_n": 1,
+    "seq": 3,
+    "id": "1aba63fbbed9a5ebb8ff739c21a1d4690b2e35dfbe025b106a6f864add1fe1f3"
+  },
+  {
+    "kind": "COMMIT_STEP",
+    "step_n": 1,
+    "seq": 4,
+    "id": "33641a5e66e6b97996c3ed8303218a3dfd0eff9c8d2038a2a8e904c83dbb154e"
+  }
+]

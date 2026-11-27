@@ -1,0 +1,1 @@
+{"conversation_id":"conv-7","generation_id":"gen-1","model":"auto","hook_event_name":"preToolUse","cursor_version":"2.4","workspace_roots":["/proj"],"transcript_path":null,"tool_name":"Shell","tool_input":{"command":"git status"},"tool_use_id":"tu-3","cwd":"/proj"}

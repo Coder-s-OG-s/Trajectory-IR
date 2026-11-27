@@ -548,6 +548,14 @@ func Export(nodeLog *nodelog.NodeLog, trajectoryID, dest string, opts ExportOpti
 	if err != nil {
 		return "", err
 	}
+	// Load rejects a package over these limits, so refuse here instead of
+	// writing one that cannot be read back.
+	if len(nodeList) > MaxNodes {
+		return "", fmt.Errorf("%w: too many nodes to export: %d > %d", ErrLimit, len(nodeList), MaxNodes)
+	}
+	if len(seals) > MaxSeals {
+		return "", fmt.Errorf("%w: too many seals to export: %d > %d", ErrLimit, len(seals), MaxSeals)
+	}
 	manifest := map[string]any{
 		"package_format": PackageFormatVersion,
 		"trajectory_id":  trajectoryID,
@@ -597,7 +605,25 @@ func Export(nodeLog *nodelog.NodeLog, trajectoryID, dest string, opts ExportOpti
 	}()
 
 	zw := zip.NewWriter(f)
+	// total counts uncompressed bytes against the same per-member and
+	// per-package limits Load applies.
+	total := 0
+	account := func(name string, n int) error {
+		if n > MaxUncompressedEntryBytes {
+			return fmt.Errorf("%w: %s would be over %d bytes, the most a reader accepts per member; the trajectory is too large for one package",
+				ErrLimit, name, MaxUncompressedEntryBytes)
+		}
+		if total+n > MaxTotalUncompressedBytes {
+			return fmt.Errorf("%w: package would be over %d bytes uncompressed, the most a reader accepts",
+				ErrLimit, MaxTotalUncompressedBytes)
+		}
+		total += n
+		return nil
+	}
 	writeFile := func(name string, body []byte) error {
+		if err := account(name, len(body)); err != nil {
+			return err
+		}
 		w, err := zw.Create(name)
 		if err != nil {
 			return err
@@ -648,16 +674,26 @@ func Export(nodeLog *nodelog.NodeLog, trajectoryID, dest string, opts ExportOpti
 		_ = zw.Close()
 		return "", err
 	}
+	nodesSize := 0
 	for _, n := range nodeList {
 		line, err := marshalLine(n)
 		if err != nil {
 			_ = zw.Close()
 			return "", err
 		}
+		nodesSize += len(line)
+		if nodesSize > MaxUncompressedEntryBytes {
+			_ = zw.Close()
+			return "", account("nodes.ndjson", nodesSize)
+		}
 		if _, err := member.Write(line); err != nil {
 			_ = zw.Close()
 			return "", err
 		}
+	}
+	if err := account("nodes.ndjson", nodesSize); err != nil {
+		_ = zw.Close()
+		return "", err
 	}
 
 	if mode == ModeFat {

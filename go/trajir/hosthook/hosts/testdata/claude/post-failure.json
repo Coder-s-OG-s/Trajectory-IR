@@ -1,0 +1,1 @@
+{"session_id":"abc123","transcript_path":"/tmp/t.jsonl","cwd":"/proj","hook_event_name":"PostToolUseFailure","tool_name":"Bash","tool_input":{"command":"npm test","description":"Run tests"},"tool_use_id":"toolu_01","error":"exit status 1","is_interrupt":false}

@@ -38,7 +38,7 @@ honesty checklist. Fill drafts here before filing on
 
 ---
 
-## 2. Honest readiness snapshot (as of v0.3.0, November 2026)
+## 2. Honest readiness snapshot (checked 2026-11-22, `main`)
 
 Update this table monthly.
 
@@ -53,16 +53,24 @@ Update this table monthly.
 | MAINTAINERS.md (Name / GitHub ID / **Company**) | **Ready** | `MAINTAINERS.md` |
 | GOVERNANCE.md | **Ready** | `GOVERNANCE.md` |
 | ROADMAP (public URL) | **Ready** | `docs/ROADMAP.md` |
-| ADOPTERS (optional) | **Template** | `ADOPTERS.md` (empty until real consent) |
-| Scope / non-goals / product separation | **Ready** | `docs/SCOPE_AND_NON_GOALS.md` + roadmap |
+| ADOPTERS (optional) | **Empty** | `ADOPTERS.md` has no entries. The form recommends production users; first outside pilot is #541 |
+| Scope / non-goals | **Ready** | `docs/SCOPE_AND_NON_GOALS.md` + roadmap |
+| Business / product separation | **Partial** | The roadmap paragraph exists. `MAINTAINERS.md` lists the lead maintainer under EliteFolks and `CI_HARDENING.md` says contributors are one organization, so the form answer has to say whether EliteFolks has a related product or service (§4.2) |
 | Org diversity of maintainers | **Partial** | Documented; more multi-employer diversity still helps |
 | Neutral GitHub org transfer-ready | **Plan** | Onboarding requires neutral org |
-| OpenSSF Best Practices badge | **Ready** | Passing, [project 14075](https://www.bestpractices.dev/projects/14075) |
-| Scorecard / CI harden | **Ready** | Scorecard 8.0 (Nov 2026); CodeQL, fuzzing, SBOM. Release provenance starts with the next release (#515); v0.3.0 artifacts are unsigned. Open items in #380 |
-| Dependency licenses | **Ready** | `docs/THIRD_PARTY_LICENSES.md` + CI license scan; `psycopg` LGPL exception documented |
+| OpenSSF Best Practices badge | **Ready** | Passing, [project 14075](https://www.bestpractices.dev/projects/14075). Silver 7%, OSPS Baseline level 1 0% (#372) |
+| Scorecard / CI harden | **Ready** | Scorecard 8.3 (2026-11-22); CodeQL, fuzzing, SBOM. Lowest checks: Signed-Releases 0, Contributors 3, Branch-Protection 4, Pinned-Dependencies 5, CII-Best-Practices 5. v0.3.0 artifacts are unsigned. `main` needs 0 approvals. Open items in #380 |
+| Dependency licenses | **Disclose** | Go tree is all allowlisted. `psycopg` and `psycopg-binary` (LGPL-3.0-only, optional `postgres` extra) are not on the CNCF allowlist and have no approved exception, so they go in the form's "not on the allowlist" answer. See `docs/THIRD_PARTY_LICENSES.md` |
 | Landscape listing | **No** | After acceptance typically |
-| Repo age 6+ months | **Not yet** | Created 2026-07-26; eligible from 2027-01-26 |
+| LFX Insights listing | **No** | The form asks; "No" is a normal answer before acceptance |
+| Website | **Not live** | GitHub Pages is off (#525). The form accepts the repo URL instead |
+| PyPI package | **No** | `pip install trajectory-ir` does not work yet (#533) |
+| TAG engagement / GTR Day 0 | **Not started** | Optional on the form, but the TOC reads it (§4.4) |
+| CNCF project integrations | **Weak** | Only optional OpenTelemetry span correlation in the Python integrations. Temporal, DBOS and Restate are not CNCF projects (§4.3, §7) |
+| Repo age 6+ months | **Not yet** | Created 2026-07-26; eligible from 2027-01-26 (about 9 weeks after this check) |
 | Contribution Agreement signatory | **Open** | Org/legal decision |
+| Application contact emails | **Open** | Maintainers who will answer TOC questions |
+| Trademark and accounts transfer | **Open** | Maintainers have not agreed yet |
 
 ---
 
@@ -79,6 +87,7 @@ Copied and adapted from the official form “Pre-Submission Checklist.”
 - [ ] Primary repository is **≥ 6 months old** with active development
 - [x] Project is a **reusable tool/library**, not a reference architecture or company platform demo
 - [x] If splitting from a parent org/project: N/A (standalone repo)
+- [ ] Project name checked against the Linux Foundation Trademark Usage Policies (no existing trademark; no `kube`/`k8s` prefix or suffix)
 - [x] Dependency licenses are on the [CNCF third-party allowlist](https://github.com/cncf/foundation/blob/main/policies-guidance/allowed-third-party-license-policy.md) (or documented plan with FOSSA/Snyk). See `docs/THIRD_PARTY_LICENSES.md`
 
 ### Strongly recommended before review
@@ -132,7 +141,8 @@ Fill the right column offline; paste into the GitHub form when ready.
 | **Maintainers file** | **Required** `.../blob/main/MAINTAINERS.md` with company column. |
 | **Security policy** | `.../blob/main/SECURITY.md` |
 | **Standard or specification?** | Yes, partially: normative IR / package semantics in `docs/MASTER_SPECIFICATION.md` (spec-v0.2-draft); Python + Go ports; conformance R01–R11. Not an ISO standard. |
-| **Business product separation** | State honestly. If unrelated to a commercial product: *“This project is unrelated to any product or service.”* If related: describe upstream OSS vs product boundary (org, branding, governance). |
+| **Business product separation** | State honestly. If unrelated to a commercial product: *“This project is unrelated to any product or service.”* If related: describe upstream OSS vs product boundary (org, branding, governance). The lead maintainer is listed under EliteFolks in `MAINTAINERS.md`, so the answer has to cover EliteFolks either way. |
+| **Dependency on paid services** | Draft: none required. CI runs on GitHub Actions for a public repo and chat is a free Discord server. The Strix security app is installed but its trial has ended and nothing depends on it. Confirm before filing. |
 
 ### 4.3 Cloud native context
 
@@ -153,7 +163,9 @@ Fill the right column offline; paste into the GitHub form when ready.
 |------------|--------|
 | **Trademark and accounts** | Must check: donate trademarks/accounts if accepted. |
 | **IP policy** | Must check: follow CNCF IP Policy. |
+| **Project naming** | Check the trademark box only after someone has actually searched for an existing "Trajectory IR" mark. No `kube`/`k8s` prefix or suffix. |
 | **License exception** | `N/A - Project uses Apache 2.0 license` (if true). |
+| **Dependencies not on the allowlist** | `psycopg`, `psycopg-binary`: LGPL-3.0-only, only in the optional `postgres` extra of the Python reference port, imported unmodified. No CNCF exception yet; we will request one if accepted. See `docs/THIRD_PARTY_LICENSES.md`. |
 | **Domain Technical Review / TAG** | Optional but high value: link TAG presentation notes or Day-0 GTR answers. |
 
 ### 4.5 Contacts
