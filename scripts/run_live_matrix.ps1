@@ -44,6 +44,18 @@ $postgresDb = if ($env:POSTGRES_DB) { $env:POSTGRES_DB } else { "trajir" }
 $minioUser = if ($env:MINIO_ROOT_USER) { $env:MINIO_ROOT_USER } else { "minioadmin" }
 $minioPassword = if ($env:MINIO_ROOT_PASSWORD) { $env:MINIO_ROOT_PASSWORD } else { "minioadmin" }
 
+$pythonBin = if ($env:PYTHON) {
+    $env:PYTHON
+} elseif ($env:PYTHON_BIN) {
+    $env:PYTHON_BIN
+} elseif (Get-Command python3 -ErrorAction SilentlyContinue) {
+    "python3"
+} elseif (Get-Command python -ErrorAction SilentlyContinue) {
+    "python"
+} else {
+    $null
+}
+
 $encUser = Format-UrlEncoded $postgresUser
 $encPassword = Format-UrlEncoded $postgresPassword
 $encDb = Format-UrlEncoded $postgresDb
@@ -79,7 +91,7 @@ if (-not $SkipUp) {
     Write-Host "==> wait postgres healthy"
     $ok = $false
     for ($i = 1; $i -le 60; $i++) {
-        docker exec trajir-live-postgres pg_isready -U $postgresUser -d $postgresDb 2>$null | Out-Null
+        docker compose -f docker-compose.live.yml exec -T postgres pg_isready -U $postgresUser -d $postgresDb 2>$null | Out-Null
         if ($LASTEXITCODE -eq 0) { $ok = $true; break }
         Start-Sleep -Seconds 2
     }
@@ -104,7 +116,10 @@ if ($UpOnly) {
 }
 
 Write-Host "==> ensure MinIO bucket exists"
-python -c @"
+if (-not $pythonBin) {
+    throw "neither python3 nor python found on PATH"
+}
+& $pythonBin -c @"
 import os
 from trajectory_ir.drivers.s3.cas import build_s3_client_from_env
 bucket = os.environ['TRAJIR_S3_BUCKET']
@@ -119,11 +134,11 @@ except Exception:
 if ($LASTEXITCODE -ne 0) { throw "bucket ensure failed (pip install -e '.[s3]' ?)" }
 
 Write-Host "==> Python live Postgres"
-python -m pytest test/integration/test_postgres_live.py -q
+& $pythonBin -m pytest test/integration/test_postgres_live.py -q
 if ($LASTEXITCODE -ne 0) { throw "postgres live failed" }
 
 Write-Host "==> Python live MinIO"
-python -m pytest test/integration/test_s3_minio_live.py -q
+& $pythonBin -m pytest test/integration/test_s3_minio_live.py -q
 if ($LASTEXITCODE -ne 0) { throw "minio live failed" }
 
 Write-Host "==> Go live Postgres"
