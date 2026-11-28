@@ -59,7 +59,7 @@ docker compose -f docker-compose.live.yml ps
 Wait until services are healthy:
 
 ```bash
-docker exec trajir-live-postgres pg_isready -U trajir -d trajir
+docker compose -f docker-compose.live.yml exec postgres pg_isready -U trajir -d trajir
 curl -sf http://127.0.0.1:9000/minio/health/live
 ```
 

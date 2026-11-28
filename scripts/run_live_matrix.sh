@@ -58,12 +58,19 @@ POSTGRES_DB="${POSTGRES_DB:-trajir}"
 MINIO_ROOT_USER="${MINIO_ROOT_USER:-minioadmin}"
 MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD:-minioadmin}"
 
+PYTHON_BIN="${PYTHON:-${PYTHON_BIN:-}}"
+if [[ -z "$PYTHON_BIN" ]]; then
+  if command -v python3 >/dev/null 2>&1; then
+    PYTHON_BIN="python3"
+  elif command -v python >/dev/null 2>&1; then
+    PYTHON_BIN="python"
+  fi
+fi
+
 urlencode() {
   local string="${1:-}"
-  if command -v python3 >/dev/null 2>&1; then
-    python3 -c 'import sys, urllib.parse; sys.stdout.write(urllib.parse.quote(sys.argv[1], safe=""))' "$string"
-  elif command -v python >/dev/null 2>&1; then
-    python -c 'import sys
+  if [[ -n "$PYTHON_BIN" ]]; then
+    "$PYTHON_BIN" -c 'import sys
 try:
     import urllib.parse as up; sys.stdout.write(up.quote(sys.argv[1], safe=""))
 except Exception:
@@ -124,7 +131,7 @@ if [[ "$SKIP_UP" -eq 0 ]]; then
 
   echo "==> wait postgres healthy"
   for i in $(seq 1 60); do
-    if docker exec trajir-live-postgres pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null 2>&1; then
+    if docker compose -f docker-compose.live.yml exec -T postgres pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null 2>&1; then
       break
     fi
     sleep 2
@@ -154,7 +161,11 @@ if [[ "$UP_ONLY" -eq 1 ]]; then
 fi
 
 echo "==> ensure MinIO bucket exists"
-python - <<'PY'
+if [[ -z "$PYTHON_BIN" ]]; then
+  echo "neither python3 nor python found on PATH" >&2
+  exit 1
+fi
+"$PYTHON_BIN" - <<'PY'
 import os
 from trajectory_ir.drivers.s3.cas import build_s3_client_from_env
 
@@ -169,10 +180,10 @@ except Exception:
 PY
 
 echo "==> Python live Postgres"
-python -m pytest test/integration/test_postgres_live.py -q
+"$PYTHON_BIN" -m pytest test/integration/test_postgres_live.py -q
 
 echo "==> Python live MinIO"
-python -m pytest test/integration/test_s3_minio_live.py -q
+"$PYTHON_BIN" -m pytest test/integration/test_s3_minio_live.py -q
 
 echo "==> Go live Postgres"
 ( cd go && go test ./trajir/postgres/... -count=1 )
